@@ -352,7 +352,44 @@ L2  =WENN(aktuelles_Jahr>=G2; J2 * 0,06 * 4; 0)
 
 **Wichtige Regel zur Übertragbarkeit:** Der Gebäudegewinn in Spalte E darf nur auf den Gebäudeanteil eines Neuobjekts übertragen werden, der G+B-Gewinn in Spalte F auf Gebäude oder Grund und Boden. Diese Trennung prüft modPruefung in Etappe 9.
 
-**Abnahme Etappe 5:** Veräußerungsgewinn 720.000 bei 6b ja und Vorbesitzzeit mindestens sechs Jahre muss im Verkaufsjahr zu Steuer null führen; die Rücklage steht mit 720.000, getrennt in Gebäude- und G+B-Anteil.
+**Umsetzung (Stand Etappe 5):** Das Blatt Rücklagen hat zwei Teile. Links steht je Verkauf eine Zeile: Zeile n gehört zu Zeile n im Blatt Verkäufe, deshalb braucht es keine Suche. Rechts steht nach einer Leerspalte der Spiegel je Prognosejahr.
+
+| Spalte | Feld | Formel |
+| --- | --- | --- |
+| A–D | ObjektID, Verkaufsjahr, Kaufjahr, Vorbesitzzeit | nur bei Verkaufsstatus OK |
+| E | Status § 6b | „6b nicht gewählt“, „Vorbesitzzeit zu kurz“, „kein Gewinn“ oder „Rücklage gebildet“ |
+| F | RücklageID | „R-“ & ObjektID, nur bei gebildeter Rücklage |
+| G | Veräußerungsgewinn | aus Verkäufe |
+| H, I, J | Rücklage Gebäude, G+B, gesamt | MAX(Gewinn Gebäude; 0), MAX(Gewinn G+B; 0), Summe |
+| K | steuerpflichtig im Verkaufsjahr | Gewinn − Rücklage |
+| L | Fristjahr | Verkaufsjahr + `par_6bFrist` |
+| M, N | übertragen Gebäude, G+B | 0, ab Etappe 6 aus Neuobjekte |
+| O | Restrücklage | J − M − N, wird im Fristjahr aufgelöst |
+| P | Gewinnzuschlag | O × `par_6bZuschlag` × (Fristjahr − Verkaufsjahr) |
+
+Der Jahresspiegel zeigt je Jahr Veräußerungsgewinne, Bildung, Übertrag, Auflösung (Restrücklagen mit Fristjahr = Jahr), Gewinnzuschlag und Stand zum Jahresende (Vorjahr + Bildung − Übertrag − Auflösung). Dazu kommt der steuerpflichtige Betrag aus Verkauf und Auflösung samt Steuer darauf mit `par_Steuersatz`.
+
+- Die Rücklage wird je Wirtschaftsgut gebildet. Ein Verlust bei Gebäude oder G+B bleibt sofort wirksam und mindert den steuerpflichtigen Betrag. Eine negative Steuer im Spiegel unterstellt, dass der Verlust verrechnet werden kann.
+- Die Vorbesitzzeit ist Verkaufsjahr minus Kaufjahr und muss mindestens `par_6bVorbesitz` betragen. Weil der Verkauf zum Jahresende angenommen wird, ist das die vorsichtige Lesart: Wer unterjährig gekauft hat, erfüllt die sechs Jahre unter Umständen schon ein Jahr früher.
+- Liegt das Fristjahr nach dem Prognoseende, bleibt die Rücklage bis 2046 stehen. Ihre Auflösung fällt dann aus dem Raster.
+- Die Steuer im Spiegel betrifft nur Veräußerung und Auflösung. Das laufende Ergebnis kommt in Etappe 7 in der Gesamt-GuV dazu.
+- Benannte Bereiche: `rl_ID`, `rl_Jahr`, `rl_Kaufjahr`, `rl_Vorbesitz`, `rl_Status`, `rl_RuecklageID`, `rl_Gewinn`, `rl_BetragGeb`, `rl_BetragGuB`, `rl_Ruecklage`, `rl_Steuerpflichtig`, `rl_Fristjahr`, `rl_UebertragGeb`, `rl_UebertragGuB`, `rl_Rest`, `rl_Zuschlag`. Im Jahresspiegel: `rlj_Jahr`, `rlj_Gewinn`, `rlj_Bildung`, `rlj_Uebertrag`, `rlj_Aufloesung`, `rlj_Zuschlag`, `rlj_Stand`, `rlj_Steuerpflichtig`, `rlj_Steuer`.
+
+**Abnahme Etappe 5:** Veräußerungsgewinn 720.000 bei 6b ja und Vorbesitzzeit mindestens sechs Jahre muss im Verkaufsjahr zu Steuer null führen; die Rücklage steht mit 720.000, getrennt in Gebäude- und G+B-Anteil. Im Prüfskript ist das der Verkauf Ende 2027 aus Etappe 4:
+
+- Nach Buchwert-Aufteilung entfallen 508.235,29 € auf das Gebäude und 211.764,71 € auf G+B, nach Verkehrswert 220.000 € und 500.000 €.
+- Fristjahr ist 2031. Dann werden 720.000 € aufgelöst, dazu 172.800 € Zuschlag (4 × 6 %); bei 30 % ergibt das 267.840 € Steuer.
+
+Weitere Fälle:
+
+- Verkauf ohne 6b
+- Vorbesitz 5 Jahre (zu kurz) und genau 6 Jahre
+- Verlust insgesamt
+- Gebäudeverlust bei G+B-Gewinn
+- Fristjahr nach Prognoseende
+- geänderte Frist, Zuschlag und Steuersatz
+- zwei Verkäufe in einem Jahr
+- ungültiger Verkauf
 
 ## 13. Reinvestition (Etappe 6)
 

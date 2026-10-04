@@ -6,7 +6,8 @@ Excel zeigt sie in der deutschen Oberfläche automatisch als WENN, ZÄHLENWENN u
 
 from openpyxl.utils import get_column_letter
 
-from .modelle import OBJEKT_FELDER, VERKAUF_FELDER, VERKAUF_SPALTEN
+from .modelle import (OBJEKT_FELDER, RUECKLAGE_6B_GEBILDET, RUECKLAGE_JAHR_SPALTEN,
+                      RUECKLAGE_SPALTEN, VERKAUF_FELDER, VERKAUF_SPALTEN)
 
 
 def spalte(key: str, felder=OBJEKT_FELDER) -> str:
@@ -123,4 +124,74 @@ def verkauf_zeile(zeile: int) -> dict:
         "gewinn_geb": nur_ok(f'{sp["erloes_geb"]}-{sp["bw_geb"]}'),
         "gewinn_gub": nur_ok(f'{netto}-{sp["erloes_geb"]}-{ak_gub}'),
         "gewinn": nur_ok(f'{sp["gewinn_geb"]}+{sp["gewinn_gub"]}'),
+    }
+
+
+def ruecklage_spalten() -> dict:
+    """Spaltenbuchstaben des Rücklagenblatts: erst je Verkauf, nach einer Leerspalte je Jahr."""
+    sp = {s.key: get_column_letter(i) for i, s in enumerate(RUECKLAGE_SPALTEN, start=1)}
+    start = len(RUECKLAGE_SPALTEN) + 2
+    sp.update({f"j_{s.key}": get_column_letter(i)
+               for i, s in enumerate(RUECKLAGE_JAHR_SPALTEN, start=start)})
+    return sp
+
+
+def ruecklage_zeile(zeile: int) -> dict:
+    """Rücklagenspiegel je Verkauf (Projektplan Abschnitt 12).
+
+    Zeile n im Blatt Rücklagen gehört zu Zeile n im Blatt Verkäufe. Gerechnet wird
+    nur für Verkäufe mit Status OK; die Rücklage wird je Wirtschaftsgut gebildet,
+    ein Verlust bei Gebäude oder G+B bleibt sofort wirksam.
+    """
+    vk = {k: f"'Verkäufe'!${v}${zeile}" for k, v in verkauf_spalten().items()}
+    sp = {k: f"${v}{zeile}" for k, v in ruecklage_spalten().items()}
+    gebildet = f'{sp["status"]}="{RUECKLAGE_6B_GEBILDET}"'
+
+    def nur_vk(formel: str) -> str:
+        return f'=IF({sp["id"]}="","",{formel})'
+
+    def nur_rl(formel: str) -> str:
+        return f'=IF({sp["id"]}="","",IF({gebildet},{formel},0))'
+
+    return {
+        "id": f'=IF({vk["status"]}="OK",{vk["objekt_id"]},"")',
+        "jahr": nur_vk(vk["jahr"]),
+        "kaufjahr": nur_vk(f'INDEX(obj_Kaufjahr,MATCH({sp["id"]},obj_ID,0))'),
+        "vorbesitz": nur_vk(f'{sp["jahr"]}-{sp["kaufjahr"]}'),
+        "status": nur_vk(
+            f'IF({vk["nutzung_6b"]}<>"ja","6b nicht gewählt",'
+            f'IF({sp["vorbesitz"]}<par_6bVorbesitz,"Vorbesitzzeit zu kurz",'
+            f'IF(MAX({vk["gewinn_geb"]},0)+MAX({vk["gewinn_gub"]},0)=0,"kein Gewinn",'
+            f'"{RUECKLAGE_6B_GEBILDET}")))'),
+        "ruecklage_id": f'=IF({gebildet},"R-"&{sp["id"]},"")',
+        "gewinn": nur_vk(vk["gewinn"]),
+        "betrag_geb": nur_rl(f'MAX({vk["gewinn_geb"]},0)'),
+        "betrag_gub": nur_rl(f'MAX({vk["gewinn_gub"]},0)'),
+        "ruecklage": nur_vk(f'{sp["betrag_geb"]}+{sp["betrag_gub"]}'),
+        "steuerpflichtig": nur_vk(f'{sp["gewinn"]}-{sp["ruecklage"]}'),
+        "fristjahr": f'=IF({gebildet},{sp["jahr"]}+par_6bFrist,"")',
+        "uebertrag_geb": nur_rl("0"),
+        "uebertrag_gub": nur_rl("0"),
+        "rest": nur_vk(f'{sp["ruecklage"]}-{sp["uebertrag_geb"]}-{sp["uebertrag_gub"]}'),
+        # 6 % je vollem Jahr zwischen Bildung (Ende Verkaufsjahr) und Auflösung (Ende Fristjahr)
+        "zuschlag": nur_rl(f'{sp["rest"]}*par_6bZuschlag*({sp["fristjahr"]}-{sp["jahr"]})'),
+    }
+
+
+def ruecklage_jahr_zeile(zeile: int, jahr_index: int) -> dict:
+    """Jahresspiegel aller Rücklagen; Stand = Vorjahr + Bildung − Übertrag − Auflösung."""
+    sp = {k: f"${v}{zeile}" for k, v in ruecklage_spalten().items()}
+    jahr = sp["j_jahr"]
+    vorjahr = "0" if jahr_index == 0 else f'${ruecklage_spalten()["j_stand"]}{zeile - 1}'
+    return {
+        "jahr": f"=par_Startjahr+{jahr_index}",
+        "gewinn": f"=SUMIFS(rl_Gewinn,rl_Jahr,{jahr})",
+        "bildung": f"=SUMIFS(rl_Ruecklage,rl_Jahr,{jahr})",
+        "uebertrag": "=0",
+        "aufloesung": f"=SUMIFS(rl_Rest,rl_Fristjahr,{jahr})",
+        "zuschlag": f"=SUMIFS(rl_Zuschlag,rl_Fristjahr,{jahr})",
+        "stand": f'={vorjahr}+{sp["j_bildung"]}-{sp["j_uebertrag"]}-{sp["j_aufloesung"]}',
+        "steuerpflichtig": f'=SUMIFS(rl_Steuerpflichtig,rl_Jahr,{jahr})'
+                           f'+{sp["j_aufloesung"]}+{sp["j_zuschlag"]}',
+        "steuer": f'={sp["j_steuerpflichtig"]}*par_Steuersatz',
     }

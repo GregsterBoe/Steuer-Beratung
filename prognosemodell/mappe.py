@@ -9,6 +9,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 
 from . import formeln
 from .modelle import (MAX_OBJEKTE, MAX_VERKAEUFE, OBJEKT_FELDER, PARAMETER, PROGNOSE_SPALTEN,
+                      RUECKLAGE_6B_GEBILDET, RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN,
                       STATUS_NAME, STATUS_UEBERSCHRIFT, VERKAUF_FELDER, VERKAUF_SPALTEN,
                       VERKAUF_STATUS_NAME, Modell)
 
@@ -214,10 +215,60 @@ def _blatt_prognose(wb, modell: Modell) -> None:
     ws.protection.sort = False
 
 
+def _rechenspalten(wb, ws, blatt: str, spalten, buchstaben: dict, prefix: str,
+                   erste: int, letzte: int, zeilen_formeln) -> None:
+    """Formelspalten mit benanntem Bereich; zeilen_formeln(zeile, index) liefert die Formeln."""
+    for s in spalten:
+        bst = buchstaben[prefix + s.key]
+        ws.column_dimensions[bst].width = s.breite
+        _name(wb, s.name, f"'{blatt}'!${bst}${erste}:${bst}${letzte}")
+    for index, zeile in enumerate(range(erste, letzte + 1)):
+        zelle_formeln = zeilen_formeln(zeile, index)
+        for s in spalten:
+            c = ws[f"{buchstaben[prefix + s.key]}{zeile}"]
+            c.value = zelle_formeln[s.key]
+            c.number_format = s.format
+            c.fill = FILL_BERECHNET
+
+
+def _blatt_ruecklagen(wb, modell: Modell) -> None:
+    """Links je Verkauf die § 6b-Prüfung und Rücklage, rechts der Spiegel je Jahr."""
+    blatt = "Rücklagen"
+    ws = wb.create_sheet(blatt)
+    erste = 2
+    sp = formeln.ruecklage_spalten()
+    _kopf(ws, 1, [s.ueberschrift for s in RUECKLAGE_SPALTEN] + [None]
+          + [s.ueberschrift for s in RUECKLAGE_JAHR_SPALTEN])
+    leer = ws.cell(row=1, column=len(RUECKLAGE_SPALTEN) + 1)
+    leer.fill = PatternFill(fill_type=None)
+    ws.column_dimensions[leer.column_letter].width = 3
+    ws.row_dimensions[1].height = 45
+
+    _rechenspalten(wb, ws, blatt, RUECKLAGE_SPALTEN, sp, "", erste, MAX_VERKAEUFE + 1,
+                   lambda zeile, _i: formeln.ruecklage_zeile(zeile))
+    _rechenspalten(wb, ws, blatt, RUECKLAGE_JAHR_SPALTEN, sp, "j_", erste,
+                   prognosejahre(modell) + 1, formeln.ruecklage_jahr_zeile)
+
+    st = sp["status"]
+    ws.conditional_formatting.add(
+        f"{st}{erste}:{st}{MAX_VERKAEUFE + 1}",
+        FormulaRule(formula=[f'{st}{erste}="Vorbesitzzeit zu kurz"'], fill=FILL_FEHLER),
+    )
+    hinweis = len(RUECKLAGE_SPALTEN) + len(RUECKLAGE_JAHR_SPALTEN) + 3
+    ws.cell(row=1, column=hinweis,
+            value=f"Zeile n gehört zu Zeile n im Blatt Verkäufe. Rücklage nur bei 6b-Nutzung ja, "
+                  f"Status „{RUECKLAGE_6B_GEBILDET}“; je Wirtschaftsgut nur Gewinne, Verluste "
+                  "wirken sofort. Steuer hier nur auf Veräußerung und Auflösung, ein Verlust "
+                  "mindert sie. " + HINWEIS_FINANZIERUNG)
+    ws.freeze_panes = "B2"
+    ws.protection.sheet = True
+
+
 def erstelle_mappe(modell: Modell) -> Workbook:
     wb = Workbook()
     _blatt_parameter(wb, modell)
     _blatt_objekte(wb, modell)
     _blatt_verkaeufe(wb, modell)
     _blatt_prognose(wb, modell)
+    _blatt_ruecklagen(wb, modell)
     return wb

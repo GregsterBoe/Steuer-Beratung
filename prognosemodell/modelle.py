@@ -71,10 +71,12 @@ PARAMETER = [
     Parameter("par_Aufteilung", "Erlösaufteilung Standard", "Buchwert", FMT_TEXT,
               "Aufteilung Verkaufserlös auf Gebäude und G+B; gilt, wenn im Blatt Verkäufe "
               "keine Methode steht", AUFTEILUNGEN),
-    Parameter("par_6bVorbesitz", "§ 6b Mindest-Vorbesitzzeit (Jahre)", 6, FMT_ZAHL, ""),
-    Parameter("par_6bFrist", "§ 6b Reinvestitionsfrist (Jahre)", 4, FMT_ZAHL, ""),
+    Parameter("par_6bVorbesitz", "§ 6b Mindest-Vorbesitzzeit (Jahre)", 6, FMT_ZAHL,
+              "gezählt als Verkaufsjahr minus Kaufjahr (Verkauf zum Jahresende)"),
+    Parameter("par_6bFrist", "§ 6b Reinvestitionsfrist (Jahre)", 4, FMT_ZAHL,
+              "Fristjahr = Verkaufsjahr + Frist; Neubau-Verlängerung auf 6 Jahre hier eintragen"),
     Parameter("par_6bZuschlag", "§ 6b Gewinnzuschlag je Jahr", 0.06, FMT_PROZENT,
-              "bei Auflösung ohne Reinvestition"),
+              "je volles Jahr des Bestehens, bei Auflösung ohne Reinvestition"),
     Parameter("par_Szenario", "aktives Szenario", "A", FMT_TEXT,
               "A = § 6b-Kette, B = sofort versteuern", ("A", "B")),
 ]
@@ -169,6 +171,45 @@ VERKAUF_SPALTEN = [
     Rechenspalte("gewinn_geb", "Gewinn Gebäude", "vk_GewinnGeb", FMT_EURO, 16),
     Rechenspalte("gewinn_gub", "Gewinn G+B", "vk_GewinnGuB", FMT_EURO, 16),
     Rechenspalte("gewinn", "Veräußerungsgewinn gesamt", "vk_Gewinn", FMT_EURO, 16),
+]
+
+
+# Blatt Rücklagen, Teil 1: je Zeile im Blatt Verkäufe eine Zeile (gleiche Zeilennummer)
+RUECKLAGE_6B_GEBILDET = "Rücklage gebildet"
+RUECKLAGE_SPALTEN = [
+    Rechenspalte("id", "ObjektID", "rl_ID", FMT_TEXT, 12),
+    Rechenspalte("jahr", "Verkaufsjahr", "rl_Jahr", FMT_JAHR, 10),
+    Rechenspalte("kaufjahr", "Kaufjahr", "rl_Kaufjahr", FMT_JAHR, 10),
+    Rechenspalte("vorbesitz", "Vorbesitzzeit Jahre", "rl_Vorbesitz", FMT_ZAHL, 10),
+    Rechenspalte("status", "Status § 6b", "rl_Status", FMT_TEXT, 22),
+    Rechenspalte("ruecklage_id", "RücklageID", "rl_RuecklageID", FMT_TEXT, 14),
+    Rechenspalte("gewinn", "Veräußerungsgewinn", "rl_Gewinn", FMT_EURO, 16),
+    Rechenspalte("betrag_geb", "Rücklage Gebäude", "rl_BetragGeb", FMT_EURO, 16),
+    Rechenspalte("betrag_gub", "Rücklage G+B", "rl_BetragGuB", FMT_EURO, 16),
+    Rechenspalte("ruecklage", "Rücklage gesamt", "rl_Ruecklage", FMT_EURO, 16),
+    Rechenspalte("steuerpflichtig", "steuerpflichtig im Verkaufsjahr", "rl_Steuerpflichtig",
+                 FMT_EURO, 16),
+    Rechenspalte("fristjahr", "Fristjahr", "rl_Fristjahr", FMT_JAHR, 10),
+    Rechenspalte("uebertrag_geb", "übertragen Gebäude (ab Etappe 6)", "rl_UebertragGeb",
+                 FMT_EURO, 16),
+    Rechenspalte("uebertrag_gub", "übertragen G+B (ab Etappe 6)", "rl_UebertragGuB",
+                 FMT_EURO, 16),
+    Rechenspalte("rest", "Restrücklage = Auflösung im Fristjahr", "rl_Rest", FMT_EURO, 18),
+    Rechenspalte("zuschlag", "Gewinnzuschlag", "rl_Zuschlag", FMT_EURO, 16),
+]
+
+# Blatt Rücklagen, Teil 2: Spiegel je Prognosejahr
+RUECKLAGE_JAHR_SPALTEN = [
+    Rechenspalte("jahr", "Jahr", "rlj_Jahr", FMT_JAHR, 8),
+    Rechenspalte("gewinn", "Veräußerungsgewinne", "rlj_Gewinn", FMT_EURO, 16),
+    Rechenspalte("bildung", "Bildung Rücklage", "rlj_Bildung", FMT_EURO, 16),
+    Rechenspalte("uebertrag", "Übertrag (ab Etappe 6)", "rlj_Uebertrag", FMT_EURO, 14),
+    Rechenspalte("aufloesung", "Auflösung Fristablauf", "rlj_Aufloesung", FMT_EURO, 16),
+    Rechenspalte("zuschlag", "Gewinnzuschlag", "rlj_Zuschlag", FMT_EURO, 14),
+    Rechenspalte("stand", "Rücklage Stand Jahresende", "rlj_Stand", FMT_EURO, 16),
+    Rechenspalte("steuerpflichtig", "steuerpflichtig aus Verkauf und Auflösung",
+                 "rlj_Steuerpflichtig", FMT_EURO, 18),
+    Rechenspalte("steuer", "Steuer darauf", "rlj_Steuer", FMT_EURO, 14),
 ]
 
 

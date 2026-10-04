@@ -80,6 +80,15 @@ def faelle():
     netto_2030 = 20 * miete_2030 - 30_000
     ohne_quote = dataclasses.replace(obj, vk_quote_gebaeude=None)
 
+    # Etappe 5: Rücklagenspiegel, Jahreszeile im Spiegel ab 2027 = Index 0
+    gewinn_geb_bw = erloes_geb_bw - 480_000
+    gewinn_gub_bw = 1_400_000 - erloes_geb_bw - 200_000
+    zuschlag = 720_000 * 0.06 * 4
+    gewinn_2030 = netto_2030 - 520_000
+
+    def rj(jahr: int) -> int:
+        return jahr - STARTJAHR
+
     def vk_status(verkauf, objekte=(obj,)):
         return Modell(list(objekte), verkaeufe=[verkauf])
 
@@ -231,6 +240,122 @@ def faelle():
          Modell([vk_obj], {"par_Aufteilung": "Verkehrswert"},
                 [dataclasses.replace(vk_2027, aufteilung=None)]),
          [("vk_ErloesGeb", 0, 700_000), ("vk_Gewinn", 0, 720_000)]),
+        ("Etappe 5: Rücklage voll, Abnahmefall 720.000",
+         Modell([vk_obj], verkaeufe=[vk_2027]), [
+            ("rl_ID", 0, "OBJ-001"),
+            ("rl_Jahr", 0, 2027),
+            ("rl_Kaufjahr", 0, 2007),
+            ("rl_Vorbesitz", 0, 20),
+            ("rl_Status", 0, "Rücklage gebildet"),
+            ("rl_RuecklageID", 0, "R-OBJ-001"),
+            ("rl_Gewinn", 0, 720_000),
+            ("rl_BetragGeb", 0, gewinn_geb_bw),
+            ("rl_BetragGuB", 0, gewinn_gub_bw),
+            ("rl_Ruecklage", 0, 720_000),
+            ("rl_Steuerpflichtig", 0, 0),
+            ("rl_Fristjahr", 0, 2031),
+            ("rl_UebertragGeb", 0, 0),
+            ("rl_Rest", 0, 720_000),
+            ("rl_Zuschlag", 0, zuschlag),
+            ("rl_ID", 1, None),                  # leere Zeile bleibt leer
+            ("rl_Status", 1, None),
+            ("rl_Fristjahr", 1, None),
+            ("rlj_Jahr", rj(2027), 2027),
+            ("rlj_Gewinn", rj(2027), 720_000),
+            ("rlj_Bildung", rj(2027), 720_000),
+            ("rlj_Stand", rj(2027), 720_000),
+            ("rlj_Steuerpflichtig", rj(2027), 0),
+            ("rlj_Steuer", rj(2027), 0),         # Steuer im Verkaufsjahr null
+            ("rlj_Stand", rj(2030), 720_000),
+            ("rlj_Aufloesung", rj(2030), 0),
+            ("rlj_Aufloesung", rj(2031), 720_000),
+            ("rlj_Zuschlag", rj(2031), zuschlag),
+            ("rlj_Stand", rj(2031), 0),
+            ("rlj_Steuerpflichtig", rj(2031), 720_000 + zuschlag),
+            ("rlj_Steuer", rj(2031), (720_000 + zuschlag) * 0.30),
+            ("rlj_Stand", rj(2046), 0),
+        ]),
+        ("Etappe 5: Rücklage nach Verkehrswert getrennt",
+         Modell([vk_obj], verkaeufe=[dataclasses.replace(vk_2027, aufteilung="Verkehrswert")]), [
+            ("rl_BetragGeb", 0, 220_000),
+            ("rl_BetragGuB", 0, 500_000),
+            ("rl_Ruecklage", 0, 720_000),
+        ]),
+        ("Etappe 5: ohne 6b sofort steuerpflichtig", Modell([obj], verkaeufe=[vk_2030]), [
+            ("rl_Status", 0, "6b nicht gewählt"),
+            ("rl_RuecklageID", 0, None),
+            ("rl_Ruecklage", 0, 0),
+            ("rl_Fristjahr", 0, None),
+            ("rl_Zuschlag", 0, 0),
+            ("rl_Steuerpflichtig", 0, gewinn_2030),
+            ("rlj_Steuerpflichtig", rj(2030), gewinn_2030),
+            ("rlj_Steuer", rj(2030), gewinn_2030 * 0.30),
+            ("rlj_Stand", rj(2030), 0),
+            ("rlj_Steuer", rj(2029), 0),
+        ]),
+        ("Etappe 5: Vorbesitzzeit 5 Jahre zu kurz",
+         Modell([dataclasses.replace(vk_obj, kaufjahr=2022)], verkaeufe=[vk_2027]), [
+            ("rl_Vorbesitz", 0, 5),
+            ("rl_Status", 0, "Vorbesitzzeit zu kurz"),
+            ("rl_Ruecklage", 0, 0),
+            ("rl_Steuerpflichtig", 0, 720_000),
+            ("rlj_Steuer", rj(2027), 216_000),
+        ]),
+        ("Etappe 5: Vorbesitzzeit genau 6 Jahre",
+         Modell([dataclasses.replace(vk_obj, kaufjahr=2021)], verkaeufe=[vk_2027]), [
+            ("rl_Status", 0, "Rücklage gebildet"),
+            ("rl_Ruecklage", 0, 720_000),
+        ]),
+        ("Etappe 5: Verlust, keine Rücklage",
+         Modell([vk_obj], verkaeufe=[dataclasses.replace(vk_2027, preis=600_000)]), [
+            ("rl_Status", 0, "kein Gewinn"),
+            ("rl_Ruecklage", 0, 0),
+            ("rl_Steuerpflichtig", 0, -80_000),
+            ("rlj_Steuer", rj(2027), -24_000),
+        ]),
+        ("Etappe 5: Verlust Gebäude, Gewinn G+B",
+         Modell([vk_obj], verkaeufe=[dataclasses.replace(vk_2027, preis=700_000,
+                                                         aufteilung="Verkehrswert")]), [
+            ("rl_Status", 0, "Rücklage gebildet"),
+            ("rl_BetragGeb", 0, 0),              # Gebäudeverlust 130.000 wirkt sofort
+            ("rl_BetragGuB", 0, 150_000),
+            ("rl_Steuerpflichtig", 0, -130_000),
+            ("rl_Zuschlag", 0, 150_000 * 0.24),
+        ]),
+        ("Etappe 5: Fristjahr nach Prognoseende",
+         Modell([vk_obj], verkaeufe=[dataclasses.replace(vk_2027, jahr=2044)]), [
+            ("rl_Ruecklage", 0, 1_060_000),      # Buchwert 2044: 140.000 + 200.000
+            ("rl_Fristjahr", 0, 2048),
+            ("rlj_Stand", rj(2046), 1_060_000),
+            ("rlj_Aufloesung", rj(2046), 0),
+            ("rlj_Steuer", rj(2044), 0),
+        ]),
+        ("Etappe 5: Frist 6 Jahre, Zuschlag 5 %, Steuersatz 25 %",
+         Modell([vk_obj], {"par_6bFrist": 6, "par_6bZuschlag": 0.05, "par_Steuersatz": 0.25},
+                [vk_2027]), [
+            ("rl_Fristjahr", 0, 2033),
+            ("rl_Zuschlag", 0, 216_000),
+            ("rlj_Stand", rj(2032), 720_000),
+            ("rlj_Steuerpflichtig", rj(2033), 936_000),
+            ("rlj_Steuer", rj(2033), 234_000),
+        ]),
+        ("Etappe 5: zwei Verkäufe im selben Jahr",
+         Modell([vk_obj, kurz], verkaeufe=[
+             vk_2027, Verkauf("OBJ-002", 2027, preis=500_000, nutzung_6b="nein")]), [
+            ("rl_Status", 1, "6b nicht gewählt"),
+            ("rl_Gewinn", 1, 270_000),           # Buchwert 30.000 + G+B 200.000
+            ("rlj_Gewinn", rj(2027), 990_000),
+            ("rlj_Bildung", rj(2027), 720_000),
+            ("rlj_Steuerpflichtig", rj(2027), 270_000),
+            ("rlj_Steuer", rj(2027), 81_000),
+        ]),
+        ("Etappe 5: ungültiger Verkauf bildet nichts",
+         vk_status(dataclasses.replace(vk_2027, objekt_id="X")), [
+            ("rl_ID", 0, None),
+            ("rl_Status", 0, None),
+            ("rlj_Gewinn", rj(2027), 0),
+            ("rlj_Stand", rj(2027), 0),
+        ]),
     ] + [
         (f"Etappe 1: Steuerwelt {welt}", Modell([obj], {"par_Steuerwelt": welt}),
          [("par_StatusSteuerwelt", 0, "nicht im MVP – Ergebnisse gelten nur für GmbH")])
