@@ -1,4 +1,4 @@
-"""Testobjekt aus dem Projektplan (Abschnitt 7: Gebäude 800.000, 2 %, Kauf 2007)."""
+"""Testobjekt aus dem Projektplan (Abschnitt 7: Gebäude 800.000, 2,5 %, Kauf 2007)."""
 
 from .modelle import Modell, Objekt
 
@@ -10,9 +10,9 @@ def testobjekt() -> Objekt:
         ak_gebaeude=800_000,
         ak_gub=200_000,
         kaufjahr=2007,
-        afa_satz=0.02,
-        # 20 volle Jahre AfA 2007 bis 2026 à 16.000
-        restbuchwert=480_000,
+        afa_satz=0.025,
+        # 20 volle Jahre AfA 2007 bis 2026 à 20.000; Ende 2046 voll abgeschrieben
+        restbuchwert=400_000,
         verkehrswert=1_400_000,
         vk_quote_gebaeude=0.5,
         miete=60_000,

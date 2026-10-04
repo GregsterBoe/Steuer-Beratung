@@ -33,7 +33,7 @@ def _kopf(ws, zeile: int, werte: list) -> None:
         c.alignment = Alignment(wrap_text=True, vertical="center")
 
 
-def _blatt_parameter(wb) -> None:
+def _blatt_parameter(wb, modell: Modell) -> None:
     ws = wb.active
     ws.title = "Parameter"
     ws["A1"] = "Parameter"
@@ -43,7 +43,7 @@ def _blatt_parameter(wb) -> None:
 
     for zeile, p in enumerate(PARAMETER, start=5):
         ws.cell(row=zeile, column=1, value=p.bezeichnung)
-        c = ws.cell(row=zeile, column=2, value=p.wert)
+        c = ws.cell(row=zeile, column=2, value=modell.parameter.get(p.name, p.wert))
         c.number_format = p.format
         berechnet = isinstance(p.wert, str) and p.wert.startswith("=")
         c.fill = FILL_BERECHNET if berechnet else FILL_EINGABE
@@ -55,6 +55,11 @@ def _blatt_parameter(wb) -> None:
                                 allow_blank=False)
             ws.add_data_validation(dv)
             dv.add(c.coordinate)
+        if p.name.startswith("par_Status"):
+            ws.conditional_formatting.add(
+                c.coordinate,
+                FormulaRule(formula=[f'{c.coordinate}<>"OK"'], fill=FILL_FEHLER),
+            )
 
     for spalte, breite in zip("ABCD", (36, 14, 22, 60)):
         ws.column_dimensions[spalte].width = breite
@@ -116,6 +121,6 @@ def _blatt_objekte(wb, modell: Modell) -> None:
 
 def erstelle_mappe(modell: Modell) -> Workbook:
     wb = Workbook()
-    _blatt_parameter(wb)
+    _blatt_parameter(wb, modell)
     _blatt_objekte(wb, modell)
     return wb

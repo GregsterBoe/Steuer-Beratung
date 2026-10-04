@@ -16,7 +16,7 @@ Der MVP bildet die volle steuerliche Logik ab: Abschreibungsdynamik, Verkauf, §
 - Jahresraster 2027 bis 2046, Basis Ist 2026. Verkauf und Kauf zum Jahresende.
 - Jede Auswertung ist als "vor Finanzierung" gekennzeichnet, solange Zins und Tilgung fehlen.
 
-**Nicht im MVP:** Zins, Tilgung, Restschuld, Vorfälligkeit; Sensitivitäten; IRR; Steuer auf Ausschüttungsebene. Diese Punkte sind in der Situationsbeschreibung als spätere Stufe vermerkt.
+**Nicht im MVP:** Zins, Tilgung, Restschuld, Vorfälligkeit; Sensitivitäten; IRR; Steuer auf Ausschüttungsebene; Steuerwelten Privat/GbR und gewerbliche Personengesellschaft (siehe Abschnitt 18). Diese Punkte sind in der Situationsbeschreibung als spätere Stufe vermerkt.
 
 ## 2. Blattarchitektur
 
@@ -38,7 +38,7 @@ Acht Blätter, getrennt nach Eingabe, Rechnung und Ausgabe. Eingabeblätter sind
 
 | Blatt | Typ | Schlüsselfelder | Zweck |
 | --- | --- | --- | --- |
-| Parameter | Eingabe | Steuerwelt-Schalter, Grenzsteuersatz, Mietsteigerung, Erhaltungssteigerung, Wertsteigerung, GrESt-Satz, aktives Szenario | alle globalen Annahmen und Schalter |
+| Parameter | Eingabe | Steuerwelt-Schalter (GmbH, Privat/GbR vermögensverwaltend, gewerblich), Grenzsteuersatz, Mietsteigerung, Erhaltungssteigerung, Wertsteigerung, GrESt-Satz, aktives Szenario | alle globalen Annahmen und Schalter |
 | Objekte | Eingabe | ObjektID, AK Gebäude, AK G+B, AfA-Satz, Kaufjahr, Restbuchwert 2026, Miete 2026, Erhaltung 2026 | Stammdaten je Bestandsobjekt |
 | Verkäufe | Eingabe | ObjektID, Verkaufsjahr, Verkaufspreis oder Faktor, Verkaufskosten, 6b-Nutzung (ja/nein) | ein Datensatz je geplantem Verkauf |
 | Neuobjekte | Eingabe | NeuID, Kaufjahr, Kaufpreis, Anteil G+B, AfA-Methode, Mietrendite, Erhaltungsquote, Quelle-Rücklage | Reinvestitionsobjekte |
@@ -128,7 +128,7 @@ Jeder Testfall ist eine Rechnung von Hand, gegen die das Blatt geprüft wird.
 
 | Fall | Eingabe | Erwartetes Ergebnis |
 | --- | --- | --- |
-| AfA-Ende | Gebäude 800.000, 2 %, Kauf 2007 | Buchwert 2047 null, AfA ab dann 0 |
+| AfA-Ende | Gebäude 800.000, 2,5 %, Kauf 2007, Restbuchwert 2026 400.000 | AfA 20.000 je Jahr, Buchwert Ende 2046 null |
 | Verkauf mit Gewinn | Preis 1,4 Mio, Buchwert 680.000, Kosten 0 | Gewinn 720.000 |
 | Rücklage voll | 6b ja, Gewinn 720.000 | Steuer im Verkaufsjahr 0, Rücklage 720.000 |
 | Übertrag | Neuobjekt Gebäude-AK 900.000 | AfA-Basis 900.000 minus Gebäudegewinn |
@@ -188,7 +188,7 @@ H2  =(D2 - E2 - F2)*C2
 
 Für Buchwert\_Vorjahr empfehle ich einen SUMMEWENNS-Verweis auf dieselbe Matrix: Buchwert der Zeile mit gleicher ObjektID und Jahr gleich B2 minus 1. Im ersten Jahr greift stattdessen der Restbuchwert aus dem Objektblatt. Das lässt sich mit einem WENN(B2=Startjahr; …; SUMMEWENNS(…)) lösen.
 
-**Abnahme Etappe 2:** Für ein Objekt mit Gebäude 800.000, AfA 2 %, Kauf 2007 muss der Buchwert 2047 null erreichen; ab dann sind AfA und der Buchwert null, Miete und Erhaltung laufen weiter.
+**Abnahme Etappe 2:** Für ein Objekt mit Gebäude 800.000, AfA 2,5 % (40 Jahre), Kauf 2007 muss der Buchwert Ende 2046 null erreichen; die AfA beträgt bis dahin 20.000 je Jahr. Miete und Erhaltung laufen unabhängig davon weiter. Den AfA-Stopp bei Buchwert null prüft zusätzlich ein Fall mit kleinerem Restbuchwert, dessen Ende innerhalb des Rasters liegt.
 
 ## 9. Generierung per Python, Endprodukt autarke Excel-Datei
 
@@ -226,7 +226,7 @@ openpyxl schreibt Formeln, berechnet sie aber nicht. Eine frisch generierte Date
 
 1. Testmappe mit bekannten Eingaben generieren, eine je Testfall aus Abschnitt 7.
 2. Mappe durchrechnen lassen (LibreOffice headless oder formulas).
-3. Zielzellen auslesen, etwa Buchwert 2047 oder Veräußerungsgewinn.
+3. Zielzellen auslesen, etwa Buchwert 2046 oder Veräußerungsgewinn.
 4. Mit der erwarteten Zahl vergleichen, auf den Euro genau, Toleranz ein Cent für Rundung.
 5. Bei Abweichung: Fall, Zelle, Soll und Ist ausgeben und das Skript mit Fehlercode beenden.
 
@@ -494,3 +494,20 @@ Vollständige Liste der Felder, die das Modell pro Objekt braucht, mit Quelle. S
 **Hinweis**
 
 Die Trennung AK Gebäude zu Grund und Boden ist das kritischste Feld. Fehlt sie, lassen sich weder AfA noch § 6b sauber rechnen. Falls das Anlageverzeichnis sie nicht ausweist, muss der Kaufpreis nachträglich aufgeteilt werden, etwa nach Bodenrichtwert oder BMF-Arbeitshilfe.
+
+## 18. Steuerwelt-Schalter
+
+Der Schalter par\_Steuerwelt auf dem Parameterblatt legt die Rechtsform fest. Sie bestimmt Steuersatz, Behandlung des Veräußerungsgewinns und ob § 6b überhaupt möglich ist.
+
+| | GmbH | Privat / GbR vermögensverwaltend | gewerblich (Personengesellschaft) |
+| --- | --- | --- | --- |
+| Steuersatz | KSt + SolZ, GewSt ggf. durch erweiterte Kürzung nahe null | persönlicher Grenzsteuersatz | persönlicher Satz + GewSt (teilweise angerechnet) |
+| Veräußerungsgewinn | immer steuerpflichtig | steuerfrei nach 10 Jahren Haltedauer (§ 23 EStG) | immer steuerpflichtig |
+| § 6b-Rücklage | ja | nein, nur im Betriebsvermögen | ja |
+| Wirtschaftsgebäude-AfA 3 % | ja | nein | ja |
+
+**MVP:** Gerechnet wird nur die GmbH. Bei jeder anderen Auswahl zeigt das Parameterblatt den Status "nicht im MVP", damit niemand unbemerkt mit GmbH-Logik für eine andere Rechtsform rechnet.
+
+**Spätere Etappe Privat/GbR:** Szenario A (§ 6b-Kette) entfällt; an seine Stelle tritt die 10-Jahres-Regel. Der Szenariovergleich wird zu "Verkauf vor oder nach Ablauf der Haltefrist". Bei der GbR entscheidet die Einordnung (vermögensverwaltend oder gewerblich, etwa durch gewerblichen Grundstückshandel), welche Spalte gilt; die Warnung zur Drei-Objekt-Grenze aus modPruefung liefert dafür den Hinweis.
+
+Einordnung und Sätze vor dem Echteinsatz mit dem zuständigen Berufsträger prüfen.

@@ -28,6 +28,10 @@ class Parameter:
     auswahl: Optional[tuple] = None  # Dropdown-Werte
 
 
+STEUERWELT_GMBH = "GmbH"
+STEUERWELTEN = (STEUERWELT_GMBH, "Privat / GbR vermögensverwaltend",
+                "gewerblich (Personengesellschaft)")
+
 # Reihenfolge = Reihenfolge auf dem Parameterblatt.
 # Alle Sätze sind Platzhalter und vor dem Echteinsatz fachlich zu prüfen.
 PARAMETER = [
@@ -39,8 +43,13 @@ PARAMETER = [
               "berechnet"),
     Parameter("par_Endjahr", "letztes Prognosejahr", "=par_Basisjahr+par_Prognosejahre",
               FMT_JAHR, "berechnet"),
-    Parameter("par_Steuerwelt", "Steuerwelt", "GmbH", FMT_TEXT,
-              "MVP rechnet nur die gewerbliche Struktur mit GmbH", ("GmbH",)),
+    Parameter("par_Steuerwelt", "Steuerwelt", STEUERWELT_GMBH, FMT_TEXT,
+              "Rechtsform; MVP rechnet nur GmbH (siehe Projektplan Abschnitt 18)",
+              STEUERWELTEN),
+    Parameter("par_StatusSteuerwelt", "Status Steuerwelt",
+              f'=IF(par_Steuerwelt="{STEUERWELT_GMBH}","OK",'
+              f'"nicht im MVP – Ergebnisse gelten nur für GmbH")',
+              FMT_TEXT, "berechnet"),
     Parameter("par_Steuersatz", "Grenzsteuersatz", 0.30, FMT_PROZENT,
               "KSt, SolZ und GewSt zusammen; Platzhalter, prüfen"),
     Parameter("par_Mietsteig", "Mietsteigerung p. a.", 0.02, FMT_PROZENT, "Platzhalter"),
@@ -123,3 +132,5 @@ class Objekt:
 @dataclass
 class Modell:
     objekte: list = field(default_factory=list)
+    # Abweichende Parameterwerte, z. B. {"par_Steuerwelt": "..."}
+    parameter: dict = field(default_factory=dict)

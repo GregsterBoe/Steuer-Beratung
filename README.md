@@ -41,7 +41,7 @@ python -m pruefung.pruefen           # rechnet per LibreOffice headless und prü
 
 Das Prüfskript braucht LibreOffice mit Calc (`soffice`).
 
-Gelb = Eingabe, grau = Formel. Die Statusspalte im Objektblatt meldet fehlende Pflichtfelder, doppelte IDs, ein Kaufjahr nach dem Basisjahr und einen Restbuchwert über den AK.
+Gelb = Eingabe, grau = Formel. Der Schalter Steuerwelt kennt GmbH, Privat/GbR und gewerblich; gerechnet wird im MVP nur GmbH, sonst zeigt das Parameterblatt „nicht im MVP“. Die Statusspalte im Objektblatt meldet fehlende Pflichtfelder, doppelte IDs, ein Kaufjahr nach dem Basisjahr und einen Restbuchwert über den AK.
 
 Details, Formeln und Testfälle stehen in [docs/Projektplan.md](docs/Projektplan.md).
 
