@@ -197,6 +197,8 @@ Das aktiv-Flag ist vorerst 1, wenn der Status der Objektzeile „OK“ lautet; O
 
 **Abnahme Etappe 2:** Für ein Objekt mit Gebäude 800.000, AfA 2,5 % (40 Jahre), Kauf 2007 muss der Buchwert Ende 2046 null erreichen; die AfA beträgt bis dahin 20.000 je Jahr. Miete und Erhaltung laufen unabhängig davon weiter. Den AfA-Stopp bei Buchwert null prüft zusätzlich ein Fall mit kleinerem Restbuchwert, dessen Ende innerhalb des Rasters liegt.
 
+**Abnahme Etappe 3:** Miete und Erhaltung wachsen ab dem Basisjahr mit ihrer Rate, das erste Prognosejahr ist also schon einmal gesteigert (Miete 2027 = 60.000 × 1,02 = 61.200). Das Prüfskript rechnet die Standardraten (Miete 2 %, Erhaltung 2,5 %) bis 2046 nach, außerdem geänderte Raten (3 % und 0 %), eine negative Rate (−1 %) und ein verschobenes Basisjahr: Der Index zählt immer ab `par_Basisjahr`, nicht ab einem festen Jahr. Die drei Steigerungsraten auf dem Parameterblatt lassen nur Werte von −10 % bis 20 % zu. Weitere Einnahmen und Ausgaben aus dem Objektblatt fließen noch nicht ins Ergebnis, weil die Ergebnisformel oben sie nicht enthält; offen ist, ob und mit welcher Rate sie einbezogen werden.
+
 ## 9. Generierung per Python, Endprodukt autarke Excel-Datei
 
 Das Endprodukt ist eine eigenständige Excel-Datei, die ohne Python läuft und vom Mandanten selbst bedient wird. Python ist nur ein einmaliger Generator beim Bauen, kein Teil des laufenden Modells. Die gesamte Rechenlogik liegt in Zellformeln; Python schreibt sie nur hinein.

@@ -67,6 +67,7 @@ def faelle():
     # 50.000 Restbuchwert: 2027 und 2028 volle AfA, 2029 Rest 10.000, ab 2030 null
     kurz = dataclasses.replace(obj, objekt_id="OBJ-002", restbuchwert=50_000)
     miete_2046 = 60_000 * 1.02 ** 20
+    afa = 20_000
     erh_2030 = 8_000 * 1.025 ** 4
     return [
         ("Etappe 1: Stammdaten vollständig", Modell([obj]), [
@@ -118,6 +119,33 @@ def faelle():
             ("prg_Aktiv", pz(0, 2027), 0),
             ("prg_AfA", pz(0, 2027), 0),
             ("prg_Ergebnis", pz(0, 2027), 0),
+        ]),
+        ("Etappe 3: Indexierung mit Standardraten", Modell([obj]), [
+            ("prg_Miete", pz(0, 2028), 60_000 * 1.02 ** 2),
+            ("prg_Miete", pz(0, 2036), 60_000 * 1.02 ** 10),
+            ("prg_Erhaltung", pz(0, 2028), 8_000 * 1.025 ** 2),
+            ("prg_Erhaltung", pz(0, 2046), 8_000 * 1.025 ** 20),
+            ("prg_Ergebnis", pz(0, 2046), miete_2046 - 8_000 * 1.025 ** 20 - afa),
+        ]),
+        ("Etappe 3: geänderte Raten (Miete 3 %, Erhaltung 0 %)",
+         Modell([obj], {"par_Mietsteig": 0.03, "par_Erhaltsteig": 0}), [
+            ("prg_Miete", pz(0, 2027), 61_800),
+            ("prg_Miete", pz(0, 2036), 60_000 * 1.03 ** 10),
+            ("prg_Erhaltung", pz(0, 2027), 8_000),
+            ("prg_Erhaltung", pz(0, 2046), 8_000),
+            ("prg_Ergebnis", pz(0, 2036), 60_000 * 1.03 ** 10 - 8_000 - afa),
+        ]),
+        ("Etappe 3: Raten null und negativ",
+         Modell([obj], {"par_Mietsteig": 0, "par_Erhaltsteig": -0.01}), [
+            ("prg_Miete", pz(0, 2027), 60_000),
+            ("prg_Miete", pz(0, 2046), 60_000),
+            ("prg_Erhaltung", pz(0, 2027), 7_920),
+            ("prg_Erhaltung", pz(0, 2046), 8_000 * 0.99 ** 20),
+        ]),
+        ("Etappe 3: Basisjahr verschoben (2030)", Modell([obj], {"par_Basisjahr": 2030}), [
+            ("prg_Jahr", pz(0, 2027), 2031),
+            ("prg_Miete", pz(0, 2027), 61_200),   # Index zählt ab Basisjahr, nicht ab 2026
+            ("prg_Erhaltung", pz(0, 2027), 8_200),
         ]),
     ] + [
         (f"Etappe 1: Steuerwelt {welt}", Modell([obj], {"par_Steuerwelt": welt}),

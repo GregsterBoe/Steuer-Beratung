@@ -55,6 +55,14 @@ def _blatt_parameter(wb, modell: Modell) -> None:
                                 allow_blank=False)
             ws.add_data_validation(dv)
             dv.add(c.coordinate)
+        if p.minimum is not None or p.maximum is not None:
+            dv = DataValidation(type="decimal", operator="between",
+                                formula1=str(p.minimum), formula2=str(p.maximum),
+                                showErrorMessage=True, errorTitle="Ungültiger Wert",
+                                error=f"{p.bezeichnung}: erlaubt sind {p.minimum:.0%} "
+                                      f"bis {p.maximum:.0%}.")
+            ws.add_data_validation(dv)
+            dv.add(c.coordinate)
         if p.name.startswith("par_Status"):
             ws.conditional_formatting.add(
                 c.coordinate,

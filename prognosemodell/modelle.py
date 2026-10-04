@@ -26,6 +26,8 @@ class Parameter:
     format: str
     erlaeuterung: str
     auswahl: Optional[tuple] = None  # Dropdown-Werte
+    minimum: Optional[float] = None  # Datenvalidierung (Dezimalzahl)
+    maximum: Optional[float] = None
 
 
 STEUERWELT_GMBH = "GmbH"
@@ -53,10 +55,13 @@ PARAMETER = [
               FMT_TEXT, "berechnet"),
     Parameter("par_Steuersatz", "Grenzsteuersatz", 0.30, FMT_PROZENT,
               "KSt, SolZ und GewSt zusammen; Platzhalter, prüfen"),
-    Parameter("par_Mietsteig", "Mietsteigerung p. a.", 0.02, FMT_PROZENT, "Platzhalter"),
+    Parameter("par_Mietsteig", "Mietsteigerung p. a.", 0.02, FMT_PROZENT,
+              "ab Basisjahr, erstes Prognosejahr schon gesteigert; negativ = Rückgang; "
+              "Platzhalter", minimum=-0.1, maximum=0.2),
     Parameter("par_Erhaltsteig", "Erhaltungssteigerung p. a.", 0.025, FMT_PROZENT,
-              "Platzhalter"),
-    Parameter("par_Wertsteig", "Wertsteigerung p. a.", 0.02, FMT_PROZENT, "Platzhalter"),
+              "wie Mietsteigerung; Platzhalter", minimum=-0.1, maximum=0.2),
+    Parameter("par_Wertsteig", "Wertsteigerung p. a.", 0.02, FMT_PROZENT, "Platzhalter",
+              minimum=-0.1, maximum=0.2),
     Parameter("par_GrESt", "Grunderwerbsteuersatz", 0.05, FMT_PROZENT,
               "abhängig vom Bundesland; Platzhalter"),
     Parameter("par_Alternativrendite", "Rendite Alternativanlage p. a.", 0.04, FMT_PROZENT,

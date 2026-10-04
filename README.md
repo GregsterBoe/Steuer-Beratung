@@ -28,7 +28,7 @@
 8. Szenariovergleich
 9. VBA-Steuerung und Plausibilitätsprüfungen
 
-Stand: Etappen 1 und 2 umgesetzt (Parameter- und Objektblatt mit Statusprüfung, Prognosematrix mit AfA-Fortschreibung).
+Stand: Etappen 1 bis 3 umgesetzt (Parameter- und Objektblatt mit Statusprüfung, Prognosematrix mit AfA-Fortschreibung, Indexierung von Miete und Erhaltung).
 
 ## Nutzung
 
@@ -41,7 +41,7 @@ python -m pruefung.pruefen           # rechnet per LibreOffice headless und prü
 
 Das Prüfskript braucht LibreOffice mit Calc (`soffice`).
 
-Gelb = Eingabe, grau = Formel. Der Schalter Steuerwelt kennt GmbH, Privat/GbR und gewerblich; gerechnet wird im MVP nur GmbH, sonst zeigt das Parameterblatt „nicht im MVP“. Die Statusspalte im Objektblatt meldet fehlende Pflichtfelder, doppelte IDs, ein Kaufjahr nach dem Basisjahr und einen Restbuchwert über den AK. Das Blatt Prognose rechnet je Objekt und Jahr Miete, Erhaltung, AfA, Buchwert und Ergebnis, nur für Objekte mit Status OK.
+Gelb = Eingabe, grau = Formel. Der Schalter Steuerwelt kennt GmbH, Privat/GbR und gewerblich; gerechnet wird im MVP nur GmbH, sonst zeigt das Parameterblatt „nicht im MVP“. Die Statusspalte im Objektblatt meldet fehlende Pflichtfelder, doppelte IDs, ein Kaufjahr nach dem Basisjahr und einen Restbuchwert über den AK. Das Blatt Prognose rechnet je Objekt und Jahr Miete, Erhaltung, AfA, Buchwert und Ergebnis, nur für Objekte mit Status OK. Miete und Erhaltung steigen ab dem Basisjahr mit den Raten vom Parameterblatt.
 
 Details, Formeln und Testfälle stehen in [docs/Projektplan.md](docs/Projektplan.md).
 
