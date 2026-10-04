@@ -522,6 +522,67 @@ Stille Reserven zeigen, wie viel unversteuerter Wert im Bestand steckt: der Verk
 
 **Abnahme Etappe 7:** Die Summe des laufenden Ergebnisses über alle Objekte eines Jahres muss mit der Einzelsumme aus der Prognosematrix übereinstimmen. In einem Verkaufsjahr ohne 6b muss die Steuer gleich Veräußerungsgewinn mal Satz sein.
 
+**Umsetzung (Stand Etappe 7):** Beide Blätter haben eine Zeile je Prognosejahr und darunter eine Summenzeile. Summiert werden nur Stromgrößen, nicht Bestände und kumulierte Werte. Gegenüber den Tabellen oben sind die Spalten feiner aufgeteilt.
+
+*Prognose, neue Spalten I–M je Objekt und Jahr*
+
+| Spalte | Feld | Formel |
+| --- | --- | --- |
+| I | im Bestand Jahresende | Bestand: Status OK und Jahr vor dem Verkaufsjahr oder kein Verkauf. Neuobjekt: Status OK und Jahr ab Kaufjahr |
+| J | Buchwert G+B Ende | AK G+B bzw. `neu_BuchwertGuB`, × I |
+| K | Buchwert gesamt Ende | (Buchwert Gebäude + J) × I |
+| L | Verkehrswert Ende | Bestand: Verkehrswert × (1 + `par_Wertsteig`)^(Jahr − Basisjahr), ohne Verkehrswert gilt K. Neuobjekt: Kaufpreis × (1 + `par_Wertsteig`)^(Jahr − Kaufjahr). Jeweils × I |
+| M | stille Reserven | L − K |
+
+Im Verkaufsjahr rechnet ein Objekt noch voll mit (aktiv = 1), ist am Jahresende aber nicht mehr im Bestand (I = 0). Ein Neuobjekt ist ab Ende des Kaufjahrs im Bestand, obwohl es erst im Folgejahr Miete und AfA bringt.
+
+*Blatt Liquidität*
+
+| Spalte | Feld | Formel |
+| --- | --- | --- |
+| A | Jahr | `par_Startjahr` + Index |
+| B–E | Miete, Erhaltung, AfA, laufendes Ergebnis | SUMMEWENNS über `prg_*`, Jahr = A |
+| F | laufender Überschuss | B − C; die AfA fließt nicht ab |
+| G | Verkaufserlös netto | Verkaufspreis angesetzt − Verkaufskosten, nur Verkäufe mit Status OK |
+| H, I | davon Buchwert-Rückfluss, davon Veräußerungsgewinn | `vk_BuchwertGesamt`, `vk_Gewinn`; H + I = G |
+| J | Steuer auf laufendes Ergebnis | E × `par_Steuersatz` |
+| K | Steuer auf Veräußerung und Auflösung | `rlj_Steuer` aus dem Rücklagenspiegel |
+| L | Steuer gesamt | J + K |
+| M | Kauf Neuobjekte inkl. Nebenkosten | `neu_AKGesamt`, Kaufjahr = A, nur Status OK |
+| N | freier Mittelzufluss | F + G − L − M |
+| O | freier Mittelzufluss kumuliert | laufende Summe über N |
+
+*Blatt Auswertung*
+
+| Spalte | Feld | Formel |
+| --- | --- | --- |
+| A | Jahr | `par_Startjahr` + Index |
+| B | laufendes Ergebnis | aus Liquidität |
+| C | steuerpflichtig aus Verkauf und Auflösung | `rlj_Steuerpflichtig` |
+| D | Gesamt-GuV vor Steuern | B + C |
+| E | Steuer | aus Liquidität, Steuer gesamt; gleich D × Satz |
+| F | Ergebnis nach Steuer | D − E |
+| G | Steuer kumuliert | laufende Summe über E |
+| H | Buchwert Immobilien Jahresende | `prg_BuchwertGesamt` |
+| I | Verkehrswert Immobilien Jahresende | `prg_Verkehrswert` |
+| J | stille Reserven | I − H |
+| K | § 6b-Rücklage Stand | `rlj_Stand` |
+| L | freier Mittelzufluss kumuliert | aus Liquidität |
+
+- **Abweichung vom Entwurf oben:** Der Entwurf rechnet den freien Mittelzufluss mit dem laufenden Ergebnis. Die AfA fließt aber nicht ab, deshalb geht der Überschuss Miete minus Erhaltung ein. Die Steuer umfasst neben dem Verkauf auch das laufende Ergebnis.
+- **Steuer ohne Verlustvortrag:** Ein Verlust mindert die Steuer im selben Jahr, die Steuer kann also negativ werden. Gedacht ist an eine Verrechnung mit anderen Einkünften der GmbH. Verlustvortrag und Mindestbesteuerung sind nicht abgebildet.
+- **Reinvestition vor Finanzierung:** Der Kauf eines Neuobjekts fließt voll aus Eigenmitteln ab.
+- **Stille Reserven:** Sie gelten nur für Objekte im Bestand am Jahresende. Kaufnebenkosten eines Neuobjekts stecken im Buchwert, nicht im Verkehrswert; ohne Wertsteigerung ergibt das zunächst eine negative stille Reserve. Nach einem Übertrag steckt die übertragene Rücklage in den stillen Reserven des Neuobjekts.
+- Benannte Bereiche: `prg_Bestand`, `prg_BuchwertGuB`, `prg_BuchwertGesamt`, `prg_Verkehrswert`, `prg_StilleReserven`; `liq_Jahr`, `liq_Miete`, `liq_Erhaltung`, `liq_AfA`, `liq_Ergebnis`, `liq_Ueberschuss`, `liq_Erloes`, `liq_BuchwertRueckfluss`, `liq_Gewinn`, `liq_SteuerLaufend`, `liq_SteuerVerkauf`, `liq_Steuer`, `liq_Reinvest`, `liq_Mittelzufluss`, `liq_MittelzuflussKum`; `aw_Jahr`, `aw_Ergebnis`, `aw_SteuerpflichtigVerkauf`, `aw_GuV`, `aw_Steuer`, `aw_NachSteuer`, `aw_SteuerKum`, `aw_Buchwert`, `aw_Verkehrswert`, `aw_StilleReserven`, `aw_Ruecklage`, `aw_MittelzuflussKum`. Die Summenzeile liegt direkt unter dem letzten Jahr, außerhalb der Bereiche.
+
+Im Prüfskript:
+
+- **Ein Objekt:** 2027 ergibt laufendes Ergebnis 33.000 €, Steuer 9.900 € und freien Mittelzufluss 43.100 €. Buchwert 580.000 €, Verkehrswert 1.428.000 €, stille Reserven 848.000 €. Die Summenzeile entspricht der Summe der 20 Jahresergebnisse.
+- **Zwei Objekte:** Miete, AfA und Ergebnis 2030 sind die Summe beider Objekte.
+- **Verkauf 2030 ohne 6b:** Steuer auf Veräußerung = Gewinn × 30 %, Erlös = Buchwert-Rückfluss + Gewinn. Ab Ende 2030 sind Buchwert und Verkehrswert null.
+- **Reinvestition (Abnahmefall Etappe 6):** 2027 fließen 1.443.100 € zu, 2028 fließen 900.000 € für das Neuobjekt ab. Ende 2028 Buchwert 180.000 €, Verkehrswert 900.000 €, stille Reserven 720.000 € (= übertragene Rücklage).
+- weitere Fälle: Neuobjekt mit G+B, Neuobjekt ohne Rücklage, ungültiges Neuobjekt, fehlender Verkehrswert, Verlust mindert die Steuer
+
 ## 15. Szenariovergleich (Etappe 8)
 
 Der Vergleich beantwortet die Kernfrage des Mandanten: Lohnt die § 6b-Kette, oder ist es besser, die Steuer sofort zu zahlen und das freie Kapital anderweitig anzulegen? Beide Pfade laufen über dieselben Objekte und 20 Jahre, nur die Behandlung des Veräußerungsgewinns unterscheidet sich.

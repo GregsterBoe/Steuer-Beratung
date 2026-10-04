@@ -133,6 +133,7 @@ class Rechenspalte:
     name: str            # benannter Bereich über die Spalte
     format: str
     breite: int = 14
+    summe: bool = False  # Jahresblätter: in der Summenzeile aufaddieren
 
 
 PrognoseSpalte = Rechenspalte
@@ -147,6 +148,11 @@ PROGNOSE_SPALTEN = [
     PrognoseSpalte("afa", "AfA", "prg_AfA", FMT_EURO),
     PrognoseSpalte("buchwert", "Buchwert Gebäude Ende", "prg_Buchwert", FMT_EURO, 16),
     PrognoseSpalte("ergebnis", "Ergebnis vor Finanzierung", "prg_Ergebnis", FMT_EURO, 16),
+    PrognoseSpalte("bestand", "im Bestand Jahresende", "prg_Bestand", FMT_ZAHL, 9),
+    PrognoseSpalte("bw_gub", "Buchwert G+B Ende", "prg_BuchwertGuB", FMT_EURO),
+    PrognoseSpalte("bw_gesamt", "Buchwert gesamt Ende", "prg_BuchwertGesamt", FMT_EURO, 16),
+    PrognoseSpalte("verkehrswert", "Verkehrswert Ende", "prg_Verkehrswert", FMT_EURO, 16),
+    PrognoseSpalte("stille_reserven", "stille Reserven", "prg_StilleReserven", FMT_EURO, 16),
 ]
 
 
@@ -246,6 +252,53 @@ NEU_SPALTEN = [
     Rechenspalte("uebertrag", "Übertrag gesamt", "neu_Uebertrag", FMT_EURO, 16),
     Rechenspalte("afa_basis", "AfA-Basis Gebäude", "neu_AfABasis", FMT_EURO, 16),
     Rechenspalte("bw_gub", "Buchwert G+B", "neu_BuchwertGuB", FMT_EURO, 16),
+]
+
+
+# Blatt Liquidität: je Prognosejahr eine Zeile, darunter die Summe über alle Jahre
+LIQUIDITAET_SPALTEN = [
+    Rechenspalte("jahr", "Jahr", "liq_Jahr", FMT_JAHR, 8),
+    Rechenspalte("miete", "Miete", "liq_Miete", FMT_EURO, summe=True),
+    Rechenspalte("erhaltung", "Erhaltung", "liq_Erhaltung", FMT_EURO, summe=True),
+    Rechenspalte("afa", "AfA (nicht zahlungswirksam)", "liq_AfA", FMT_EURO, summe=True),
+    Rechenspalte("ergebnis", "laufendes Ergebnis", "liq_Ergebnis", FMT_EURO, 16, summe=True),
+    Rechenspalte("ueberschuss", "laufender Überschuss (Miete − Erhaltung)", "liq_Ueberschuss",
+                 FMT_EURO, 16, summe=True),
+    Rechenspalte("erloes", "Verkaufserlös netto", "liq_Erloes", FMT_EURO, 16, summe=True),
+    Rechenspalte("bw_rueckfluss", "davon Buchwert-Rückfluss", "liq_BuchwertRueckfluss",
+                 FMT_EURO, 16, summe=True),
+    Rechenspalte("gewinn", "davon Veräußerungsgewinn", "liq_Gewinn", FMT_EURO, 16, summe=True),
+    Rechenspalte("steuer_laufend", "Steuer auf laufendes Ergebnis", "liq_SteuerLaufend",
+                 FMT_EURO, 16, summe=True),
+    Rechenspalte("steuer_verkauf", "Steuer auf Veräußerung und Auflösung", "liq_SteuerVerkauf",
+                 FMT_EURO, 16, summe=True),
+    Rechenspalte("steuer", "Steuer gesamt", "liq_Steuer", FMT_EURO, summe=True),
+    Rechenspalte("reinvest", "Kauf Neuobjekte inkl. Nebenkosten", "liq_Reinvest", FMT_EURO, 16,
+                 summe=True),
+    Rechenspalte("mittelzufluss", "freier Mittelzufluss", "liq_Mittelzufluss", FMT_EURO, 16,
+                 summe=True),
+    Rechenspalte("mittelzufluss_kum", "freier Mittelzufluss kumuliert", "liq_MittelzuflussKum",
+                 FMT_EURO, 16),
+]
+
+# Blatt Auswertung: Kennzahlen je Prognosejahr, darunter die Summe
+AUSWERTUNG_SPALTEN = [
+    Rechenspalte("jahr", "Jahr", "aw_Jahr", FMT_JAHR, 8),
+    Rechenspalte("ergebnis", "laufendes Ergebnis", "aw_Ergebnis", FMT_EURO, 16, summe=True),
+    Rechenspalte("steuerpflichtig_vk", "steuerpflichtig aus Verkauf und Auflösung",
+                 "aw_SteuerpflichtigVerkauf", FMT_EURO, 18, summe=True),
+    Rechenspalte("guv", "Gesamt-GuV vor Steuern", "aw_GuV", FMT_EURO, 16, summe=True),
+    Rechenspalte("steuer", "Steuer", "aw_Steuer", FMT_EURO, summe=True),
+    Rechenspalte("nach_steuer", "Ergebnis nach Steuer", "aw_NachSteuer", FMT_EURO, 16,
+                 summe=True),
+    Rechenspalte("steuer_kum", "Steuer kumuliert", "aw_SteuerKum", FMT_EURO, 16),
+    Rechenspalte("buchwert", "Buchwert Immobilien Jahresende", "aw_Buchwert", FMT_EURO, 16),
+    Rechenspalte("verkehrswert", "Verkehrswert Immobilien Jahresende", "aw_Verkehrswert",
+                 FMT_EURO, 16),
+    Rechenspalte("stille_reserven", "stille Reserven", "aw_StilleReserven", FMT_EURO, 16),
+    Rechenspalte("ruecklage", "§ 6b-Rücklage Stand", "aw_Ruecklage", FMT_EURO, 16),
+    Rechenspalte("mittel_kum", "freier Mittelzufluss kumuliert", "aw_MittelzuflussKum",
+                 FMT_EURO, 16),
 ]
 
 

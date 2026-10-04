@@ -6,8 +6,9 @@ Excel zeigt sie in der deutschen Oberfläche automatisch als WENN, ZÄHLENWENN u
 
 from openpyxl.utils import get_column_letter
 
-from .modelle import (NEU_FELDER, NEU_SPALTEN, OBJEKT_FELDER, RUECKLAGE_6B_GEBILDET,
-                      RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN, VERKAUF_FELDER, VERKAUF_SPALTEN)
+from .modelle import (AUSWERTUNG_SPALTEN, LIQUIDITAET_SPALTEN, NEU_FELDER, NEU_SPALTEN,
+                      OBJEKT_FELDER, RUECKLAGE_6B_GEBILDET, RUECKLAGE_JAHR_SPALTEN,
+                      RUECKLAGE_SPALTEN, VERKAUF_FELDER, VERKAUF_SPALTEN)
 
 
 def spalte(key: str, felder=OBJEKT_FELDER) -> str:
@@ -41,7 +42,7 @@ def _obj(key: str, objekt_zeile: int) -> str:
 
 
 def prognose_zeile(zeile: int, objekt_zeile: int, jahr_index: int) -> dict:
-    """Formeln einer Prognosezeile (Spalten A–H laut Projektplan Abschnitt 8).
+    """Formeln einer Prognosezeile (Spalten A–H laut Projektplan Abschnitt 8, I–M Abschnitt 14).
 
     Jeder Objektzeile ist ein fester Block von Jahreszeilen zugeordnet, deshalb
     verweist die Zeile direkt auf ihre Objektzeile statt per SVERWEIS über die ID.
@@ -68,6 +69,15 @@ def prognose_zeile(zeile: int, objekt_zeile: int, jahr_index: int) -> dict:
         # nach dem Verkauf (oder ohne gültiges Objekt) steht kein Buchwert mehr
         "buchwert": f"=MAX({bw_vorjahr}-$F{zeile},0)*$C{zeile}",
         "ergebnis": f"=($D{zeile}-$E{zeile}-$F{zeile})*$C{zeile}",
+        # Verkauf zum Jahresende: im Verkaufsjahr aktiv, am Jahresende aber nicht mehr im Bestand
+        "bestand": f'=IF(AND({status}="OK",OR({verkauft}=0,$B{zeile}<{vk_jahr})),1,0)',
+        "bw_gub": f"={_obj('ak_gub', objekt_zeile)}*$I{zeile}",
+        "bw_gesamt": f"=($G{zeile}+$J{zeile})*$I{zeile}",
+        # ohne Verkehrswert im Objektblatt gilt der Buchwert, stille Reserve also null
+        "verkehrswert": f'=IF({_obj("verkehrswert", objekt_zeile)}="",$K{zeile},'
+                        f'{_obj("verkehrswert", objekt_zeile)}'
+                        f"*(1+par_Wertsteig)^($B{zeile}-par_Basisjahr))*$I{zeile}",
+        "stille_reserven": f"=$L{zeile}-$K{zeile}",
     }
 
 
@@ -289,4 +299,75 @@ def prognose_neu_zeile(zeile: int, neu_zeile_nr: int, jahr_index: int) -> dict:
         "buchwert": f'=IF({ok},IF({jahr}<{kaufjahr},0,IF({jahr}={kaufjahr},{sp["afa_basis"]},'
                     f"MAX({bw_vorjahr}-$F{zeile},0))),0)",
         "ergebnis": f"=($D{zeile}-$E{zeile}-$F{zeile})*$C{zeile}",
+        # ab Ende des Kaufjahrs im Bestand; Verkehrswert = Kaufpreis, steigt ab dem Folgejahr
+        "bestand": f"=IF({ok},IF({jahr}>={kaufjahr},1,0),0)",
+        "bw_gub": f'=IF($I{zeile}=1,{sp["bw_gub"]},0)',
+        "bw_gesamt": f"=($G{zeile}+$J{zeile})*$I{zeile}",
+        "verkehrswert": f'=IF($I{zeile}=1,{sp["kaufpreis"]}'
+                        f"*(1+par_Wertsteig)^({jahr}-{kaufjahr}),0)",
+        "stille_reserven": f"=$L{zeile}-$K{zeile}",
+    }
+
+
+def jahres_spalten(spalten) -> dict:
+    """Spaltenbuchstaben eines Jahresblatts (Liquidität, Auswertung)."""
+    return {s.key: get_column_letter(i) for i, s in enumerate(spalten, start=1)}
+
+
+def liquiditaet_zeile(zeile: int, jahr_index: int) -> dict:
+    """Geldfluss je Jahr über alle Objekte, vor Finanzierung (Projektplan Abschnitt 14).
+
+    Zahlungswirksam sind Miete und Erhaltung, nicht die AfA. Der Kauf eines
+    Neuobjekts fließt vor Finanzierung voll aus Eigenmitteln ab.
+    """
+    sp = {k: f"${v}{zeile}" for k, v in jahres_spalten(LIQUIDITAET_SPALTEN).items()}
+    jahr = sp["jahr"]
+
+    def prg(name: str) -> str:
+        return f"=SUMIFS({name},prg_Jahr,{jahr})"
+
+    def vk(name: str) -> str:
+        return f'SUMIFS({name},vk_Jahr,{jahr},vk_Status,"OK")'
+
+    vorjahr = "0" if jahr_index == 0 else \
+        f'${jahres_spalten(LIQUIDITAET_SPALTEN)["mittelzufluss_kum"]}{zeile - 1}'
+    return {
+        "jahr": f"=par_Startjahr+{jahr_index}",
+        "miete": prg("prg_Miete"),
+        "erhaltung": prg("prg_Erhaltung"),
+        "afa": prg("prg_AfA"),
+        "ergebnis": prg("prg_Ergebnis"),
+        "ueberschuss": f'={sp["miete"]}-{sp["erhaltung"]}',
+        "erloes": f'={vk("vk_PreisAngesetzt")}-{vk("vk_Kosten")}',
+        "bw_rueckfluss": f'={vk("vk_BuchwertGesamt")}',
+        "gewinn": f'={vk("vk_Gewinn")}',
+        # ohne Verlustvortrag: ein Verlust mindert die Steuer im selben Jahr
+        "steuer_laufend": f'={sp["ergebnis"]}*par_Steuersatz',
+        "steuer_verkauf": f"=SUMIFS(rlj_Steuer,rlj_Jahr,{jahr})",
+        "steuer": f'={sp["steuer_laufend"]}+{sp["steuer_verkauf"]}',
+        "reinvest": f'=SUMIFS(neu_AKGesamt,neu_Kaufjahr,{jahr},neu_Status,"OK")',
+        "mittelzufluss": f'={sp["ueberschuss"]}+{sp["erloes"]}-{sp["steuer"]}-{sp["reinvest"]}',
+        "mittelzufluss_kum": f'={vorjahr}+{sp["mittelzufluss"]}',
+    }
+
+
+def auswertung_zeile(zeile: int, jahr_index: int) -> dict:
+    """Kennzahlen je Jahr: Gesamt-GuV, Steuer, Buch- und Verkehrswert, stille Reserven."""
+    sp = {k: f"${v}{zeile}" for k, v in jahres_spalten(AUSWERTUNG_SPALTEN).items()}
+    jahr = sp["jahr"]
+    vorjahr = "0" if jahr_index == 0 else \
+        f'${jahres_spalten(AUSWERTUNG_SPALTEN)["steuer_kum"]}{zeile - 1}'
+    return {
+        "jahr": f"=par_Startjahr+{jahr_index}",
+        "ergebnis": f"=SUMIFS(liq_Ergebnis,liq_Jahr,{jahr})",
+        "steuerpflichtig_vk": f"=SUMIFS(rlj_Steuerpflichtig,rlj_Jahr,{jahr})",
+        "guv": f'={sp["ergebnis"]}+{sp["steuerpflichtig_vk"]}',
+        "steuer": f"=SUMIFS(liq_Steuer,liq_Jahr,{jahr})",
+        "nach_steuer": f'={sp["guv"]}-{sp["steuer"]}',
+        "steuer_kum": f'={vorjahr}+{sp["steuer"]}',
+        "buchwert": f"=SUMIFS(prg_BuchwertGesamt,prg_Jahr,{jahr})",
+        "verkehrswert": f"=SUMIFS(prg_Verkehrswert,prg_Jahr,{jahr})",
+        "stille_reserven": f'={sp["verkehrswert"]}-{sp["buchwert"]}',
+        "ruecklage": f"=SUMIFS(rlj_Stand,rlj_Jahr,{jahr})",
+        "mittel_kum": f"=SUMIFS(liq_MittelzuflussKum,liq_Jahr,{jahr})",
     }

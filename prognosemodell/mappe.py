@@ -8,7 +8,7 @@ from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from . import formeln
-from .modelle import (MAX_NEUOBJEKTE, MAX_OBJEKTE, MAX_VERKAEUFE, NEU_FELDER, NEU_SPALTEN,
+from .modelle import (AUSWERTUNG_SPALTEN, LIQUIDITAET_SPALTEN, MAX_NEUOBJEKTE, MAX_OBJEKTE, MAX_VERKAEUFE, NEU_FELDER, NEU_SPALTEN,
                       NEU_STATUS_NAME, OBJEKT_FELDER, PARAMETER, PROGNOSE_SPALTEN,
                       RUECKLAGE_6B_GEBILDET, RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN,
                       STATUS_NAME, STATUS_UEBERSCHRIFT, VERKAUF_FELDER, VERKAUF_SPALTEN,
@@ -296,6 +296,52 @@ def _blatt_ruecklagen(wb, modell: Modell) -> None:
     ws.protection.sheet = True
 
 
+def _jahresblatt(wb, modell: Modell, blatt: str, spalten, zeilen_formeln,
+                 hinweis: str) -> None:
+    """Rechenblatt mit einer Zeile je Prognosejahr und einer Summenzeile darunter."""
+    ws = wb.create_sheet(blatt)
+    erste, letzte = 2, prognosejahre(modell) + 1
+    buchstaben = formeln.jahres_spalten(spalten)
+    _kopf(ws, 1, [s.ueberschrift for s in spalten])
+    ws.row_dimensions[1].height = 45
+    _rechenspalten(wb, ws, blatt, spalten, buchstaben, "", erste, letzte, zeilen_formeln)
+
+    # Summe über alle Jahre nur für Stromgrößen, nicht für Bestände und kumulierte Werte
+    summe = letzte + 1
+    for s in spalten:
+        bst = buchstaben[s.key]
+        c = ws[f"{bst}{summe}"]
+        if s.key == "jahr":
+            c.value = "Summe"
+        elif s.summe:
+            c.value = f"=SUM({bst}{erste}:{bst}{letzte})"
+            c.number_format = s.format
+        c.font = Font(bold=True)
+        c.fill = FILL_BERECHNET
+
+    ws.cell(row=1, column=len(spalten) + 2, value=hinweis)
+    ws.freeze_panes = "B2"
+    ws.protection.sheet = True
+
+
+def _blatt_liquiditaet(wb, modell: Modell) -> None:
+    _jahresblatt(wb, modell, "Liquidität", LIQUIDITAET_SPALTEN, formeln.liquiditaet_zeile,
+                 "Summen über alle Objekte und Neuobjekte je Jahr. Freier Mittelzufluss = "
+                 "laufender Überschuss + Verkaufserlös netto − Steuer gesamt − Kauf Neuobjekte; "
+                 "die AfA fließt nicht ab. Steuer ohne Verlustvortrag: ein Verlust mindert die "
+                 "Steuer im selben Jahr. Neuobjekte voll aus Eigenmitteln. "
+                 + HINWEIS_FINANZIERUNG)
+
+
+def _blatt_auswertung(wb, modell: Modell) -> None:
+    _jahresblatt(wb, modell, "Auswertung", AUSWERTUNG_SPALTEN, formeln.auswertung_zeile,
+                 "Gesamt-GuV = laufendes Ergebnis + steuerpflichtiger Teil aus Verkauf und "
+                 "Auflösung (Rücklagenspiegel). Buch- und Verkehrswert über die Objekte im "
+                 "Bestand am Jahresende; ohne Verkehrswert im Objektblatt gilt der Buchwert. "
+                 "Stille Reserven = Verkehrswert − Buchwert, eine Steuerungsgröße, keine "
+                 "Steuerposition. " + HINWEIS_FINANZIERUNG)
+
+
 def erstelle_mappe(modell: Modell) -> Workbook:
     wb = Workbook()
     _blatt_parameter(wb, modell)
@@ -304,4 +350,6 @@ def erstelle_mappe(modell: Modell) -> Workbook:
     _blatt_neuobjekte(wb, modell)
     _blatt_prognose(wb, modell)
     _blatt_ruecklagen(wb, modell)
+    _blatt_liquiditaet(wb, modell)
+    _blatt_auswertung(wb, modell)
     return wb

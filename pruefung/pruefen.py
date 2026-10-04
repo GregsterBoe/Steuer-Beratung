@@ -107,6 +107,15 @@ def faelle():
     rest_teil = 720_000 - 400_000
     basis_zweit = 800_000 - (gewinn_geb_bw - 300_000)
 
+    # Etappe 7: Jahresblätter, Zeile 0 = 2027, Zeile 20 = Summe über alle Jahre
+    summe = JAHRE
+    ergebnisse = [60_000 * 1.02 ** k - 8_000 * 1.025 ** k - afa for k in range(1, JAHRE + 1)]
+    ergebnis_2028 = ergebnisse[1]
+    ergebnis_2030 = miete_2030 - erh_2030 - afa
+    steuer_2030 = (ergebnis_2030 + gewinn_2030) * 0.30
+    fluss_2027 = 53_000 - 9_900
+    fluss_2028 = 60_000 * 1.02 ** 2 - 8_000 * 1.025 ** 2 - ergebnis_2028 * 0.30
+
     return [
         ("Etappe 1: Stammdaten vollständig", Modell([obj]), [
             ("par_Startjahr", 0, 2027),
@@ -500,6 +509,129 @@ def faelle():
          [("neu_Status", 0, "Pflichtfeld fehlt")]),
         ("Etappe 6: Kaufjahr außerhalb", reinvest(neu(kaufjahr=2050, quelle=None)),
          [("neu_Status", 0, "Kaufjahr außerhalb Prognose")]),
+        ("Etappe 7: ein Objekt ohne Verkauf", Modell([obj]), [
+            ("liq_Jahr", rj(2027), 2027),
+            ("liq_Miete", rj(2027), 61_200),
+            ("liq_Erhaltung", rj(2027), 8_200),
+            ("liq_AfA", rj(2027), 20_000),
+            ("liq_Ergebnis", rj(2027), 33_000),
+            ("liq_Ueberschuss", rj(2027), 53_000),  # AfA fließt nicht ab
+            ("liq_Erloes", rj(2027), 0),
+            ("liq_SteuerLaufend", rj(2027), 9_900),
+            ("liq_SteuerVerkauf", rj(2027), 0),
+            ("liq_Steuer", rj(2027), 9_900),
+            ("liq_Reinvest", rj(2027), 0),
+            ("liq_Mittelzufluss", rj(2027), fluss_2027),
+            ("liq_MittelzuflussKum", rj(2028), fluss_2027 + fluss_2028),
+            ("liq_Jahr", summe, "Summe"),
+            ("liq_Ergebnis", summe, sum(ergebnisse)),
+            ("liq_Steuer", summe, sum(ergebnisse) * 0.30),
+            ("liq_MittelzuflussKum", summe, None),  # kumulierte Werte ohne Summe
+            ("prg_Bestand", pz(0, 2027), 1),
+            ("prg_BuchwertGuB", pz(0, 2027), 200_000),
+            ("prg_BuchwertGesamt", pz(0, 2027), 580_000),
+            ("prg_Verkehrswert", pz(0, 2027), 1_428_000),
+            ("prg_StilleReserven", pz(0, 2027), 848_000),
+            ("prg_Bestand", pz(1, 2027), 0),     # leerer Block zählt nicht
+            ("prg_Verkehrswert", pz(1, 2027), 0),
+            ("aw_Ergebnis", rj(2027), 33_000),
+            ("aw_SteuerpflichtigVerkauf", rj(2027), 0),
+            ("aw_GuV", rj(2027), 33_000),
+            ("aw_Steuer", rj(2027), 9_900),
+            ("aw_NachSteuer", rj(2027), 23_100),
+            ("aw_Buchwert", rj(2027), 580_000),
+            ("aw_Verkehrswert", rj(2027), 1_428_000),
+            ("aw_StilleReserven", rj(2027), 848_000),
+            ("aw_Buchwert", rj(2046), 200_000),
+            ("aw_Verkehrswert", rj(2046), 1_400_000 * 1.02 ** 20),
+            ("aw_SteuerKum", rj(2046), sum(ergebnisse) * 0.30),
+            ("aw_Steuer", summe, sum(ergebnisse) * 0.30),
+            ("aw_Ruecklage", rj(2027), 0),
+            ("aw_MittelzuflussKum", rj(2028), fluss_2027 + fluss_2028),
+        ]),
+        ("Etappe 7: Summe über zwei Objekte", Modell([obj, kurz]), [
+            ("liq_Miete", rj(2030), 2 * miete_2030),
+            ("liq_AfA", rj(2029), 30_000),
+            ("liq_AfA", rj(2030), 20_000),       # OBJ-002 ist abgeschrieben
+            ("liq_Ergebnis", rj(2030), ergebnis_2030 + miete_2030 - erh_2030),
+            ("aw_Buchwert", rj(2030), 720_000),
+            ("aw_Verkehrswert", rj(2030), 2 * 1_400_000 * 1.02 ** 4),
+        ]),
+        ("Etappe 7: Verkauf ohne 6b, Steuer = Gewinn × Satz",
+         Modell([obj], verkaeufe=[vk_2030]), [
+            ("liq_Erloes", rj(2030), netto_2030),
+            ("liq_BuchwertRueckfluss", rj(2030), 520_000),
+            ("liq_Gewinn", rj(2030), gewinn_2030),
+            ("liq_SteuerVerkauf", rj(2030), gewinn_2030 * 0.30),
+            ("liq_Steuer", rj(2030), steuer_2030),
+            ("liq_Mittelzufluss", rj(2030), miete_2030 - erh_2030 + netto_2030 - steuer_2030),
+            ("liq_Miete", rj(2031), 0),
+            ("liq_Mittelzufluss", rj(2031), 0),
+            ("prg_Bestand", pz(0, 2029), 1),
+            ("prg_Bestand", pz(0, 2030), 0),     # Verkauf zum Jahresende
+            ("aw_Buchwert", rj(2029), 540_000),
+            ("aw_Buchwert", rj(2030), 0),
+            ("aw_Verkehrswert", rj(2030), 0),
+            ("aw_GuV", rj(2030), ergebnis_2030 + gewinn_2030),
+            ("aw_Steuer", rj(2030), steuer_2030),
+        ]),
+        ("Etappe 7: Reinvestition, Abnahmefall", reinvest(neu()), [
+            ("liq_Erloes", rj(2027), 1_400_000),
+            ("liq_SteuerVerkauf", rj(2027), 0),
+            ("liq_Steuer", rj(2027), 9_900),
+            ("liq_Mittelzufluss", rj(2027), 53_000 + 1_400_000 - 9_900),
+            ("liq_Reinvest", rj(2028), 900_000),
+            ("liq_Miete", rj(2028), 0),
+            ("liq_Mittelzufluss", rj(2028), -900_000),
+            ("liq_MittelzuflussKum", rj(2028), 53_000 + 1_400_000 - 9_900 - 900_000),
+            ("liq_Ergebnis", rj(2029), 30_600),
+            ("liq_Steuer", rj(2029), 9_180),
+            ("liq_Mittelzufluss", rj(2029), 45_000 - 9_000 - 9_180),
+            ("liq_SteuerVerkauf", rj(2031), 0),
+            ("prg_Bestand", nz(0, 2027), 0),
+            ("prg_Bestand", nz(0, 2028), 1),
+            ("prg_BuchwertGesamt", nz(0, 2028), 180_000),
+            ("aw_Buchwert", rj(2027), 0),        # Altobjekt verkauft, Neuobjekt noch nicht da
+            ("aw_Ruecklage", rj(2027), 720_000),
+            ("aw_Ruecklage", rj(2028), 0),
+            ("aw_Buchwert", rj(2028), 180_000),
+            ("aw_Verkehrswert", rj(2028), 900_000),
+            ("aw_StilleReserven", rj(2028), 720_000),  # = übertragene Rücklage
+            ("aw_Verkehrswert", rj(2030), 900_000 * 1.02 ** 2),
+            ("aw_Buchwert", rj(2029), 174_600),
+        ]),
+        ("Etappe 7: Neuobjekt mit G+B im Buchwert",
+         reinvest(neu(kaufpreis=1_000_000, anteil_gub=0.1)), [
+            ("prg_BuchwertGuB", nz(0, 2028), 0),
+            ("aw_Buchwert", rj(2028), 280_000),
+            ("aw_StilleReserven", rj(2028), 720_000),
+        ]),
+        ("Etappe 7: Neuobjekt ohne Rücklage", Modell([obj], neuobjekte=[
+            neu(kaufjahr=2030, kaufpreis=500_000, anteil_gub=0.2, nebenkosten=None,
+                quelle=None)]), [
+            ("liq_Reinvest", rj(2030), 525_000),
+            ("prg_BuchwertGuB", nz(0, 2030), 105_000),
+            ("prg_BuchwertGesamt", nz(0, 2030), 525_000),
+            ("prg_StilleReserven", nz(0, 2030), -25_000),  # Nebenkosten nicht im Verkehrswert
+            ("aw_Buchwert", rj(2030), 520_000 + 525_000),
+        ]),
+        ("Etappe 7: ungültiges Neuobjekt fließt nicht ab", reinvest(neu(kaufjahr=2032)), [
+            ("liq_Reinvest", rj(2032), 0),
+            ("liq_SteuerVerkauf", rj(2031), (720_000 + zuschlag) * 0.30),
+            ("aw_SteuerpflichtigVerkauf", rj(2031), 720_000 + zuschlag),
+            ("aw_Verkehrswert", rj(2032), 0),
+        ]),
+        ("Etappe 7: ohne Verkehrswert keine stille Reserve",
+         Modell([dataclasses.replace(obj, verkehrswert=None)]), [
+            ("prg_Verkehrswert", pz(0, 2027), 580_000),
+            ("aw_StilleReserven", rj(2027), 0),
+        ]),
+        ("Etappe 7: Verlust mindert die Steuer im selben Jahr",
+         Modell([vk_obj], verkaeufe=[dataclasses.replace(vk_2027, preis=600_000)]), [
+            ("liq_Erloes", rj(2027), 600_000),
+            ("liq_Steuer", rj(2027), (33_000 - 80_000) * 0.30),
+            ("aw_GuV", rj(2027), 33_000 - 80_000),
+        ]),
     ] + [
         (f"Etappe 1: Steuerwelt {welt}", Modell([obj], {"par_Steuerwelt": welt}),
          [("par_StatusSteuerwelt", 0, "nicht im MVP – Ergebnisse gelten nur für GmbH")])
