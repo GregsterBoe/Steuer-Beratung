@@ -2,17 +2,18 @@
 
 from openpyxl import Workbook
 from openpyxl.formatting.rule import FormulaRule
-from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.styles import Alignment, Font, PatternFill, Protection
 from openpyxl.utils import get_column_letter
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from . import formeln
-from .modelle import (AUSWERTUNG_SPALTEN, LIQUIDITAET_SPALTEN, MAX_NEUOBJEKTE, MAX_OBJEKTE, MAX_VERKAEUFE, NEU_FELDER, NEU_SPALTEN,
-                      NEU_STATUS_NAME, OBJEKT_FELDER, PARAMETER, PROGNOSE_SPALTEN,
-                      RUECKLAGE_6B_GEBILDET, RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN,
-                      STATUS_NAME, STATUS_UEBERSCHRIFT, VERKAUF_FELDER, VERKAUF_SPALTEN,
-                      VERKAUF_STATUS_NAME, Modell)
+from .modelle import (AUSWERTUNG_SPALTEN, FMT_EURO, LIQUIDITAET_SPALTEN, MAX_NEUOBJEKTE,
+                      MAX_OBJEKTE, MAX_VERKAEUFE, NEU_FELDER, NEU_SPALTEN, NEU_STATUS_NAME,
+                      OBJEKT_FELDER, PARAMETER, PROGNOSE_SPALTEN, RUECKLAGE_6B_GEBILDET,
+                      RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN, STATUS_NAME,
+                      STATUS_UEBERSCHRIFT, SZENARIO_A, SZENARIO_B, VERGLEICH_KENNZAHLEN,
+                      VERKAUF_FELDER, VERKAUF_SPALTEN, VERKAUF_STATUS_NAME, Modell)
 
 HINWEIS_FINANZIERUNG = "Alle Werte vor Finanzierung (ohne Zins und Tilgung)."
 
@@ -116,11 +117,14 @@ def _datensaetze(ws, felder, datensaetze, erste: int) -> None:
                 ws.cell(row=zeile, column=i, value=wert)
 
 
-def _status_rot(ws, st: str, erste: int, letzte: int) -> None:
-    """Status rot, sobald er gesetzt ist und nicht OK lautet."""
+def _status_rot(ws, st: str, erste: int, letzte: int, ausnahme: str = "") -> None:
+    """Status rot, sobald er gesetzt ist und nicht OK lautet (und nicht die Ausnahme ist)."""
+    bedingungen = [f'{st}{erste}<>""', f'{st}{erste}<>"OK"']
+    if ausnahme:
+        bedingungen.append(f'{st}{erste}<>"{ausnahme}"')
     ws.conditional_formatting.add(
         f"{st}{erste}:{st}{letzte}",
-        FormulaRule(formula=[f'AND({st}{erste}<>"",{st}{erste}<>"OK")'], fill=FILL_FEHLER),
+        FormulaRule(formula=[f"AND({','.join(bedingungen)})"], fill=FILL_FEHLER),
     )
 
 
@@ -146,7 +150,8 @@ def _blatt_objekte(wb, modell: Modell) -> None:
 
 
 def _eingabeblatt(wb, blatt: str, felder, status_name: str, spalten, buchstaben: dict,
-                  letzte: int, zeilen_formeln, datensaetze, hinweis: str) -> None:
+                  letzte: int, zeilen_formeln, datensaetze, hinweis: str,
+                  status_ausnahme: str = "") -> None:
     """Eingabeblatt mit Statusspalte und anschließenden Formelspalten (Verkäufe, Neuobjekte)."""
     ws = wb.create_sheet(blatt)
     erste = 2
@@ -173,7 +178,7 @@ def _eingabeblatt(wb, blatt: str, felder, status_name: str, spalten, buchstaben:
             c.value = zelle_formeln[s.key]
             c.number_format = s.format
             c.fill = FILL_BERECHNET
-    _status_rot(ws, st, erste, letzte)
+    _status_rot(ws, st, erste, letzte, status_ausnahme)
 
     _datensaetze(ws, felder, datensaetze, erste)
     ws.cell(row=1, column=len(felder) + len(spalten) + 3, value=hinweis)
@@ -196,8 +201,9 @@ def _blatt_neuobjekte(wb, modell: Modell) -> None:
                   modell.neuobjekte,
                   "Kauf zum Jahresende; Miete, Erhaltung und AfA ab dem Folgejahr. Gebäude-"
                   "Rücklage nur auf Gebäude, G+B-Rücklage zuerst auf G+B, Rest auf Gebäude; "
-                  "übertragen wird so viel wie möglich, obere Zeilen zuerst. "
-                  + HINWEIS_FINANZIERUNG)
+                  "übertragen wird so viel wie möglich, obere Zeilen zuerst. In Szenario B "
+                  "entfallen Neuobjekte mit Quelle-Rücklage. " + HINWEIS_FINANZIERUNG,
+                  formeln.NEU_SZENARIO_B)
 
 
 def prognosejahre(modell: Modell) -> int:
@@ -339,7 +345,71 @@ def _blatt_auswertung(wb, modell: Modell) -> None:
                  "Auflösung (Rücklagenspiegel). Buch- und Verkehrswert über die Objekte im "
                  "Bestand am Jahresende; ohne Verkehrswert im Objektblatt gilt der Buchwert. "
                  "Stille Reserven = Verkehrswert − Buchwert, eine Steuerungsgröße, keine "
-                 "Steuerposition. " + HINWEIS_FINANZIERUNG)
+                 "Steuerposition. Alternativanlage: freie Mittel zum Jahresende angelegt, "
+                 "verzinst ab dem Folgejahr mit der Alternativrendite, Zins versteuert; ein "
+                 "negativer Stand wird ebenso verzinst. Vermögen nach Steuern = Verkehrswert + "
+                 "Alternativanlage − latente Steuer auf stille Reserven und Rücklage (ohne "
+                 "Gewinnzuschlag). " + HINWEIS_FINANZIERUNG)
+
+
+def _blatt_vergleich(wb, modell: Modell) -> None:
+    """Szenariovergleich: Kennzahlen des aktiven Szenarios und gespeicherte Läufe A und B."""
+    ws = wb.create_sheet("Vergleich")
+    ws["A1"] = "Szenariovergleich"
+    ws["A1"].font = FONT_TITEL
+    ws["A2"] = HINWEIS_FINANZIERUNG
+    ws["A3"] = "aktives Szenario"
+    ws["B3"] = "=par_Szenario"
+    ws["B3"].fill = FILL_BERECHNET
+    _kopf(ws, 5, ["Kennzahl", "aktives Szenario", f"Szenario {SZENARIO_A} gespeichert",
+                  f"Szenario {SZENARIO_B} gespeichert",
+                  f"Differenz {SZENARIO_A} − {SZENARIO_B}", "Erläuterung"])
+    ws.row_dimensions[5].height = 32
+    erste = 6
+    letzte = erste + len(VERGLEICH_KENNZAHLEN) - 1
+    aktuell = formeln.vergleich_aktuell(erste)
+    gespeichert = {sz: modell.vergleich.get(sz, {}) for sz in (SZENARIO_A, SZENARIO_B)}
+    for zeile, k in enumerate(VERGLEICH_KENNZAHLEN, start=erste):
+        ws.cell(row=zeile, column=1, value=k.bezeichnung)
+        werte = [aktuell[k.key], gespeichert[SZENARIO_A].get(k.key),
+                 gespeichert[SZENARIO_B].get(k.key),
+                 f'=IF(OR(C{zeile}="",D{zeile}=""),"",C{zeile}-D{zeile})']
+        for spalte, wert in enumerate(werte, start=2):
+            c = ws.cell(row=zeile, column=spalte, value=wert)
+            c.number_format = FMT_EURO
+            eingabe = spalte in (3, 4)
+            c.fill = FILL_EINGABE if eingabe else FILL_BERECHNET
+            if eingabe:
+                c.protection = Protection(locked=False)
+        ws.cell(row=zeile, column=6, value=k.erlaeuterung)
+        if k.fett:
+            for spalte in range(1, 6):
+                ws.cell(row=zeile, column=spalte).font = Font(bold=True)
+    for name, bst in (("vg_Aktuell", "B"), ("vg_A", "C"), ("vg_B", "D"),
+                      ("vg_Differenz", "E")):
+        _name(wb, name, f"Vergleich!${bst}${erste}:${bst}${letzte}")
+
+    hinweise = [
+        "So wird verglichen: Szenario A auf dem Parameterblatt wählen, Spalte „aktives "
+        "Szenario“ als Werte in Spalte C einfügen; dann Szenario B wählen und ebenso in "
+        "Spalte D. Ab Etappe 9 übernimmt das ein Makro.",
+        "Szenario A rechnet die § 6b-Kette wie erfasst. Szenario B versteuert jeden "
+        "Veräußerungsgewinn sofort; Neuobjekte mit Quelle-Rücklage entfallen, das Kapital "
+        "bleibt in der Alternativanlage. Neuobjekte ohne Rücklage gibt es in beiden Szenarien.",
+        "In beiden Szenarien liegen die freien Mittel in der Alternativanlage, die Differenz "
+        "zeigt also nur die Wirkung der 6b-Kette: gestundete Steuer (Steuer gesamt, latente "
+        "Steuer), verlorene AfA (AfA gesamt), Miete des Neuobjekts gegen Zinsertrag.",
+        "Entscheidend ist das Endvermögen nach Steuern, nicht die gesparte Steuer allein. Die "
+        "latente Steuer auf stille Reserven und Restrücklage ist abgezogen, als würde am Ende "
+        "alles verkauft.",
+    ]
+    for i, text in enumerate(hinweise, start=letzte + 2):
+        ws.cell(row=i, column=1, value=text)
+
+    for spalte, breite in zip("ABCDEF", (40, 18, 18, 18, 18, 70)):
+        ws.column_dimensions[spalte].width = breite
+    ws.freeze_panes = "B6"
+    ws.protection.sheet = True
 
 
 def erstelle_mappe(modell: Modell) -> Workbook:
@@ -352,4 +422,5 @@ def erstelle_mappe(modell: Modell) -> Workbook:
     _blatt_ruecklagen(wb, modell)
     _blatt_liquiditaet(wb, modell)
     _blatt_auswertung(wb, modell)
+    _blatt_vergleich(wb, modell)
     return wb

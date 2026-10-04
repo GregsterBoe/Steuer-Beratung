@@ -8,7 +8,11 @@ from openpyxl.utils import get_column_letter
 
 from .modelle import (AUSWERTUNG_SPALTEN, LIQUIDITAET_SPALTEN, NEU_FELDER, NEU_SPALTEN,
                       OBJEKT_FELDER, RUECKLAGE_6B_GEBILDET, RUECKLAGE_JAHR_SPALTEN,
-                      RUECKLAGE_SPALTEN, VERKAUF_FELDER, VERKAUF_SPALTEN)
+                      RUECKLAGE_SPALTEN, SZENARIO_B, VERKAUF_FELDER, VERKAUF_SPALTEN,
+                      VERGLEICH_KENNZAHLEN)
+
+RUECKLAGE_SZENARIO_B = "Szenario B: sofort versteuert"
+NEU_SZENARIO_B = "entfällt in Szenario B"
 
 
 def spalte(key: str, felder=OBJEKT_FELDER) -> str:
@@ -170,11 +174,13 @@ def ruecklage_zeile(zeile: int) -> dict:
         "jahr": nur_vk(vk["jahr"]),
         "kaufjahr": nur_vk(f'INDEX(obj_Kaufjahr,MATCH({sp["id"]},obj_ID,0))'),
         "vorbesitz": nur_vk(f'{sp["jahr"]}-{sp["kaufjahr"]}'),
+        # Szenario B versteuert jeden Gewinn sofort, unabhängig von der 6b-Angabe
         "status": nur_vk(
+            f'IF(par_Szenario="{SZENARIO_B}","{RUECKLAGE_SZENARIO_B}",'
             f'IF({vk["nutzung_6b"]}<>"ja","6b nicht gewählt",'
             f'IF({sp["vorbesitz"]}<par_6bVorbesitz,"Vorbesitzzeit zu kurz",'
             f'IF(MAX({vk["gewinn_geb"]},0)+MAX({vk["gewinn_gub"]},0)=0,"kein Gewinn",'
-            f'"{RUECKLAGE_6B_GEBILDET}")))'),
+            f'"{RUECKLAGE_6B_GEBILDET}"))))'),
         "ruecklage_id": f'=IF({gebildet},"R-"&{sp["id"]},"")',
         "gewinn": nur_vk(vk["gewinn"]),
         "betrag_geb": nur_rl(f'MAX({vk["gewinn_geb"]},0)'),
@@ -256,10 +262,11 @@ def neu_zeile(zeile: int) -> dict:
             f'IF(OR({kaufjahr}<par_Startjahr,{kaufjahr}>par_Endjahr),'
             f'"Kaufjahr außerhalb Prognose",'
             f'IF({quelle}="","OK",'
+            f'IF(par_Szenario="{SZENARIO_B}","{NEU_SZENARIO_B}",'
             f'IF(COUNTIF(rl_RuecklageID,{quelle})=0,"Rücklage unbekannt",'
             f'IF({kaufjahr}<INDEX(rl_Jahr,{treffer}),"Kauf vor Verkauf",'
             f'IF({kaufjahr}>INDEX(rl_Fristjahr,{treffer}),"Kauf nach Fristjahr",'
-            f'"OK"))))))))'
+            f'"OK")))))))))'
         ),
         "ak_gesamt": nur_ok(f'{sp["kaufpreis"]}+IF({sp["nebenkosten"]}="",'
                             f'{sp["kaufpreis"]}*par_GrESt,{sp["nebenkosten"]})'),
@@ -353,10 +360,11 @@ def liquiditaet_zeile(zeile: int, jahr_index: int) -> dict:
 
 def auswertung_zeile(zeile: int, jahr_index: int) -> dict:
     """Kennzahlen je Jahr: Gesamt-GuV, Steuer, Buch- und Verkehrswert, stille Reserven."""
-    sp = {k: f"${v}{zeile}" for k, v in jahres_spalten(AUSWERTUNG_SPALTEN).items()}
+    bst = jahres_spalten(AUSWERTUNG_SPALTEN)
+    sp = {k: f"${v}{zeile}" for k, v in bst.items()}
     jahr = sp["jahr"]
-    vorjahr = "0" if jahr_index == 0 else \
-        f'${jahres_spalten(AUSWERTUNG_SPALTEN)["steuer_kum"]}{zeile - 1}'
+    vorjahr = "0" if jahr_index == 0 else f'${bst["steuer_kum"]}{zeile - 1}'
+    anlage_vorjahr = "0" if jahr_index == 0 else f'${bst["anlage"]}{zeile - 1}'
     return {
         "jahr": f"=par_Startjahr+{jahr_index}",
         "ergebnis": f"=SUMIFS(liq_Ergebnis,liq_Jahr,{jahr})",
@@ -370,4 +378,42 @@ def auswertung_zeile(zeile: int, jahr_index: int) -> dict:
         "stille_reserven": f'={sp["verkehrswert"]}-{sp["buchwert"]}',
         "ruecklage": f"=SUMIFS(rlj_Stand,rlj_Jahr,{jahr})",
         "mittel_kum": f"=SUMIFS(liq_MittelzuflussKum,liq_Jahr,{jahr})",
+        # Alternativanlage: Bestand Vorjahresende verzinst, Mittelzufluss zum Jahresende
+        "zins": f"={anlage_vorjahr}*par_Alternativrendite",
+        "steuer_zins": f'={sp["zins"]}*par_Steuersatz',
+        "anlage": f'={anlage_vorjahr}+SUMIFS(liq_Mittelzufluss,liq_Jahr,{jahr})'
+                  f'+{sp["zins"]}-{sp["steuer_zins"]}',
+        "latente_steuer": f'=({sp["stille_reserven"]}+{sp["ruecklage"]})*par_Steuersatz',
+        "vermoegen": f'={sp["verkehrswert"]}+{sp["anlage"]}-{sp["latente_steuer"]}',
+    }
+
+
+def vergleich_zeilen(erste: int) -> dict:
+    """Zeilennummer je Kennzahl im Blatt Vergleich."""
+    return {k.key: zeile for zeile, k in enumerate(VERGLEICH_KENNZAHLEN, start=erste)}
+
+
+def vergleich_aktuell(erste: int, spalte: str = "B") -> dict:
+    """Kennzahlen des aktiven Szenarios: Bestände am Ende des letzten Jahres, sonst Summen."""
+    z = {k: f"{spalte}{n}" for k, n in vergleich_zeilen(erste).items()}
+
+    def ende(name: str) -> str:
+        return f"=SUMIFS({name},aw_Jahr,par_Endjahr)"
+
+    return {
+        "verkehrswert": ende("aw_Verkehrswert"),
+        "anlage": ende("aw_Anlage"),
+        "latente_steuer": ende("aw_LatenteSteuer"),
+        "vermoegen": f'={z["verkehrswert"]}+{z["anlage"]}-{z["latente_steuer"]}',
+        "buchwert": ende("aw_Buchwert"),
+        "stille_reserven": ende("aw_StilleReserven"),
+        "ruecklage": ende("aw_Ruecklage"),
+        "miete": "=SUM(liq_Miete)",
+        "afa": "=SUM(liq_AfA)",
+        "ergebnis": "=SUM(liq_Ergebnis)",
+        "steuer": "=SUM(aw_Steuer)",
+        "zins": "=SUM(aw_Zins)",
+        "steuer_zins": "=SUM(aw_SteuerZins)",
+        "steuer_gesamt": f'={z["steuer"]}+{z["steuer_zins"]}',
+        "reinvest": "=SUM(liq_Reinvest)",
     }

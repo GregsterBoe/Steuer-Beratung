@@ -34,7 +34,7 @@ So bleibt nachvollziehbar, woher jede Zahl kommt: Alle Eingaben links, die Rechn
 
 ## 3. Blätter im Detail
 
-Acht Blätter, getrennt nach Eingabe, Rechnung und Ausgabe. Eingabeblätter sind die einzige Stelle, an der getippt wird.
+Neun Blätter, getrennt nach Eingabe, Rechnung und Ausgabe. Eingabeblätter sind die einzige Stelle, an der getippt wird.
 
 | Blatt | Typ | Schlüsselfelder | Zweck |
 | --- | --- | --- | --- |
@@ -45,7 +45,8 @@ Acht Blätter, getrennt nach Eingabe, Rechnung und Ausgabe. Eingabeblätter sind
 | Prognose | Rechnung | ObjektID × Jahr (2027-2046), Miete, Erhaltung, AfA, Buchwert, Ergebnis, aktiv-Flag | Jahresmatrix je Objekt, Herzstück |
 | Rücklagen | Rechnung | RücklageID, Verkaufsjahr, Betrag G+B, Betrag Gebäude, Fristjahr, Übertrag, Auflösung, Zuschlag | § 6b-Spiegel je Rücklage |
 | Liquidität | Rechnung | Jahr, Buchwert-Rückfluss, Steuer, Eigenkapital Reinvest, Alternativanlage | Geldfluss je Jahr |
-| Auswertung | Ausgabe | Jahr, Gesamt-GuV, Steuer, stille Reserven, Szenariovergleich | Kennzahlen und Vergleich |
+| Auswertung | Ausgabe | Jahr, Gesamt-GuV, Steuer, stille Reserven, Alternativanlage, Vermögen nach Steuern | Kennzahlen je Jahr |
+| Vergleich | Ausgabe | Kennzahl, aktives Szenario, gespeichert A, gespeichert B, Differenz | Szenariovergleich (Abschnitt 15) |
 
 Konvention: ObjektID ist der Schlüssel, der Objekte, Verkäufe, Rücklagen und Prognose verbindet. Neuobjekte bekommen eine eigene ID, laufen in der Prognose aber in derselben Matrix.
 
@@ -238,6 +239,8 @@ openpyxl schreibt Formeln, berechnet sie aber nicht. Eine frisch generierte Date
 3. Zielzellen auslesen, etwa Buchwert 2046 oder Veräußerungsgewinn.
 4. Mit der erwarteten Zahl vergleichen, auf den Euro genau, Toleranz ein Cent für Rundung.
 5. Bei Abweichung: Fall, Zelle, Soll und Ist ausgeben und das Skript mit Fehlercode beenden.
+
+Mit einem Aufrufparameter laufen nur die Fälle, deren Name ihn enthält, etwa `python -m pruefung.pruefen "Etappe 8"`.
 
 **Nutzen**
 
@@ -610,6 +613,54 @@ Ein Schalter auf dem Parameterblatt, par\_Szenario, steuert, welcher Pfad gerech
 Entscheidend ist das Endvermögen nach Steuern, nicht die gesparte Steuer allein. Szenario A spart Steuer heute, verliert aber AfA und bindet Kapital in Immobilien. Ob sich das lohnt, hängt an der Rendite der Alternativanlage und an der Wertsteigerung der Neuimmobilie. Genau diesen Vergleich macht das Blatt sichtbar.
 
 **Abnahme Etappe 8:** Beide Pfade liefern je ein Endvermögen; die Differenz ist nachvollziehbar aus gestundeter Steuer, verlorener AfA und Alternativrendite. Bei Alternativrendite null und gleicher Wertentwicklung muss A vorn liegen, weil die Steuerstundung dann reiner Zinsvorteil ist.
+
+**Umsetzung (Stand Etappe 8):** Ein Lauf rechnet immer genau ein Szenario, gesteuert über `par_Szenario`. Das Blatt Vergleich zeigt die Kennzahlen des aktiven Szenarios und daneben die gespeicherten Läufe A und B.
+
+*Was der Schalter ändert*
+
+| | Szenario A | Szenario B |
+| --- | --- | --- |
+| Verkauf mit 6b-Nutzung ja | Rücklage wie in Abschnitt 12 | Status „Szenario B: sofort versteuert“, Gewinn voll steuerpflichtig |
+| Neuobjekt mit Quelle-Rücklage | Kauf mit Übertrag | Status „entfällt in Szenario B“ (nicht rot), kein Kauf, keine Prognose |
+| Neuobjekt ohne Quelle-Rücklage | Kauf | Kauf |
+| freie Mittel | Alternativanlage | Alternativanlage |
+
+*Blatt Auswertung, neue Spalten M–Q*
+
+| Spalte | Feld | Formel |
+| --- | --- | --- |
+| M | Zinsertrag Alternativanlage | Stand Vorjahresende × `par_Alternativrendite`; im ersten Jahr null |
+| N | Steuer auf Zinsertrag | M × `par_Steuersatz` |
+| O | Alternativanlage Stand Jahresende | Vorjahr + freier Mittelzufluss + M − N |
+| P | latente Steuer | (stille Reserven + Rücklage Stand) × `par_Steuersatz` |
+| Q | Vermögen nach Steuern | Verkehrswert + O − P |
+
+*Blatt Vergleich*
+
+| Spalte | Inhalt |
+| --- | --- |
+| A | Kennzahl |
+| B | aktives Szenario (Formel): Bestände am Ende des letzten Jahres, sonst Summe über alle Jahre |
+| C, D | Szenario A bzw. B gespeichert (gelbe Eingabe, als Werte eingefügt; ab Etappe 9 per Makro) |
+| E | Differenz A − B, leer solange C oder D fehlt |
+| F | Erläuterung |
+
+Kennzahlen: Verkehrswert, Alternativanlage, latente Steuer, **Endvermögen nach Steuern** (Verkehrswert + Anlage − latente Steuer), Buchwert, stille Reserven, Rücklage, Miete, AfA, laufendes Ergebnis, Steuer auf Ergebnis, Verkauf und Auflösung, Zinsertrag, Steuer auf Zinsertrag, Steuer gesamt, Kauf Neuobjekte.
+
+- **Alternativanlage in beiden Szenarien:** Auch in A liegen die freien Mittel (Mieten, Verkaufserlös nach Kauf des Neuobjekts) in der Alternativanlage. So zeigt die Differenz nur die Wirkung der 6b-Kette: gestundete Steuer (Steuer gesamt und latente Steuer), verlorene AfA (AfA gesamt), Miete und Wertsteigerung des Neuobjekts gegen Zinsertrag.
+- **Zins:** Mittelzufluss zum Jahresende, Verzinsung ab dem Folgejahr. Der Zinsertrag wird mit dem Grenzsteuersatz besteuert. Ein negativer Stand wird mit demselben Satz belastet (vor Finanzierung, kein eigener Kreditzins).
+- **Latente Steuer:** Das Endvermögen zieht die Steuer ab, die bei Verkauf aller Objekte und Auflösung der Restrücklage am Ende anfiele, ohne Gewinnzuschlag. Ohne diesen Abzug wäre A geschönt, weil die gestundete Steuer nie auftaucht.
+- **Grenze:** Die Variante „sofort versteuern und trotzdem das Neuobjekt kaufen“ (volle AfA-Basis) ist nicht abgebildet; sie lässt sich in A mit 6b-Nutzung nein nachstellen.
+- Benannte Bereiche: `aw_Zins`, `aw_SteuerZins`, `aw_Anlage`, `aw_LatenteSteuer`, `aw_Vermoegen`; `vg_Aktuell`, `vg_A`, `vg_B`, `vg_Differenz` (je eine Zeile pro Kennzahl).
+
+Im Prüfskript:
+
+- **Ein Objekt:** Alternativanlage 2027 = Mittelzufluss 43.100 €, 2028 verzinst mit 4 % × (1 − 30 %) = 2,8 %. Vermögen 2027 = 1.428.000 € + 43.100 € − 30 % × 848.000 €.
+- **Szenario A, Abnahmefall Reinvestition, Alternativrendite 0:** Rücklage 720.000 € ist 2027 latent steuerpflichtig (216.000 €). Ende 2046 Verkehrswert 900.000 € × 1,02^18, Buchwert 82.800 €, AfA gesamt 117.200 €, Endvermögen nach Handrechnung.
+- **Szenario B, gleiche Eingaben:** Steuer 2027 = (33.000 € + 720.000 €) × 30 % = 225.900 €, Neuobjekt entfällt, Endvermögen = Alternativanlage = 1.227.100 €. A liegt vorn.
+- **Szenario B mit 4 %:** Anlage Ende 2046 = 1.227.100 € × 1,028^19, Zinsertrag und Zinssteuer als Summe.
+- **Gespeicherter Vergleich:** Das Skript spielt das spätere Makro nach: Kennzahlen aus Lauf A und B als Werte in die Spalten C und D, dann Differenz je Kennzahl prüfen.
+- Neuobjekt ohne Rücklage bleibt in Szenario B erhalten.
 
 ## 16. Datenanbindung: zwei Quellen
 

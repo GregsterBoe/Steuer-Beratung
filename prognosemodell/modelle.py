@@ -33,6 +33,7 @@ class Parameter:
 
 
 STEUERWELT_GMBH = "GmbH"
+SZENARIO_A, SZENARIO_B = "A", "B"
 AUFTEILUNGEN = ("Buchwert", "Verkehrswert")
 STEUERWELTEN = (STEUERWELT_GMBH, "Privat / GbR vermögensverwaltend",
                 "gewerblich (Personengesellschaft)")
@@ -68,7 +69,8 @@ PARAMETER = [
     Parameter("par_GrESt", "Grunderwerbsteuersatz", 0.05, FMT_PROZENT,
               "abhängig vom Bundesland; Platzhalter"),
     Parameter("par_Alternativrendite", "Rendite Alternativanlage p. a.", 0.04, FMT_PROZENT,
-              "für Szenario B; Platzhalter"),
+              "vor Steuern, auf die freien Mittel in beiden Szenarien; der Zinsertrag wird mit "
+              "dem Grenzsteuersatz besteuert; Platzhalter", minimum=-0.1, maximum=0.2),
     Parameter("par_Aufteilung", "Erlösaufteilung Standard", "Buchwert", FMT_TEXT,
               "Aufteilung Verkaufserlös auf Gebäude und G+B; gilt, wenn im Blatt Verkäufe "
               "keine Methode steht", AUFTEILUNGEN),
@@ -78,8 +80,10 @@ PARAMETER = [
               "Fristjahr = Verkaufsjahr + Frist; Neubau-Verlängerung auf 6 Jahre hier eintragen"),
     Parameter("par_6bZuschlag", "§ 6b Gewinnzuschlag je Jahr", 0.06, FMT_PROZENT,
               "je volles Jahr des Bestehens, bei Auflösung ohne Reinvestition"),
-    Parameter("par_Szenario", "aktives Szenario", "A", FMT_TEXT,
-              "A = § 6b-Kette, B = sofort versteuern", ("A", "B")),
+    Parameter("par_Szenario", "aktives Szenario", SZENARIO_A, FMT_TEXT,
+              "A = § 6b-Kette wie erfasst; B = jeder Veräußerungsgewinn sofort versteuert, "
+              "Neuobjekte mit Quelle-Rücklage entfallen, das Kapital bleibt in der "
+              "Alternativanlage", (SZENARIO_A, SZENARIO_B)),
 ]
 
 
@@ -299,6 +303,47 @@ AUSWERTUNG_SPALTEN = [
     Rechenspalte("ruecklage", "§ 6b-Rücklage Stand", "aw_Ruecklage", FMT_EURO, 16),
     Rechenspalte("mittel_kum", "freier Mittelzufluss kumuliert", "aw_MittelzuflussKum",
                  FMT_EURO, 16),
+    Rechenspalte("zins", "Zinsertrag Alternativanlage", "aw_Zins", FMT_EURO, 16, summe=True),
+    Rechenspalte("steuer_zins", "Steuer auf Zinsertrag", "aw_SteuerZins", FMT_EURO, 16,
+                 summe=True),
+    Rechenspalte("anlage", "Alternativanlage (freie Mittel) Stand Jahresende", "aw_Anlage",
+                 FMT_EURO, 18),
+    Rechenspalte("latente_steuer", "latente Steuer auf stille Reserven und Rücklage",
+                 "aw_LatenteSteuer", FMT_EURO, 18),
+    Rechenspalte("vermoegen", "Vermögen nach Steuern", "aw_Vermoegen", FMT_EURO, 16),
+]
+
+
+@dataclass(frozen=True)
+class Kennzahl:
+    """Eine Zeile im Blatt Vergleich."""
+    key: str
+    bezeichnung: str
+    erlaeuterung: str
+    fett: bool = False
+
+
+# Blatt Vergleich: Kennzahlen über den ganzen Prognosezeitraum, je eine Zeile
+VERGLEICH_KENNZAHLEN = [
+    Kennzahl("verkehrswert", "Verkehrswert Immobilien Ende", "Bestand am Ende des letzten Jahres"),
+    Kennzahl("anlage", "Alternativanlage Ende", "freie Mittel samt Zinsen nach Steuern"),
+    Kennzahl("latente_steuer", "latente Steuer Ende",
+             "(stille Reserven + Rücklage) × Grenzsteuersatz, fällig erst bei Verkauf "
+             "bzw. Auflösung"),
+    Kennzahl("vermoegen", "Endvermögen nach Steuern",
+             "Verkehrswert + Alternativanlage − latente Steuer", fett=True),
+    Kennzahl("buchwert", "Buchwert Immobilien Ende", ""),
+    Kennzahl("stille_reserven", "stille Reserven Ende", "Verkehrswert − Buchwert"),
+    Kennzahl("ruecklage", "§ 6b-Rücklage Ende", "noch nicht übertragen oder aufgelöst"),
+    Kennzahl("miete", "Miete gesamt", "A: inklusive Neuobjekt"),
+    Kennzahl("afa", "AfA gesamt", "A: geringer durch den Übertrag (verlorene AfA)"),
+    Kennzahl("ergebnis", "laufendes Ergebnis gesamt", ""),
+    Kennzahl("steuer", "Steuer auf Ergebnis, Verkauf und Auflösung",
+             "B: Steuer auf den Gewinn sofort; A: gestundet"),
+    Kennzahl("zins", "Zinsertrag Alternativanlage gesamt", "Alternativrendite vor Steuern"),
+    Kennzahl("steuer_zins", "Steuer auf Zinsertrag gesamt", ""),
+    Kennzahl("steuer_gesamt", "Steuer gesamt gezahlt", "ohne latente Steuer"),
+    Kennzahl("reinvest", "Kauf Neuobjekte gesamt", "inklusive Nebenkosten"),
 ]
 
 
@@ -354,3 +399,5 @@ class Modell:
     parameter: dict = field(default_factory=dict)
     verkaeufe: list = field(default_factory=list)
     neuobjekte: list = field(default_factory=list)
+    # gespeicherte Szenarioergebnisse im Blatt Vergleich: {"A": {key: Wert}, "B": {...}}
+    vergleich: dict = field(default_factory=dict)
