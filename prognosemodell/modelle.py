@@ -33,7 +33,8 @@ class Parameter:
 
 
 STEUERWELT_GMBH = "GmbH"
-SZENARIO_A, SZENARIO_B = "A", "B"
+SZENARIO_A, SZENARIO_B, SZENARIO_C = "A", "B", "C"
+SZENARIEN = (SZENARIO_A, SZENARIO_B, SZENARIO_C)
 AUFTEILUNGEN = ("Buchwert", "Verkehrswert")
 STEUERWELTEN = (STEUERWELT_GMBH, "Privat / GbR vermögensverwaltend",
                 "gewerblich (Personengesellschaft)")
@@ -83,7 +84,8 @@ PARAMETER = [
     Parameter("par_Szenario", "aktives Szenario", SZENARIO_A, FMT_TEXT,
               "A = § 6b-Kette wie erfasst; B = jeder Veräußerungsgewinn sofort versteuert, "
               "Neuobjekte mit Quelle-Rücklage entfallen, das Kapital bleibt in der "
-              "Alternativanlage", (SZENARIO_A, SZENARIO_B)),
+              "Alternativanlage; C = sofort versteuert, Neuobjekte trotzdem gekauft, ohne "
+              "Übertrag mit voller AfA-Basis", SZENARIEN),
 ]
 
 
@@ -336,10 +338,10 @@ VERGLEICH_KENNZAHLEN = [
     Kennzahl("stille_reserven", "stille Reserven Ende", "Verkehrswert − Buchwert"),
     Kennzahl("ruecklage", "§ 6b-Rücklage Ende", "noch nicht übertragen oder aufgelöst"),
     Kennzahl("miete", "Miete gesamt", "A: inklusive Neuobjekt"),
-    Kennzahl("afa", "AfA gesamt", "A: geringer durch den Übertrag (verlorene AfA)"),
+    Kennzahl("afa", "AfA gesamt", "A: geringer durch den Übertrag (verlorene AfA); C: volle AfA"),
     Kennzahl("ergebnis", "laufendes Ergebnis gesamt", ""),
     Kennzahl("steuer", "Steuer auf Ergebnis, Verkauf und Auflösung",
-             "B: Steuer auf den Gewinn sofort; A: gestundet"),
+             "B, C: Steuer auf den Gewinn sofort; A: gestundet"),
     Kennzahl("zins", "Zinsertrag Alternativanlage gesamt", "Alternativrendite vor Steuern"),
     Kennzahl("steuer_zins", "Steuer auf Zinsertrag gesamt", ""),
     Kennzahl("steuer_gesamt", "Steuer gesamt gezahlt", "ohne latente Steuer"),
@@ -399,5 +401,5 @@ class Modell:
     parameter: dict = field(default_factory=dict)
     verkaeufe: list = field(default_factory=list)
     neuobjekte: list = field(default_factory=list)
-    # gespeicherte Szenarioergebnisse im Blatt Vergleich: {"A": {key: Wert}, "B": {...}}
+    # gespeicherte Szenarioergebnisse im Blatt Vergleich: {"A": {key: Wert}, "B": ..., "C": ...}
     vergleich: dict = field(default_factory=dict)

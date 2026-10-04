@@ -8,10 +8,10 @@ from openpyxl.utils import get_column_letter
 
 from .modelle import (AUSWERTUNG_SPALTEN, LIQUIDITAET_SPALTEN, NEU_FELDER, NEU_SPALTEN,
                       OBJEKT_FELDER, RUECKLAGE_6B_GEBILDET, RUECKLAGE_JAHR_SPALTEN,
-                      RUECKLAGE_SPALTEN, SZENARIO_B, VERKAUF_FELDER, VERKAUF_SPALTEN,
+                      RUECKLAGE_SPALTEN, SZENARIO_A, SZENARIO_B, SZENARIO_C, VERKAUF_FELDER, VERKAUF_SPALTEN,
                       VERGLEICH_KENNZAHLEN)
 
-RUECKLAGE_SZENARIO_B = "Szenario B: sofort versteuert"
+RUECKLAGE_SOFORT = "Szenario B/C: sofort versteuert"
 NEU_SZENARIO_B = "entfällt in Szenario B"
 
 
@@ -174,9 +174,9 @@ def ruecklage_zeile(zeile: int) -> dict:
         "jahr": nur_vk(vk["jahr"]),
         "kaufjahr": nur_vk(f'INDEX(obj_Kaufjahr,MATCH({sp["id"]},obj_ID,0))'),
         "vorbesitz": nur_vk(f'{sp["jahr"]}-{sp["kaufjahr"]}'),
-        # Szenario B versteuert jeden Gewinn sofort, unabhängig von der 6b-Angabe
+        # Szenario B und C versteuern jeden Gewinn sofort, unabhängig von der 6b-Angabe
         "status": nur_vk(
-            f'IF(par_Szenario="{SZENARIO_B}","{RUECKLAGE_SZENARIO_B}",'
+            f'IF(par_Szenario<>"{SZENARIO_A}","{RUECKLAGE_SOFORT}",'
             f'IF({vk["nutzung_6b"]}<>"ja","6b nicht gewählt",'
             f'IF({sp["vorbesitz"]}<par_6bVorbesitz,"Vorbesitzzeit zu kurz",'
             f'IF(MAX({vk["gewinn_geb"]},0)+MAX({vk["gewinn_gub"]},0)=0,"kein Gewinn",'
@@ -251,8 +251,9 @@ def neu_zeile(zeile: int) -> dict:
     def nur_ok(formel: str) -> str:
         return f'=IF({sp["status"]}<>"OK","",{formel})'
 
+    # Szenario C: Kauf wie erfasst, aber ohne Übertrag, also volle AfA-Basis
     def mit_quelle(formel: str) -> str:
-        return nur_ok(f'IF({quelle}="",0,{formel})')
+        return nur_ok(f'IF(OR({quelle}="",par_Szenario="{SZENARIO_C}"),0,{formel})')
 
     return {
         "status": (
@@ -263,10 +264,11 @@ def neu_zeile(zeile: int) -> dict:
             f'"Kaufjahr außerhalb Prognose",'
             f'IF({quelle}="","OK",'
             f'IF(par_Szenario="{SZENARIO_B}","{NEU_SZENARIO_B}",'
+            f'IF(par_Szenario="{SZENARIO_C}","OK",'
             f'IF(COUNTIF(rl_RuecklageID,{quelle})=0,"Rücklage unbekannt",'
             f'IF({kaufjahr}<INDEX(rl_Jahr,{treffer}),"Kauf vor Verkauf",'
             f'IF({kaufjahr}>INDEX(rl_Fristjahr,{treffer}),"Kauf nach Fristjahr",'
-            f'"OK")))))))))'
+            f'"OK"))))))))))'
         ),
         "ak_gesamt": nur_ok(f'{sp["kaufpreis"]}+IF({sp["nebenkosten"]}="",'
                             f'{sp["kaufpreis"]}*par_GrESt,{sp["nebenkosten"]})'),

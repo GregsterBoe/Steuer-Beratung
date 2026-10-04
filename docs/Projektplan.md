@@ -82,6 +82,7 @@ Vier Rechenbausteine, alle als Zellformeln. Die Notation unten ist fachlich, in 
 
 - Szenario A (6b-Kette): Steuer im Verkaufsjahr = 0 bei voller Rücklage; dafür spätere AfA geringer
 - Szenario B (sofort versteuern): Steuer = Veräußerungsgewinn × Grenzsteuersatz; freigesetztes Kapital in Alternativanlage mit eigener Rendite
+- Szenario C (sofort versteuern und trotzdem kaufen): Steuer wie B, Neuobjekt wie A, aber mit voller AfA-Basis
 - Vergleich über Endvermögen und kumulierte Steuer nach 20 Jahren
 
 ## 5. VBA-Module
@@ -590,10 +591,11 @@ Im Prüfskript:
 
 Der Vergleich beantwortet die Kernfrage des Mandanten: Lohnt die § 6b-Kette, oder ist es besser, die Steuer sofort zu zahlen und das freie Kapital anderweitig anzulegen? Beide Pfade laufen über dieselben Objekte und 20 Jahre, nur die Behandlung des Veräußerungsgewinns unterscheidet sich.
 
-**Die zwei Szenarien**
+**Die Szenarien**
 
 - **Szenario A, 6b-Kette:** Gewinn in die Rücklage, keine Steuer im Verkaufsjahr, Reinvestition in ein Neuobjekt mit geminderter AfA-Basis. Das Neuobjekt wirft Miete ab, die AfA ist aber kleiner.
 - **Szenario B, sofort versteuern:** Gewinn wird im Verkaufsjahr versteuert. Das verbleibende Kapital geht in eine Alternativanlage mit eigener Rendite, statt in eine Immobilie.
+- **Szenario C, sofort versteuern und trotzdem kaufen:** Gewinn wird im Verkaufsjahr versteuert, das Neuobjekt wird wie in A gekauft, aber ohne Übertrag und mit voller AfA-Basis. A gegen C zeigt die reine Wirkung von § 6b, A gegen B die Frage Immobilie oder Geldanlage.
 
 **Umsetzung im Blatt**
 
@@ -612,18 +614,20 @@ Ein Schalter auf dem Parameterblatt, par\_Szenario, steuert, welcher Pfad gerech
 
 Entscheidend ist das Endvermögen nach Steuern, nicht die gesparte Steuer allein. Szenario A spart Steuer heute, verliert aber AfA und bindet Kapital in Immobilien. Ob sich das lohnt, hängt an der Rendite der Alternativanlage und an der Wertsteigerung der Neuimmobilie. Genau diesen Vergleich macht das Blatt sichtbar.
 
-**Abnahme Etappe 8:** Beide Pfade liefern je ein Endvermögen; die Differenz ist nachvollziehbar aus gestundeter Steuer, verlorener AfA und Alternativrendite. Bei Alternativrendite null und gleicher Wertentwicklung muss A vorn liegen, weil die Steuerstundung dann reiner Zinsvorteil ist.
+**Abnahme Etappe 8:** Jeder Pfad liefert ein Endvermögen; die Differenz ist nachvollziehbar aus gestundeter Steuer, verlorener AfA und Alternativrendite. Bei Alternativrendite null und gleichem Steuersatz liegen A und C beim Endvermögen gleichauf: § 6b spart keine Steuer, sondern stundet sie, und ohne Zins ist die Stundung nichts wert. Mit positiver Alternativrendite liegt A vor C, der Vorsprung ist der Zins auf die gestundete Steuer. Gegenüber B liegt A bei Alternativrendite null vorn, weil das Neuobjekt Miete und Wertsteigerung bringt.
 
-**Umsetzung (Stand Etappe 8):** Ein Lauf rechnet immer genau ein Szenario, gesteuert über `par_Szenario`. Das Blatt Vergleich zeigt die Kennzahlen des aktiven Szenarios und daneben die gespeicherten Läufe A und B.
+*Korrektur gegenüber dem ersten Entwurf:* Dort stand, bei Alternativrendite null müsse A vorn liegen, weil die Steuerstundung dann reiner Zinsvorteil sei. Das gilt nur gegenüber B. Gegenüber C ist es ein Gleichstand, gerade weil der Vorteil der Stundung ein Zinsvorteil ist und ohne Zins entfällt.
+
+**Umsetzung (Stand Etappe 8):** Ein Lauf rechnet immer genau ein Szenario, gesteuert über `par_Szenario` (A, B oder C). Das Blatt Vergleich zeigt die Kennzahlen des aktiven Szenarios und daneben die gespeicherten Läufe A, B und C.
 
 *Was der Schalter ändert*
 
-| | Szenario A | Szenario B |
-| --- | --- | --- |
-| Verkauf mit 6b-Nutzung ja | Rücklage wie in Abschnitt 12 | Status „Szenario B: sofort versteuert“, Gewinn voll steuerpflichtig |
-| Neuobjekt mit Quelle-Rücklage | Kauf mit Übertrag | Status „entfällt in Szenario B“ (nicht rot), kein Kauf, keine Prognose |
-| Neuobjekt ohne Quelle-Rücklage | Kauf | Kauf |
-| freie Mittel | Alternativanlage | Alternativanlage |
+| | Szenario A | Szenario B | Szenario C |
+| --- | --- | --- | --- |
+| Verkauf mit 6b-Nutzung ja | Rücklage wie in Abschnitt 12 | Status „Szenario B/C: sofort versteuert“, Gewinn voll steuerpflichtig | wie B |
+| Neuobjekt mit Quelle-Rücklage | Kauf mit Übertrag | Status „entfällt in Szenario B“ (nicht rot), kein Kauf, keine Prognose | Kauf ohne Übertrag, volle AfA-Basis, Status OK |
+| Neuobjekt ohne Quelle-Rücklage | Kauf | Kauf | Kauf |
+| freie Mittel | Alternativanlage | Alternativanlage | Alternativanlage |
 
 *Blatt Auswertung, neue Spalten M–Q*
 
@@ -641,17 +645,17 @@ Entscheidend ist das Endvermögen nach Steuern, nicht die gesparte Steuer allein
 | --- | --- |
 | A | Kennzahl |
 | B | aktives Szenario (Formel): Bestände am Ende des letzten Jahres, sonst Summe über alle Jahre |
-| C, D | Szenario A bzw. B gespeichert (gelbe Eingabe, als Werte eingefügt; ab Etappe 9 per Makro) |
-| E | Differenz A − B, leer solange C oder D fehlt |
-| F | Erläuterung |
+| C, D, E | Szenario A, B bzw. C gespeichert (gelbe Eingabe, als Werte eingefügt; ab Etappe 9 per Makro) |
+| F | Differenz A − B, leer solange eine der beiden Spalten fehlt |
+| G | Differenz A − C, ebenso |
+| H | Erläuterung |
 
 Kennzahlen: Verkehrswert, Alternativanlage, latente Steuer, **Endvermögen nach Steuern** (Verkehrswert + Anlage − latente Steuer), Buchwert, stille Reserven, Rücklage, Miete, AfA, laufendes Ergebnis, Steuer auf Ergebnis, Verkauf und Auflösung, Zinsertrag, Steuer auf Zinsertrag, Steuer gesamt, Kauf Neuobjekte.
 
-- **Alternativanlage in beiden Szenarien:** Auch in A liegen die freien Mittel (Mieten, Verkaufserlös nach Kauf des Neuobjekts) in der Alternativanlage. So zeigt die Differenz nur die Wirkung der 6b-Kette: gestundete Steuer (Steuer gesamt und latente Steuer), verlorene AfA (AfA gesamt), Miete und Wertsteigerung des Neuobjekts gegen Zinsertrag.
+- **Alternativanlage in allen Szenarien:** Auch in A und C liegen die freien Mittel (Mieten, Verkaufserlös nach Kauf des Neuobjekts) in der Alternativanlage. So zeigt die Differenz nur die Wirkung der 6b-Kette: gestundete Steuer (Steuer gesamt und latente Steuer), verlorene AfA (AfA gesamt), Miete und Wertsteigerung des Neuobjekts gegen Zinsertrag.
 - **Zins:** Mittelzufluss zum Jahresende, Verzinsung ab dem Folgejahr. Der Zinsertrag wird mit dem Grenzsteuersatz besteuert. Ein negativer Stand wird mit demselben Satz belastet (vor Finanzierung, kein eigener Kreditzins).
 - **Latente Steuer:** Das Endvermögen zieht die Steuer ab, die bei Verkauf aller Objekte und Auflösung der Restrücklage am Ende anfiele, ohne Gewinnzuschlag. Ohne diesen Abzug wäre A geschönt, weil die gestundete Steuer nie auftaucht.
-- **Grenze:** Die Variante „sofort versteuern und trotzdem das Neuobjekt kaufen“ (volle AfA-Basis) ist nicht abgebildet; sie lässt sich in A mit 6b-Nutzung nein nachstellen.
-- Benannte Bereiche: `aw_Zins`, `aw_SteuerZins`, `aw_Anlage`, `aw_LatenteSteuer`, `aw_Vermoegen`; `vg_Aktuell`, `vg_A`, `vg_B`, `vg_Differenz` (je eine Zeile pro Kennzahl).
+- Benannte Bereiche: `aw_Zins`, `aw_SteuerZins`, `aw_Anlage`, `aw_LatenteSteuer`, `aw_Vermoegen`; `vg_Aktuell`, `vg_A`, `vg_B`, `vg_C`, `vg_DiffB` (A − B), `vg_DiffC` (A − C), je eine Zeile pro Kennzahl.
 
 Im Prüfskript:
 
@@ -659,7 +663,9 @@ Im Prüfskript:
 - **Szenario A, Abnahmefall Reinvestition, Alternativrendite 0:** Rücklage 720.000 € ist 2027 latent steuerpflichtig (216.000 €). Ende 2046 Verkehrswert 900.000 € × 1,02^18, Buchwert 82.800 €, AfA gesamt 117.200 €, Endvermögen nach Handrechnung.
 - **Szenario B, gleiche Eingaben:** Steuer 2027 = (33.000 € + 720.000 €) × 30 % = 225.900 €, Neuobjekt entfällt, Endvermögen = Alternativanlage = 1.227.100 €. A liegt vorn.
 - **Szenario B mit 4 %:** Anlage Ende 2046 = 1.227.100 € × 1,028^19, Zinsertrag und Zinssteuer als Summe.
-- **Gespeicherter Vergleich:** Das Skript spielt das spätere Makro nach: Kennzahlen aus Lauf A und B als Werte in die Spalten C und D, dann Differenz je Kennzahl prüfen.
+- **Szenario C, gleiche Eingaben:** Steuer 2027 wie B, Neuobjekt mit AfA-Basis 900.000 € und AfA 27.000 €, Buchwert Ende 2046 414.000 €. Endvermögen ohne Alternativrendite gleich A.
+- **A und C mit 4 %:** Endvermögen nach Handrechnung, A liegt vor C.
+- **Gespeicherter Vergleich:** Das Skript spielt das spätere Makro nach: Kennzahlen aus den Läufen A, B und C als Werte in die Spalten C bis E, dann beide Differenzen je Kennzahl prüfen; A − C beim Endvermögen ist null.
 - Neuobjekt ohne Rücklage bleibt in Szenario B erhalten.
 
 ## 16. Datenanbindung: zwei Quellen

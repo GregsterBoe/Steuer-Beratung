@@ -12,7 +12,7 @@ from .modelle import (AUSWERTUNG_SPALTEN, FMT_EURO, LIQUIDITAET_SPALTEN, MAX_NEU
                       MAX_OBJEKTE, MAX_VERKAEUFE, NEU_FELDER, NEU_SPALTEN, NEU_STATUS_NAME,
                       OBJEKT_FELDER, PARAMETER, PROGNOSE_SPALTEN, RUECKLAGE_6B_GEBILDET,
                       RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN, STATUS_NAME,
-                      STATUS_UEBERSCHRIFT, SZENARIO_A, SZENARIO_B, VERGLEICH_KENNZAHLEN,
+                      STATUS_UEBERSCHRIFT, SZENARIEN, SZENARIO_A, VERGLEICH_KENNZAHLEN,
                       VERKAUF_FELDER, VERKAUF_SPALTEN, VERKAUF_STATUS_NAME, Modell)
 
 HINWEIS_FINANZIERUNG = "Alle Werte vor Finanzierung (ohne Zins und Tilgung)."
@@ -202,7 +202,8 @@ def _blatt_neuobjekte(wb, modell: Modell) -> None:
                   "Kauf zum Jahresende; Miete, Erhaltung und AfA ab dem Folgejahr. Gebäude-"
                   "Rücklage nur auf Gebäude, G+B-Rücklage zuerst auf G+B, Rest auf Gebäude; "
                   "übertragen wird so viel wie möglich, obere Zeilen zuerst. In Szenario B "
-                  "entfallen Neuobjekte mit Quelle-Rücklage. " + HINWEIS_FINANZIERUNG,
+                  "entfallen Neuobjekte mit Quelle-Rücklage, in Szenario C werden sie ohne "
+                  "Übertrag gekauft. " + HINWEIS_FINANZIERUNG,
                   formeln.NEU_SZENARIO_B)
 
 
@@ -353,7 +354,11 @@ def _blatt_auswertung(wb, modell: Modell) -> None:
 
 
 def _blatt_vergleich(wb, modell: Modell) -> None:
-    """Szenariovergleich: Kennzahlen des aktiven Szenarios und gespeicherte Läufe A und B."""
+    """Szenariovergleich: Kennzahlen des aktiven Szenarios und gespeicherte Läufe A, B, C.
+
+    Spalten: A Kennzahl, B aktives Szenario, C–E gespeichert A, B, C (Eingabe),
+    F Differenz A − B, G Differenz A − C, H Erläuterung.
+    """
     ws = wb.create_sheet("Vergleich")
     ws["A1"] = "Szenariovergleich"
     ws["A1"].font = FONT_TITEL
@@ -361,52 +366,64 @@ def _blatt_vergleich(wb, modell: Modell) -> None:
     ws["A3"] = "aktives Szenario"
     ws["B3"] = "=par_Szenario"
     ws["B3"].fill = FILL_BERECHNET
-    _kopf(ws, 5, ["Kennzahl", "aktives Szenario", f"Szenario {SZENARIO_A} gespeichert",
-                  f"Szenario {SZENARIO_B} gespeichert",
-                  f"Differenz {SZENARIO_A} − {SZENARIO_B}", "Erläuterung"])
+    gespeichert_bst = dict(zip(SZENARIEN, "CDE"))
+    vergleiche = [(sz, bst) for sz, bst in zip(SZENARIEN[1:], "FG")]
+    _kopf(ws, 5, ["Kennzahl", "aktives Szenario"]
+          + [f"Szenario {sz} gespeichert" for sz in SZENARIEN]
+          + [f"Differenz {SZENARIO_A} − {sz}" for sz, _ in vergleiche] + ["Erläuterung"])
     ws.row_dimensions[5].height = 32
     erste = 6
     letzte = erste + len(VERGLEICH_KENNZAHLEN) - 1
     aktuell = formeln.vergleich_aktuell(erste)
-    gespeichert = {sz: modell.vergleich.get(sz, {}) for sz in (SZENARIO_A, SZENARIO_B)}
+    a = gespeichert_bst[SZENARIO_A]
     for zeile, k in enumerate(VERGLEICH_KENNZAHLEN, start=erste):
         ws.cell(row=zeile, column=1, value=k.bezeichnung)
-        werte = [aktuell[k.key], gespeichert[SZENARIO_A].get(k.key),
-                 gespeichert[SZENARIO_B].get(k.key),
-                 f'=IF(OR(C{zeile}="",D{zeile}=""),"",C{zeile}-D{zeile})']
-        for spalte, wert in enumerate(werte, start=2):
-            c = ws.cell(row=zeile, column=spalte, value=wert)
+        zellen = {"B": aktuell[k.key]}
+        zellen.update({bst: modell.vergleich.get(sz, {}).get(k.key)
+                       for sz, bst in gespeichert_bst.items()})
+        for sz, bst in vergleiche:
+            andere = f"{gespeichert_bst[sz]}{zeile}"
+            zellen[bst] = f'=IF(OR({a}{zeile}="",{andere}=""),"",{a}{zeile}-{andere})'
+        for bst, wert in zellen.items():
+            c = ws[f"{bst}{zeile}"]
+            c.value = wert
             c.number_format = FMT_EURO
-            eingabe = spalte in (3, 4)
+            eingabe = bst in gespeichert_bst.values()
             c.fill = FILL_EINGABE if eingabe else FILL_BERECHNET
             if eingabe:
                 c.protection = Protection(locked=False)
-        ws.cell(row=zeile, column=6, value=k.erlaeuterung)
+            if k.fett:
+                c.font = Font(bold=True)
+        ws[f"H{zeile}"] = k.erlaeuterung
         if k.fett:
-            for spalte in range(1, 6):
-                ws.cell(row=zeile, column=spalte).font = Font(bold=True)
-    for name, bst in (("vg_Aktuell", "B"), ("vg_A", "C"), ("vg_B", "D"),
-                      ("vg_Differenz", "E")):
+            ws[f"A{zeile}"].font = Font(bold=True)
+    namen = [("vg_Aktuell", "B")] + [(f"vg_{sz}", bst) for sz, bst in gespeichert_bst.items()]
+    namen += [(f"vg_Diff{sz}", bst) for sz, bst in vergleiche]
+    for name, bst in namen:
         _name(wb, name, f"Vergleich!${bst}${erste}:${bst}${letzte}")
 
     hinweise = [
-        "So wird verglichen: Szenario A auf dem Parameterblatt wählen, Spalte „aktives "
-        "Szenario“ als Werte in Spalte C einfügen; dann Szenario B wählen und ebenso in "
-        "Spalte D. Ab Etappe 9 übernimmt das ein Makro.",
-        "Szenario A rechnet die § 6b-Kette wie erfasst. Szenario B versteuert jeden "
-        "Veräußerungsgewinn sofort; Neuobjekte mit Quelle-Rücklage entfallen, das Kapital "
-        "bleibt in der Alternativanlage. Neuobjekte ohne Rücklage gibt es in beiden Szenarien.",
-        "In beiden Szenarien liegen die freien Mittel in der Alternativanlage, die Differenz "
-        "zeigt also nur die Wirkung der 6b-Kette: gestundete Steuer (Steuer gesamt, latente "
-        "Steuer), verlorene AfA (AfA gesamt), Miete des Neuobjekts gegen Zinsertrag.",
-        "Entscheidend ist das Endvermögen nach Steuern, nicht die gesparte Steuer allein. Die "
-        "latente Steuer auf stille Reserven und Restrücklage ist abgezogen, als würde am Ende "
-        "alles verkauft.",
+        "So wird verglichen: auf dem Parameterblatt Szenario A wählen und die Spalte „aktives "
+        "Szenario“ als Werte in Spalte C einfügen; ebenso B in Spalte D und C in Spalte E. "
+        "Ab Etappe 9 übernimmt das ein Makro.",
+        "A rechnet die § 6b-Kette wie erfasst. B versteuert jeden Veräußerungsgewinn sofort; "
+        "Neuobjekte mit Quelle-Rücklage entfallen, das Kapital bleibt in der Alternativanlage. "
+        "C versteuert ebenfalls sofort, kauft die Neuobjekte aber trotzdem, ohne Übertrag und "
+        "mit voller AfA-Basis. Neuobjekte ohne Rücklage gibt es in allen Szenarien.",
+        "A − C zeigt die reine Wirkung von § 6b: Die Steuer wird nicht gespart, sondern "
+        "gestundet und über geringere AfA und höhere latente Steuer nachgeholt. Bei "
+        "Alternativrendite null und gleichem Steuersatz ist A − C beim Endvermögen null, "
+        "der Vorteil von A ist der Zins auf die gestundete Steuer.",
+        "A − B vergleicht dagegen Neuobjekt gegen Alternativanlage: Miete und Wertsteigerung "
+        "gegen Zinsertrag, dazu die gestundete Steuer.",
+        "In allen Szenarien liegen die freien Mittel in der Alternativanlage. Entscheidend ist "
+        "das Endvermögen nach Steuern, nicht die gesparte Steuer allein; die latente Steuer "
+        "auf stille Reserven und Restrücklage ist abgezogen, als würde am Ende alles verkauft.",
     ]
     for i, text in enumerate(hinweise, start=letzte + 2):
         ws.cell(row=i, column=1, value=text)
 
-    for spalte, breite in zip("ABCDEF", (40, 18, 18, 18, 18, 70)):
+    for spalte, breite in zip("ABCDEFGH", (40, 18, 18, 18, 18, 18, 18, 70)):
         ws.column_dimensions[spalte].width = breite
     ws.freeze_panes = "B6"
     ws.protection.sheet = True

@@ -14,7 +14,7 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 from prognosemodell.mappe import erstelle_mappe
-from prognosemodell.formeln import NEU_SZENARIO_B, RUECKLAGE_SZENARIO_B
+from prognosemodell.formeln import NEU_SZENARIO_B, RUECKLAGE_SOFORT
 from prognosemodell.modelle import (MAX_OBJEKTE, STEUERWELTEN, VERGLEICH_KENNZAHLEN, Modell,
                                     Neuobjekt, Verkauf)
 from prognosemodell.testdaten import testobjekt
@@ -142,6 +142,29 @@ def faelle():
     assert vermoegen_a > anlage_b        # Abnahme: ohne Alternativrendite liegt A vorn
     # Szenario B mit 4 % Alternativrendite: 2,8 % nach Steuern auf den Bestand Ende 2027
     zins_b = sum(anlage_b * 1.028 ** n * 0.04 for n in range(19))
+    # Szenario C: sofort versteuert, Neuobjekt ohne Übertrag, AfA 3 % von 900.000
+    szenario_c = dataclasses.replace(szenario_a, parameter={"par_Alternativrendite": 0,
+                                                            "par_Szenario": "C"})
+    c_fluesse = []
+    for k in range(18):
+        m, e = 45_000 * 1.02 ** k, 9_000 * 1.025 ** k
+        c_fluesse.append(m - e - (m - e - 27_000) * 0.30)
+    bw_c = 900_000 - 18 * 27_000
+    anlage_c = anlage_b - 900_000 + sum(c_fluesse)
+    vermoegen_c = vw_neu + anlage_c - (vw_neu - bw_c) * 0.30
+    # Abnahme: ohne Zins und bei gleichem Satz ist die Stundung nichts wert, A = C
+    assert abs(vermoegen_a - vermoegen_c) < 0.01
+
+    def anlage_verzinst(fluesse):        # 2,8 % nach Steuern, Zufluss zum Jahresende
+        stand = 0
+        for fluss in fluesse:
+            stand = stand * 1.028 + fluss
+        return stand
+
+    vermoegen_a4 = vw_neu + anlage_verzinst([1_443_100, -900_000] + neu_fluesse) - latent_a
+    vermoegen_c4 = vw_neu + anlage_verzinst([anlage_b, -900_000] + c_fluesse) \
+        - (vw_neu - bw_c) * 0.30
+    assert vermoegen_a4 > vermoegen_c4   # mit Zins: Vorteil aus der gestundeten Steuer
 
     return [
         ("Etappe 1: Stammdaten vollständig", Modell([obj]), [
@@ -672,7 +695,8 @@ def faelle():
             ("vg_Aktuell", vg("afa"), 20 * 20_000),
             ("vg_Aktuell", vg("ergebnis"), sum(ergebnisse)),
             ("vg_A", vg("vermoegen"), None),     # nichts gespeichert
-            ("vg_Differenz", vg("vermoegen"), None),
+            ("vg_DiffB", vg("vermoegen"), None),
+            ("vg_DiffC", vg("vermoegen"), None),
         ]),
         ("Etappe 8: Szenario A, 6b-Kette", szenario_a, [
             ("rl_Status", 0, "Rücklage gebildet"),
@@ -692,7 +716,7 @@ def faelle():
             ("vg_Aktuell", vg("zins"), 0),
         ]),
         ("Etappe 8: Szenario B, sofort versteuern", szenario_b, [
-            ("rl_Status", 0, RUECKLAGE_SZENARIO_B),
+            ("rl_Status", 0, RUECKLAGE_SOFORT),
             ("rl_Ruecklage", 0, 0),
             ("rl_RuecklageID", 0, None),
             ("rlj_Steuer", rj(2027), 216_000),
@@ -718,6 +742,32 @@ def faelle():
             ("vg_Aktuell", vg("steuer_zins"), zins_b * 0.30),
             ("vg_Aktuell", vg("steuer_gesamt"), steuer_b_2027 + zins_b * 0.30),
             ("vg_Aktuell", vg("vermoegen"), anlage_b * 1.028 ** 19),
+        ]),
+        ("Etappe 8: Szenario C, sofort versteuern und kaufen", szenario_c, [
+            ("rl_Status", 0, RUECKLAGE_SOFORT),
+            ("rl_Ruecklage", 0, 0),
+            ("neu_Status", 0, "OK"),
+            ("neu_Uebertrag", 0, 0),
+            ("neu_AfABasis", 0, 900_000),
+            ("rl_UebertragGeb", 0, 0),
+            ("liq_Steuer", rj(2027), steuer_b_2027),
+            ("liq_Reinvest", rj(2028), 900_000),
+            ("prg_AfA", nz(0, 2029), 27_000),    # volle AfA-Basis
+            ("aw_Ruecklage", rj(2027), 0),
+            ("vg_Aktuell", vg("verkehrswert"), vw_neu),
+            ("vg_Aktuell", vg("buchwert"), bw_c),
+            ("vg_Aktuell", vg("anlage"), anlage_c),
+            ("vg_Aktuell", vg("afa"), 20_000 + 18 * 27_000),
+            ("vg_Aktuell", vg("vermoegen"), vermoegen_c),
+            ("vg_Aktuell", vg("vermoegen"), vermoegen_a),  # gleich A ohne Zins
+        ]),
+        ("Etappe 8: Szenario A mit Alternativrendite 4 %",
+         dataclasses.replace(szenario_a, parameter={}), [
+            ("vg_Aktuell", vg("vermoegen"), vermoegen_a4),
+        ]),
+        ("Etappe 8: Szenario C mit Alternativrendite 4 %",
+         dataclasses.replace(szenario_c, parameter={"par_Szenario": "C"}), [
+            ("vg_Aktuell", vg("vermoegen"), vermoegen_c4),
         ]),
         ("Etappe 8: Neuobjekt ohne Rücklage bleibt in Szenario B", Modell([obj], {
             "par_Szenario": "B"}, neuobjekte=[neu(kaufjahr=2030, kaufpreis=500_000,
@@ -748,26 +798,28 @@ def pruefe(fall: str, wb, pruefungen) -> int:
 
 
 def gespeicherter_vergleich(laeufe: dict, ordner: Path) -> int:
-    """Etappe 8: Läufe A und B in die Vergleichsspalten übernehmen, Differenz prüfen.
+    """Etappe 8: Läufe A, B und C in die Vergleichsspalten übernehmen, Differenzen prüfen.
 
     Spielt nach, was ab Etappe 9 das Makro tut: Kennzahlen des aktiven Szenarios
-    als Werte in Spalte A bzw. B speichern.
+    als Werte in die Spalte des Szenarios speichern.
     """
     werte = {sz: {k.key: wert(wb, "vg_Aktuell", vg(k.key)) for k in VERGLEICH_KENNZAHLEN}
              for sz, (modell, wb) in laeufe.items()}
-    modell = dataclasses.replace(laeufe["B"][0], vergleich=werte)
+    modell = dataclasses.replace(laeufe["C"][0], vergleich=werte)
     wb = durchrechnen(modell, ordner)
     pruefungen = []
     for k in VERGLEICH_KENNZAHLEN:
-        a, b = werte["A"][k.key], werte["B"][k.key]
-        pruefungen += [("vg_A", vg(k.key), a), ("vg_B", vg(k.key), b),
-                       ("vg_Differenz", vg(k.key), a - b)]
-    fehler = pruefe("Etappe 8: gespeicherter Vergleich A − B", wb, pruefungen)
+        a, b, c = (werte[sz][k.key] for sz in "ABC")
+        pruefungen += [("vg_A", vg(k.key), a), ("vg_B", vg(k.key), b), ("vg_C", vg(k.key), c),
+                       ("vg_DiffB", vg(k.key), a - b), ("vg_DiffC", vg(k.key), a - c)]
+    # ohne Alternativrendite: A vor B (Neuobjekt gegen Geld), A gleich C (Stundung ohne Zins)
+    pruefungen.append(("vg_DiffC", vg("vermoegen"), 0))
+    fehler = pruefe("Etappe 8: gespeicherter Vergleich", wb, pruefungen)
     if werte["A"]["vermoegen"] <= werte["B"]["vermoegen"]:
         fehler += 1
-        print("FEHLER  Etappe 8: ohne Alternativrendite muss A beim Endvermögen vorn liegen")
+        print("FEHLER  Etappe 8: ohne Alternativrendite muss A beim Endvermögen vor B liegen")
     else:
-        print("OK      Etappe 8: ohne Alternativrendite liegt A beim Endvermögen vorn")
+        print("OK      Etappe 8: ohne Alternativrendite liegt A beim Endvermögen vor B")
     return fehler
 
 
@@ -782,11 +834,10 @@ def main() -> int:
                 continue
             wb = durchrechnen(modell, Path(tmp) / f"fall{i}")
             fehler += pruefe(fall, wb, pruefungen)
-            if fall.startswith("Etappe 8: Szenario A,"):
-                laeufe["A"] = (modell, wb)
-            elif fall.startswith("Etappe 8: Szenario B,"):
-                laeufe["B"] = (modell, wb)
-        if len(laeufe) == 2:
+            for sz in "ABC":
+                if fall.startswith(f"Etappe 8: Szenario {sz},"):
+                    laeufe[sz] = (modell, wb)
+        if len(laeufe) == 3:
             fehler += gespeicherter_vergleich(laeufe, Path(tmp) / "vergleich")
     print(f"\n{fehler} Abweichung(en)" if fehler else "\nAlle Prüfungen bestanden.")
     return 1 if fehler else 0
