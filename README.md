@@ -28,6 +28,21 @@
 8. Szenariovergleich
 9. VBA-Steuerung und Plausibilitätsprüfungen
 
+Stand: Etappe 1 umgesetzt (Parameter- und Objektblatt mit Statusprüfung).
+
+## Nutzung
+
+```bash
+pip install -r requirements.txt
+python -m prognosemodell             # erzeugt ausgabe/Prognosemodell_VV.xlsx (mit Testobjekt)
+python -m prognosemodell --ohne-testdaten
+python -m pruefung.pruefen           # rechnet per LibreOffice headless und prüft gegen Sollwerte
+```
+
+Das Prüfskript braucht LibreOffice mit Calc (`soffice`).
+
+Gelb = Eingabe, grau = Formel. Die Statusspalte im Objektblatt meldet fehlende Pflichtfelder, doppelte IDs, ein Kaufjahr nach dem Basisjahr und einen Restbuchwert über den AK.
+
 Details, Formeln und Testfälle stehen in [docs/Projektplan.md](docs/Projektplan.md).
 
 > Alle Steuersätze und Fristen vor dem Echteinsatz mit dem zuständigen Berufsträger prüfen.
