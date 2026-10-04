@@ -429,7 +429,57 @@ Die neue AfA-Basis J fließt zurück in die Objektlogik: Das Neuobjekt bekommt e
 
 **Rückkopplung in den Rücklagenspiegel:** Der übertragene Betrag I landet in Spalte H des Rücklagenspiegels und senkt dort die Restrücklage. Ist die Rücklage voll übertragen, entfällt die spätere Auflösung samt Zuschlag.
 
-**Abnahme Etappe 6:** Neuobjekt mit Gebäude-AK 900.000 und übertragenem Gebäudegewinn 720.000 muss eine AfA-Basis von 180.000 ergeben. Die AfA des Neuobjekts läuft ab Kaufjahr von diesen 180.000, nicht von 900.000.
+**Umsetzung (Stand Etappe 6):** Das Blatt Neuobjekte hat Eingaben, eine Statusspalte und Formelspalten. Unterschiede zum Layout oben: AfA-Satz statt AfA-Methode, dazu Mietrendite und Erhaltungsquote auf den Kaufpreis.
+
+| Spalten | Feld | Formel |
+| --- | --- | --- |
+| A–J | NeuID, Name, Kaufjahr, Kaufpreis, Anteil G+B, Kaufnebenkosten, AfA-Satz, Mietrendite, Erhaltungsquote, Quelle RücklageID | Eingabe; Quelle als Dropdown aus `rl_RuecklageID`, leer = Kauf ohne Übertrag |
+| K | Status | „NeuID doppelt“ (auch gegen Bestand), „Pflichtfeld fehlt“, „Kaufjahr außerhalb Prognose“, „Rücklage unbekannt“, „Kauf vor Verkauf“, „Kauf nach Fristjahr“ oder „OK“ |
+| L | AK gesamt | Kaufpreis + Nebenkosten; leere Nebenkosten = Kaufpreis × `par_GrESt` |
+| M, N | AK Gebäude, AK G+B | L × (1 − Anteil G+B), L × Anteil G+B |
+| O | aus Gebäude-Rücklage auf Gebäude | MIN(freie Gebäude-Rücklage; M) |
+| P | aus G+B-Rücklage auf G+B | MIN(freie G+B-Rücklage; N) |
+| Q | aus G+B-Rücklage auf Gebäude | MIN(freie G+B-Rücklage − P; M − O) |
+| R | Übertrag gesamt | O + P + Q |
+| S | AfA-Basis Gebäude | M − O − Q |
+| T | Buchwert G+B | N − P |
+
+- **Übertragbarkeit:** Die Gebäude-Rücklage geht nur auf das Gebäude. Die G+B-Rücklage geht zuerst auf G+B, weil das keine AfA kostet, der Rest aufs Gebäude.
+- **Höhe des Übertrags:** Übertragen wird so viel wie möglich. Was nicht passt, bleibt Restrücklage und wird im Fristjahr mit Zuschlag aufgelöst.
+- **Mehrere Neuobjekte auf eine Rücklage:** Die oberen Zeilen bedienen sich zuerst. Frei ist der Rücklagenbetrag minus die Überträge der Zeilen darüber mit derselben Quelle.
+- **Zeitpunkt:** Das Kaufjahr muss zwischen Verkaufsjahr und Fristjahr liegen. Der Übertrag zählt im Jahresspiegel im Kaufjahr.
+- **Rückkopplung:** Im Blatt Rücklagen summieren `rl_UebertragGeb` und `rl_UebertragGuB` die Überträge aller Neuobjekte mit dieser Quelle. Die Restrücklage sinkt, Auflösung und Zuschlag fallen entsprechend kleiner aus oder entfallen.
+- **Prognose:** Die Neuobjekte stehen in der Prognose als eigene Blöcke unter allen Bestandsobjekten (50 Zeilen vorgesehen). Kauf zum Jahresende: Im Kaufjahr steht nur der Buchwert gleich AfA-Basis; Miete, Erhaltung und AfA laufen ab dem Folgejahr. Die Miete im ersten vollen Jahr ist Kaufpreis × Mietrendite, danach steigt sie wie beim Bestand. Die AfA ist linear: AfA-Basis × AfA-Satz, höchstens der Buchwert.
+- **Kein Zirkelbezug:** Das Blatt Verkäufe liest nur den Bestandsteil der Prognose (`prgb_ID`, `prgb_Jahr`, `prgb_Miete`, `prgb_Buchwert`), denn die Zeilen der Neuobjekte hängen über die Rücklage am Veräußerungsgewinn. `prg_*` läuft über beide Teile.
+- **Noch nicht abgebildet:**
+  - Verkauf eines Neuobjekts
+  - degressive AfA
+  - Reinvestition im Jahr vor dem Verkauf
+  - freiwillig geringerer Übertrag
+- Benannte Bereiche: `neu_ID`, `neu_Name`, `neu_Kaufjahr`, `neu_Kaufpreis`, `neu_AnteilGuB`, `neu_Nebenkosten`, `neu_AfASatz`, `neu_Mietrendite`, `neu_ErhQuote`, `neu_Quelle`, `neu_Status`, `neu_AKGesamt`, `neu_AKGeb`, `neu_AKGuB`, `neu_UebGeb`, `neu_UebGuBGuB`, `neu_UebGuBGeb`, `neu_Uebertrag`, `neu_AfABasis`, `neu_BuchwertGuB`.
+
+**Abnahme Etappe 6:** Neuobjekt mit Gebäude-AK 900.000 und übertragenem Gebäudegewinn 720.000 muss eine AfA-Basis von 180.000 ergeben. Die AfA des Neuobjekts läuft von diesen 180.000, nicht von 900.000; wegen Kauf zum Jahresende ab dem Folgejahr.
+
+Im Prüfskript nimmt ein Neuobjekt Ende 2028 die Rücklage aus dem Verkauf 2027 auf. Es kostet 900.000 €, ohne G+B-Anteil und ohne Nebenkosten.
+
+- Übertragen werden 508.235,29 € aus der Gebäude-Rücklage und 211.764,71 € aus der G+B-Rücklage, beides aufs Gebäude.
+- Die AfA-Basis ist 180.000 €. Ab 2029 beträgt die AfA 5.400 € (3 %).
+- Die Rücklage steht danach auf null; 2031 fällt keine Auflösung und keine Steuer an.
+
+Weitere Fälle:
+
+- G+B-Rücklage zuerst auf G+B
+- Gebäude-Rücklage nicht auf reines G+B
+- Neuobjekt zu klein: Rest wird 2031 mit Zuschlag aufgelöst
+- zwei Neuobjekte aus einer Rücklage
+- Neuobjekt ohne Rücklage, mit Nebenkosten aus GrESt
+- Kauf nach Fristjahr
+- Kauf vor Verkauf
+- unbekannte Rücklage
+- Verkauf ohne 6b
+- NeuID wie Bestandsobjekt
+- Pflichtfeld fehlt
+- Kaufjahr außerhalb
 
 ## 14. Liquidität und Auswertung (Etappe 7)
 

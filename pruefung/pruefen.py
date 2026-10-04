@@ -14,7 +14,7 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 from prognosemodell.mappe import erstelle_mappe
-from prognosemodell.modelle import STEUERWELTEN, Modell, Verkauf
+from prognosemodell.modelle import MAX_OBJEKTE, STEUERWELTEN, Modell, Neuobjekt, Verkauf
 from prognosemodell.testdaten import testobjekt
 
 TOLERANZ = 0.01  # ein Cent
@@ -91,6 +91,21 @@ def faelle():
 
     def vk_status(verkauf, objekte=(obj,)):
         return Modell(list(objekte), verkaeufe=[verkauf])
+
+    # Etappe 6: Reinvestition; Neuobjekte stehen in der Prognose hinter allen Bestandsblöcken
+    def nz(n: int, jahr: int) -> int:
+        return pz(MAX_OBJEKTE + n, jahr)
+
+    def neu(neu_id="NEU-001", kaufjahr=2028, kaufpreis=900_000, anteil_gub=0.0, nebenkosten=0,
+            quelle="R-OBJ-001"):
+        return Neuobjekt(neu_id, "Neubau", kaufjahr, kaufpreis, anteil_gub, nebenkosten,
+                         afa_satz=0.03, mietrendite=0.05, erhaltungsquote=0.01, quelle=quelle)
+
+    def reinvest(*neuobjekte, verkauf=vk_2027, objekte=(vk_obj,)):
+        return Modell(list(objekte), verkaeufe=[verkauf], neuobjekte=list(neuobjekte))
+
+    rest_teil = 720_000 - 400_000
+    basis_zweit = 800_000 - (gewinn_geb_bw - 300_000)
 
     return [
         ("Etappe 1: Stammdaten vollständig", Modell([obj]), [
@@ -356,6 +371,135 @@ def faelle():
             ("rlj_Gewinn", rj(2027), 0),
             ("rlj_Stand", rj(2027), 0),
         ]),
+        ("Etappe 6: Abnahmefall Übertrag, AfA-Basis 180.000", reinvest(neu()), [
+            ("neu_Status", 0, "OK"),
+            ("neu_Status", 1, None),             # leere Zeile bleibt leer
+            ("neu_AKGesamt", 0, 900_000),
+            ("neu_AKGeb", 0, 900_000),
+            ("neu_UebGeb", 0, gewinn_geb_bw),
+            ("neu_UebGuBGuB", 0, 0),
+            ("neu_UebGuBGeb", 0, gewinn_gub_bw),  # G+B-Gewinn darf aufs Gebäude
+            ("neu_Uebertrag", 0, 720_000),
+            ("neu_AfABasis", 0, 180_000),
+            ("vk_Gewinn", 0, 720_000),           # kein Zirkelbezug über die Prognose
+            ("rl_UebertragGeb", 0, gewinn_geb_bw),
+            ("rl_UebertragGuB", 0, gewinn_gub_bw),
+            ("rl_Rest", 0, 0),
+            ("rl_Zuschlag", 0, 0),
+            ("rlj_Stand", rj(2027), 720_000),
+            ("rlj_Uebertrag", rj(2028), 720_000),
+            ("rlj_Stand", rj(2028), 0),
+            ("rlj_Aufloesung", rj(2031), 0),
+            ("rlj_Steuer", rj(2031), 0),
+            ("prg_ID", nz(0, 2027), "NEU-001"),
+            ("prg_Aktiv", nz(0, 2028), 0),       # Kauf zum Jahresende
+            ("prg_AfA", nz(0, 2028), 0),
+            ("prg_Buchwert", nz(0, 2027), 0),
+            ("prg_Buchwert", nz(0, 2028), 180_000),
+            ("prg_Aktiv", nz(0, 2029), 1),
+            ("prg_AfA", nz(0, 2029), 5_400),     # 3 % von 180.000, nicht von 900.000
+            ("prg_Buchwert", nz(0, 2029), 174_600),
+            ("prg_Miete", nz(0, 2029), 45_000),
+            ("prg_Miete", nz(0, 2030), 45_900),
+            ("prg_Erhaltung", nz(0, 2029), 9_000),
+            ("prg_Ergebnis", nz(0, 2029), 45_000 - 9_000 - 5_400),
+            ("prg_Buchwert", nz(0, 2046), 180_000 - 18 * 5_400),
+            ("prg_Aktiv", pz(0, 2028), 0),       # Altobjekt bleibt verkauft
+        ]),
+        ("Etappe 6: G+B-Rücklage zuerst auf G+B",
+         reinvest(neu(kaufpreis=1_000_000, anteil_gub=0.1)), [
+            ("neu_AKGeb", 0, 900_000),
+            ("neu_AKGuB", 0, 100_000),
+            ("neu_UebGuBGuB", 0, 100_000),
+            ("neu_UebGuBGeb", 0, gewinn_gub_bw - 100_000),
+            ("neu_AfABasis", 0, 280_000),
+            ("neu_BuchwertGuB", 0, 0),
+            ("rl_Rest", 0, 0),
+        ]),
+        ("Etappe 6: Gebäude-Rücklage nicht auf G+B",
+         reinvest(neu(kaufpreis=1_000_000, anteil_gub=1.0)), [
+            ("neu_AKGeb", 0, 0),
+            ("neu_UebGeb", 0, 0),
+            ("neu_UebGuBGuB", 0, gewinn_gub_bw),
+            ("neu_BuchwertGuB", 0, 1_000_000 - gewinn_gub_bw),
+            ("rl_Rest", 0, gewinn_geb_bw),
+            ("rl_Zuschlag", 0, gewinn_geb_bw * 0.24),
+            ("rlj_Aufloesung", rj(2031), gewinn_geb_bw),
+        ]),
+        ("Etappe 6: Neuobjekt zu klein, Rest wird aufgelöst",
+         reinvest(neu(kaufjahr=2029, kaufpreis=400_000, anteil_gub=0.25)), [
+            ("neu_UebGeb", 0, 300_000),
+            ("neu_UebGuBGuB", 0, 100_000),
+            ("neu_UebGuBGeb", 0, 0),
+            ("neu_AfABasis", 0, 0),
+            ("rl_Rest", 0, rest_teil),
+            ("rl_Zuschlag", 0, rest_teil * 0.24),
+            ("rlj_Uebertrag", rj(2029), 400_000),
+            ("rlj_Stand", rj(2029), rest_teil),
+            ("rlj_Aufloesung", rj(2031), rest_teil),
+            ("rlj_Steuer", rj(2031), rest_teil * 1.24 * 0.30),
+            ("rlj_Stand", rj(2031), 0),
+            ("prg_AfA", nz(0, 2030), 0),
+        ]),
+        ("Etappe 6: zwei Neuobjekte aus einer Rücklage",
+         reinvest(neu(kaufjahr=2029, kaufpreis=400_000, anteil_gub=0.25),
+                  neu("NEU-002", 2030, 1_000_000, 0.2)), [
+            ("neu_UebGeb", 1, gewinn_geb_bw - 300_000),
+            ("neu_UebGuBGuB", 1, gewinn_gub_bw - 100_000),
+            ("neu_UebGuBGeb", 1, 0),
+            ("neu_AfABasis", 1, basis_zweit),
+            ("neu_BuchwertGuB", 1, 200_000 - (gewinn_gub_bw - 100_000)),
+            ("rl_UebertragGeb", 0, gewinn_geb_bw),
+            ("rl_Rest", 0, 0),
+            ("rlj_Uebertrag", rj(2030), rest_teil),
+            ("rlj_Stand", rj(2030), 0),
+            ("rlj_Steuer", rj(2031), 0),
+            ("prg_ID", nz(1, 2027), "NEU-002"),
+            ("prg_AfA", nz(1, 2031), basis_zweit * 0.03),
+        ]),
+        ("Etappe 6: Neuobjekt ohne Rücklage, Nebenkosten aus GrESt",
+         Modell([obj], neuobjekte=[neu(kaufjahr=2030, kaufpreis=500_000, anteil_gub=0.2,
+                                       nebenkosten=None, quelle=None)]), [
+            ("neu_Status", 0, "OK"),
+            ("neu_AKGesamt", 0, 525_000),
+            ("neu_AKGeb", 0, 420_000),
+            ("neu_AKGuB", 0, 105_000),
+            ("neu_Uebertrag", 0, 0),
+            ("neu_AfABasis", 0, 420_000),
+            ("prg_Buchwert", nz(0, 2029), 0),
+            ("prg_Buchwert", nz(0, 2030), 420_000),
+            ("prg_Miete", nz(0, 2030), 0),
+            ("prg_Miete", nz(0, 2031), 25_000),
+            ("prg_Miete", nz(0, 2032), 25_500),
+            ("prg_Erhaltung", nz(0, 2031), 5_000),
+            ("prg_AfA", nz(0, 2031), 12_600),
+            ("prg_Buchwert", nz(0, 2031), 407_400),
+            ("prg_Ergebnis", nz(0, 2031), 25_000 - 5_000 - 12_600),
+        ]),
+        ("Etappe 6: Kauf nach Fristjahr", reinvest(neu(kaufjahr=2032)), [
+            ("neu_Status", 0, "Kauf nach Fristjahr"),
+            ("neu_AfABasis", 0, None),
+            ("rl_Rest", 0, 720_000),
+            ("rlj_Aufloesung", rj(2031), 720_000),
+            ("prg_Aktiv", nz(0, 2033), 0),
+            ("prg_Buchwert", nz(0, 2033), 0),
+        ]),
+        ("Etappe 6: Kauf vor Verkauf",
+         reinvest(neu(kaufjahr=2029), verkauf=dataclasses.replace(vk_2030, nutzung_6b="ja"),
+                  objekte=(obj,)),
+         [("neu_Status", 0, "Kauf vor Verkauf"), ("rl_UebertragGeb", 0, 0)]),
+        ("Etappe 6: Rücklage unbekannt", reinvest(neu(quelle="R-X")),
+         [("neu_Status", 0, "Rücklage unbekannt")]),
+        ("Etappe 6: Rücklage eines Verkaufs ohne 6b",
+         reinvest(neu(), verkauf=dataclasses.replace(vk_2027, nutzung_6b="nein")),
+         [("neu_Status", 0, "Rücklage unbekannt")]),
+        ("Etappe 6: NeuID wie Bestandsobjekt", reinvest(neu(neu_id="OBJ-001")),
+         [("neu_Status", 0, "NeuID doppelt"), ("rl_Rest", 0, 720_000)]),
+        ("Etappe 6: Pflichtfeld fehlt",
+         reinvest(dataclasses.replace(neu(), mietrendite=None)),
+         [("neu_Status", 0, "Pflichtfeld fehlt")]),
+        ("Etappe 6: Kaufjahr außerhalb", reinvest(neu(kaufjahr=2050, quelle=None)),
+         [("neu_Status", 0, "Kaufjahr außerhalb Prognose")]),
     ] + [
         (f"Etappe 1: Steuerwelt {welt}", Modell([obj], {"par_Steuerwelt": welt}),
          [("par_StatusSteuerwelt", 0, "nicht im MVP – Ergebnisse gelten nur für GmbH")])

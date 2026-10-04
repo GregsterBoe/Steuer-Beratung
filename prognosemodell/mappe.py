@@ -8,7 +8,8 @@ from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from . import formeln
-from .modelle import (MAX_OBJEKTE, MAX_VERKAEUFE, OBJEKT_FELDER, PARAMETER, PROGNOSE_SPALTEN,
+from .modelle import (MAX_NEUOBJEKTE, MAX_OBJEKTE, MAX_VERKAEUFE, NEU_FELDER, NEU_SPALTEN,
+                      NEU_STATUS_NAME, OBJEKT_FELDER, PARAMETER, PROGNOSE_SPALTEN,
                       RUECKLAGE_6B_GEBILDET, RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN,
                       STATUS_NAME, STATUS_UEBERSCHRIFT, VERKAUF_FELDER, VERKAUF_SPALTEN,
                       VERKAUF_STATUS_NAME, Modell)
@@ -95,9 +96,10 @@ def _eingabespalten(wb, ws, blatt: str, felder, erste: int, letzte: int) -> None
             )
             ws.add_data_validation(dv)
             dv.add(bereich)
-        if f.auswahl:
-            dv = DataValidation(type="list", formula1='"' + ",".join(f.auswahl) + '"',
-                                allow_blank=True, showErrorMessage=True)
+        if f.auswahl or f.auswahl_bereich:
+            liste = f.auswahl_bereich or '"' + ",".join(f.auswahl) + '"'
+            dv = DataValidation(type="list", formula1=liste, allow_blank=True,
+                                showErrorMessage=True)
             ws.add_data_validation(dv)
             dv.add(bereich)
         for zeile in range(erste, letzte + 1):
@@ -143,40 +145,59 @@ def _blatt_objekte(wb, modell: Modell) -> None:
     ws.freeze_panes = "B2"
 
 
-def _blatt_verkaeufe(wb, modell: Modell) -> None:
-    """Je Zeile ein geplanter Verkauf; Aufteilung des Erlöses in Buchwert und Gewinn."""
-    blatt = "Verkäufe"
+def _eingabeblatt(wb, blatt: str, felder, status_name: str, spalten, buchstaben: dict,
+                  letzte: int, zeilen_formeln, datensaetze, hinweis: str) -> None:
+    """Eingabeblatt mit Statusspalte und anschließenden Formelspalten (Verkäufe, Neuobjekte)."""
     ws = wb.create_sheet(blatt)
-    erste, letzte = 2, MAX_VERKAEUFE + 1
-    sp = formeln.verkauf_spalten()
-    _kopf(ws, 1, [f.ueberschrift for f in VERKAUF_FELDER] + [STATUS_UEBERSCHRIFT]
-          + [s.ueberschrift for s in VERKAUF_SPALTEN])
+    erste = 2
+    _kopf(ws, 1, [f.ueberschrift for f in felder] + [STATUS_UEBERSCHRIFT]
+          + [s.ueberschrift for s in spalten])
     ws.row_dimensions[1].height = 45
-    _eingabespalten(wb, ws, blatt, VERKAUF_FELDER, erste, letzte)
+    _eingabespalten(wb, ws, blatt, felder, erste, letzte)
 
-    st = sp["status"]
+    st = buchstaben["status"]
     ws.column_dimensions[st].width = 28
-    _name(wb, VERKAUF_STATUS_NAME, f"'{blatt}'!${st}${erste}:${st}${letzte}")
-    for s in VERKAUF_SPALTEN:
-        bst = sp[s.key]
+    _name(wb, status_name, f"'{blatt}'!${st}${erste}:${st}${letzte}")
+    for s in spalten:
+        bst = buchstaben[s.key]
         ws.column_dimensions[bst].width = s.breite
         _name(wb, s.name, f"'{blatt}'!${bst}${erste}:${bst}${letzte}")
 
     for zeile in range(erste, letzte + 1):
-        zelle_formeln = formeln.verkauf_zeile(zeile)
-        c = ws.cell(row=zeile, column=len(VERKAUF_FELDER) + 1, value=zelle_formeln["status"])
+        zelle_formeln = zeilen_formeln(zeile)
+        c = ws[f"{st}{zeile}"]
+        c.value = zelle_formeln["status"]
         c.fill = FILL_BERECHNET
-        for i, s in enumerate(VERKAUF_SPALTEN, start=len(VERKAUF_FELDER) + 2):
-            c = ws.cell(row=zeile, column=i, value=zelle_formeln[s.key])
+        for s in spalten:
+            c = ws[f"{buchstaben[s.key]}{zeile}"]
+            c.value = zelle_formeln[s.key]
             c.number_format = s.format
             c.fill = FILL_BERECHNET
     _status_rot(ws, st, erste, letzte)
 
-    _datensaetze(ws, VERKAUF_FELDER, modell.verkaeufe, erste)
-    ws.cell(row=1, column=len(VERKAUF_FELDER) + len(VERKAUF_SPALTEN) + 3,
-            value="Verkauf zum Jahresende; das Objekt rechnet ab dem Folgejahr nicht mehr. "
-                  + HINWEIS_FINANZIERUNG)
+    _datensaetze(ws, felder, datensaetze, erste)
+    ws.cell(row=1, column=len(felder) + len(spalten) + 3, value=hinweis)
     ws.freeze_panes = "B2"
+
+
+def _blatt_verkaeufe(wb, modell: Modell) -> None:
+    """Je Zeile ein geplanter Verkauf; Aufteilung des Erlöses in Buchwert und Gewinn."""
+    _eingabeblatt(wb, "Verkäufe", VERKAUF_FELDER, VERKAUF_STATUS_NAME, VERKAUF_SPALTEN,
+                  formeln.verkauf_spalten(), MAX_VERKAEUFE + 1, formeln.verkauf_zeile,
+                  modell.verkaeufe,
+                  "Verkauf zum Jahresende; das Objekt rechnet ab dem Folgejahr nicht mehr. "
+                  + HINWEIS_FINANZIERUNG)
+
+
+def _blatt_neuobjekte(wb, modell: Modell) -> None:
+    """Je Zeile ein Reinvestitionsobjekt; Übertrag der Rücklage mindert die AfA-Basis."""
+    _eingabeblatt(wb, "Neuobjekte", NEU_FELDER, NEU_STATUS_NAME, NEU_SPALTEN,
+                  formeln.neu_spalten(), MAX_NEUOBJEKTE + 1, formeln.neu_zeile,
+                  modell.neuobjekte,
+                  "Kauf zum Jahresende; Miete, Erhaltung und AfA ab dem Folgejahr. Gebäude-"
+                  "Rücklage nur auf Gebäude, G+B-Rücklage zuerst auf G+B, Rest auf Gebäude; "
+                  "übertragen wird so viel wie möglich, obere Zeilen zuerst. "
+                  + HINWEIS_FINANZIERUNG)
 
 
 def prognosejahre(modell: Modell) -> int:
@@ -185,10 +206,16 @@ def prognosejahre(modell: Modell) -> int:
 
 
 def _blatt_prognose(wb, modell: Modell) -> None:
-    """Long-Format: je Objektzeile ein Block mit einer Zeile je Prognosejahr."""
+    """Long-Format: je Objektzeile ein Block mit einer Zeile je Prognosejahr.
+
+    Erst alle Bestandsobjekte, darunter die Neuobjekte. prg_* läuft über beide Teile,
+    prgb_* nur über den Bestand (für das Blatt Verkäufe, ohne Zirkelbezug).
+    """
     ws = wb.create_sheet("Prognose")
     jahre = prognosejahre(modell)
-    erste, letzte = 2, MAX_OBJEKTE * jahre + 1
+    erste = 2
+    letzte_bestand = MAX_OBJEKTE * jahre + 1
+    letzte = letzte_bestand + MAX_NEUOBJEKTE * jahre
     _kopf(ws, 1, [s.ueberschrift for s in PROGNOSE_SPALTEN])
     ws.row_dimensions[1].height = 32
 
@@ -196,11 +223,15 @@ def _blatt_prognose(wb, modell: Modell) -> None:
         bst = get_column_letter(i)
         ws.column_dimensions[bst].width = s.breite
         _name(wb, s.name, f"Prognose!${bst}${erste}:${bst}${letzte}")
+        _name(wb, s.name.replace("prg_", "prgb_"),
+              f"Prognose!${bst}${erste}:${bst}${letzte_bestand}")
 
+    bloecke = [(formeln.prognose_zeile, z) for z in range(2, MAX_OBJEKTE + 2)]
+    bloecke += [(formeln.prognose_neu_zeile, z) for z in range(2, MAX_NEUOBJEKTE + 2)]
     zeile = erste
-    for objekt_zeile in range(2, MAX_OBJEKTE + 2):
+    for zeilen_formeln, eingabe_zeile in bloecke:
         for jahr_index in range(jahre):
-            zelle_formeln = formeln.prognose_zeile(zeile, objekt_zeile, jahr_index)
+            zelle_formeln = zeilen_formeln(zeile, eingabe_zeile, jahr_index)
             for i, s in enumerate(PROGNOSE_SPALTEN, start=1):
                 c = ws.cell(row=zeile, column=i, value=zelle_formeln[s.key])
                 c.number_format = s.format
@@ -258,7 +289,8 @@ def _blatt_ruecklagen(wb, modell: Modell) -> None:
     ws.cell(row=1, column=hinweis,
             value=f"Zeile n gehört zu Zeile n im Blatt Verkäufe. Rücklage nur bei 6b-Nutzung ja, "
                   f"Status „{RUECKLAGE_6B_GEBILDET}“; je Wirtschaftsgut nur Gewinne, Verluste "
-                  "wirken sofort. Steuer hier nur auf Veräußerung und Auflösung, ein Verlust "
+                  "wirken sofort. Übertrag aus dem Blatt Neuobjekte, der Rest wird im Fristjahr "
+                  "aufgelöst. Steuer hier nur auf Veräußerung und Auflösung, ein Verlust "
                   "mindert sie. " + HINWEIS_FINANZIERUNG)
     ws.freeze_panes = "B2"
     ws.protection.sheet = True
@@ -269,6 +301,7 @@ def erstelle_mappe(modell: Modell) -> Workbook:
     _blatt_parameter(wb, modell)
     _blatt_objekte(wb, modell)
     _blatt_verkaeufe(wb, modell)
+    _blatt_neuobjekte(wb, modell)
     _blatt_prognose(wb, modell)
     _blatt_ruecklagen(wb, modell)
     return wb

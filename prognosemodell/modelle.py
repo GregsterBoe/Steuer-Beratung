@@ -17,6 +17,7 @@ FMT_TEXT = "@"
 # Feste Zeilenzahl des Objektblatts; benannte Bereiche laufen über alle Zeilen.
 MAX_OBJEKTE = 200
 MAX_VERKAEUFE = MAX_OBJEKTE  # höchstens ein Verkauf je Objekt
+MAX_NEUOBJEKTE = 50
 
 
 @dataclass(frozen=True)
@@ -95,6 +96,7 @@ class Feld:
     maximum: Optional[float] = None
     ganzzahl: bool = False
     auswahl: Optional[tuple] = None  # Dropdown-Werte
+    auswahl_bereich: Optional[str] = None  # Dropdown aus einem benannten Bereich
 
 
 OBJEKT_FELDER = [
@@ -190,9 +192,9 @@ RUECKLAGE_SPALTEN = [
     Rechenspalte("steuerpflichtig", "steuerpflichtig im Verkaufsjahr", "rl_Steuerpflichtig",
                  FMT_EURO, 16),
     Rechenspalte("fristjahr", "Fristjahr", "rl_Fristjahr", FMT_JAHR, 10),
-    Rechenspalte("uebertrag_geb", "übertragen Gebäude (ab Etappe 6)", "rl_UebertragGeb",
+    Rechenspalte("uebertrag_geb", "übertragen aus Gebäude-Rücklage", "rl_UebertragGeb",
                  FMT_EURO, 16),
-    Rechenspalte("uebertrag_gub", "übertragen G+B (ab Etappe 6)", "rl_UebertragGuB",
+    Rechenspalte("uebertrag_gub", "übertragen aus G+B-Rücklage", "rl_UebertragGuB",
                  FMT_EURO, 16),
     Rechenspalte("rest", "Restrücklage = Auflösung im Fristjahr", "rl_Rest", FMT_EURO, 18),
     Rechenspalte("zuschlag", "Gewinnzuschlag", "rl_Zuschlag", FMT_EURO, 16),
@@ -203,7 +205,7 @@ RUECKLAGE_JAHR_SPALTEN = [
     Rechenspalte("jahr", "Jahr", "rlj_Jahr", FMT_JAHR, 8),
     Rechenspalte("gewinn", "Veräußerungsgewinne", "rlj_Gewinn", FMT_EURO, 16),
     Rechenspalte("bildung", "Bildung Rücklage", "rlj_Bildung", FMT_EURO, 16),
-    Rechenspalte("uebertrag", "Übertrag (ab Etappe 6)", "rlj_Uebertrag", FMT_EURO, 14),
+    Rechenspalte("uebertrag", "Übertrag auf Neuobjekte", "rlj_Uebertrag", FMT_EURO, 14),
     Rechenspalte("aufloesung", "Auflösung Fristablauf", "rlj_Aufloesung", FMT_EURO, 16),
     Rechenspalte("zuschlag", "Gewinnzuschlag", "rlj_Zuschlag", FMT_EURO, 14),
     Rechenspalte("stand", "Rücklage Stand Jahresende", "rlj_Stand", FMT_EURO, 16),
@@ -211,6 +213,55 @@ RUECKLAGE_JAHR_SPALTEN = [
                  "rlj_Steuerpflichtig", FMT_EURO, 18),
     Rechenspalte("steuer", "Steuer darauf", "rlj_Steuer", FMT_EURO, 14),
 ]
+
+
+# Blatt Neuobjekte: Reinvestitionsobjekte, Eingaben, Status, dann Formeln
+NEU_FELDER = [
+    Feld("neu_id", "NeuID", "neu_ID", FMT_TEXT, True, 12),
+    Feld("name", "Objektname", "neu_Name", FMT_TEXT, False, 24),
+    Feld("kaufjahr", "Kaufjahr", "neu_Kaufjahr", FMT_JAHR, True, 10,
+         minimum=1900, maximum=2100, ganzzahl=True),
+    Feld("kaufpreis", "Kaufpreis", "neu_Kaufpreis", FMT_EURO, True, minimum=0),
+    Feld("anteil_gub", "Anteil G+B", "neu_AnteilGuB", FMT_PROZENT, True, 10,
+         minimum=0, maximum=1),
+    Feld("nebenkosten", "Kaufnebenkosten (leer = Kaufpreis × GrESt)", "neu_Nebenkosten",
+         FMT_EURO, False, minimum=0),
+    Feld("afa_satz", "AfA-Satz", "neu_AfASatz", FMT_PROZENT, True, 10, minimum=0, maximum=0.2),
+    Feld("mietrendite", "Mietrendite auf Kaufpreis", "neu_Mietrendite", FMT_PROZENT, True, 10,
+         minimum=0, maximum=0.2),
+    Feld("erhaltungsquote", "Erhaltung in % vom Kaufpreis", "neu_ErhQuote", FMT_PROZENT, True,
+         10, minimum=0, maximum=0.1),
+    Feld("quelle", "Quelle RücklageID (leer = ohne Übertrag)", "neu_Quelle", FMT_TEXT, False,
+         16, auswahl_bereich="rl_RuecklageID"),
+]
+NEU_STATUS_NAME = "neu_Status"
+
+NEU_SPALTEN = [
+    Rechenspalte("ak_gesamt", "AK gesamt mit Nebenkosten", "neu_AKGesamt", FMT_EURO, 16),
+    Rechenspalte("ak_geb", "AK Gebäude brutto", "neu_AKGeb", FMT_EURO, 16),
+    Rechenspalte("ak_gub", "AK G+B brutto", "neu_AKGuB", FMT_EURO, 16),
+    Rechenspalte("ueb_geb", "aus Gebäude-Rücklage auf Gebäude", "neu_UebGeb", FMT_EURO, 16),
+    Rechenspalte("ueb_gub_gub", "aus G+B-Rücklage auf G+B", "neu_UebGuBGuB", FMT_EURO, 16),
+    Rechenspalte("ueb_gub_geb", "aus G+B-Rücklage auf Gebäude", "neu_UebGuBGeb", FMT_EURO, 16),
+    Rechenspalte("uebertrag", "Übertrag gesamt", "neu_Uebertrag", FMT_EURO, 16),
+    Rechenspalte("afa_basis", "AfA-Basis Gebäude", "neu_AfABasis", FMT_EURO, 16),
+    Rechenspalte("bw_gub", "Buchwert G+B", "neu_BuchwertGuB", FMT_EURO, 16),
+]
+
+
+@dataclass
+class Neuobjekt:
+    """Ein Reinvestitionsobjekt. None = Feld leer lassen."""
+    neu_id: Optional[str]
+    name: Optional[str] = None
+    kaufjahr: Optional[int] = None
+    kaufpreis: Optional[float] = None
+    anteil_gub: Optional[float] = None
+    nebenkosten: Optional[float] = None
+    afa_satz: Optional[float] = None
+    mietrendite: Optional[float] = None
+    erhaltungsquote: Optional[float] = None
+    quelle: Optional[str] = None
 
 
 @dataclass
@@ -249,3 +300,4 @@ class Modell:
     # Abweichende Parameterwerte, z. B. {"par_Steuerwelt": "..."}
     parameter: dict = field(default_factory=dict)
     verkaeufe: list = field(default_factory=list)
+    neuobjekte: list = field(default_factory=list)

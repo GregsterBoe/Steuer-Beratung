@@ -6,8 +6,8 @@ Excel zeigt sie in der deutschen Oberfläche automatisch als WENN, ZÄHLENWENN u
 
 from openpyxl.utils import get_column_letter
 
-from .modelle import (OBJEKT_FELDER, RUECKLAGE_6B_GEBILDET, RUECKLAGE_JAHR_SPALTEN,
-                      RUECKLAGE_SPALTEN, VERKAUF_FELDER, VERKAUF_SPALTEN)
+from .modelle import (NEU_FELDER, NEU_SPALTEN, OBJEKT_FELDER, RUECKLAGE_6B_GEBILDET,
+                      RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN, VERKAUF_FELDER, VERKAUF_SPALTEN)
 
 
 def spalte(key: str, felder=OBJEKT_FELDER) -> str:
@@ -84,7 +84,9 @@ def verkauf_zeile(zeile: int) -> dict:
     """Status und Formeln einer Zeile im Blatt Verkäufe (Projektplan Abschnitt 11).
 
     Der Status prüft nur Eingaben und Objektblatt, nicht die Prognose; so bleibt
-    das aktiv-Flag der Prognose frei von Zirkelbezügen.
+    das aktiv-Flag der Prognose frei von Zirkelbezügen. Aus demselben Grund lesen
+    die Formeln nur den Bestandsteil der Prognose (prgb_*): Die Zeilen der
+    Neuobjekte hängen über die Rücklage am Veräußerungsgewinn.
     """
     sp = {k: f"${v}{zeile}" for k, v in verkauf_spalten().items()}
     id_ = sp["objekt_id"]
@@ -114,8 +116,8 @@ def verkauf_zeile(zeile: int) -> dict:
         # Faktor bezieht sich auf die Miete im Verkaufsjahr laut Prognose
         "preis_angesetzt": nur_ok(
             f'IF({sp["preis"]}<>"",{sp["preis"]},'
-            f'{sp["faktor"]}*SUMIFS(prg_Miete,prg_ID,{id_},prg_Jahr,{sp["jahr"]}))'),
-        "bw_geb": nur_ok(f'SUMIFS(prg_Buchwert,prg_ID,{id_},prg_Jahr,{sp["jahr"]})'),
+            f'{sp["faktor"]}*SUMIFS(prgb_Miete,prgb_ID,{id_},prgb_Jahr,{sp["jahr"]}))'),
+        "bw_geb": nur_ok(f'SUMIFS(prgb_Buchwert,prgb_ID,{id_},prgb_Jahr,{sp["jahr"]})'),
         "bw_gesamt": nur_ok(f'{sp["bw_geb"]}+{ak_gub}'),
         "erloes_geb": nur_ok(
             f'IF({methode}="Buchwert",'
@@ -170,8 +172,10 @@ def ruecklage_zeile(zeile: int) -> dict:
         "ruecklage": nur_vk(f'{sp["betrag_geb"]}+{sp["betrag_gub"]}'),
         "steuerpflichtig": nur_vk(f'{sp["gewinn"]}-{sp["ruecklage"]}'),
         "fristjahr": f'=IF({gebildet},{sp["jahr"]}+par_6bFrist,"")',
-        "uebertrag_geb": nur_rl("0"),
-        "uebertrag_gub": nur_rl("0"),
+        # Summe über alle Neuobjekte, die diese Rücklage als Quelle nennen
+        "uebertrag_geb": nur_rl(f'SUMIFS(neu_UebGeb,neu_Quelle,{sp["ruecklage_id"]})'),
+        "uebertrag_gub": nur_rl(f'SUMIFS(neu_UebGuBGuB,neu_Quelle,{sp["ruecklage_id"]})'
+                                f'+SUMIFS(neu_UebGuBGeb,neu_Quelle,{sp["ruecklage_id"]})'),
         "rest": nur_vk(f'{sp["ruecklage"]}-{sp["uebertrag_geb"]}-{sp["uebertrag_gub"]}'),
         # 6 % je vollem Jahr zwischen Bildung (Ende Verkaufsjahr) und Auflösung (Ende Fristjahr)
         "zuschlag": nur_rl(f'{sp["rest"]}*par_6bZuschlag*({sp["fristjahr"]}-{sp["jahr"]})'),
@@ -187,11 +191,102 @@ def ruecklage_jahr_zeile(zeile: int, jahr_index: int) -> dict:
         "jahr": f"=par_Startjahr+{jahr_index}",
         "gewinn": f"=SUMIFS(rl_Gewinn,rl_Jahr,{jahr})",
         "bildung": f"=SUMIFS(rl_Ruecklage,rl_Jahr,{jahr})",
-        "uebertrag": "=0",
+        # übertragen wird im Kaufjahr des Neuobjekts
+        "uebertrag": f"=SUMIFS(neu_Uebertrag,neu_Kaufjahr,{jahr})",
         "aufloesung": f"=SUMIFS(rl_Rest,rl_Fristjahr,{jahr})",
         "zuschlag": f"=SUMIFS(rl_Zuschlag,rl_Fristjahr,{jahr})",
         "stand": f'={vorjahr}+{sp["j_bildung"]}-{sp["j_uebertrag"]}-{sp["j_aufloesung"]}',
         "steuerpflichtig": f'=SUMIFS(rl_Steuerpflichtig,rl_Jahr,{jahr})'
                            f'+{sp["j_aufloesung"]}+{sp["j_zuschlag"]}',
         "steuer": f'={sp["j_steuerpflichtig"]}*par_Steuersatz',
+    }
+
+
+def neu_spalten() -> dict:
+    """Spaltenbuchstaben des Blatts Neuobjekte: Eingaben, Status, dann Formeln."""
+    sp = {f.key: get_column_letter(i) for i, f in enumerate(NEU_FELDER, start=1)}
+    sp["status"] = get_column_letter(len(NEU_FELDER) + 1)
+    for i, s in enumerate(NEU_SPALTEN, start=len(NEU_FELDER) + 2):
+        sp[s.key] = get_column_letter(i)
+    return sp
+
+
+def neu_zeile(zeile: int) -> dict:
+    """Status, Anschaffungskosten und Übertrag einer Zeile im Blatt Neuobjekte (Abschnitt 13).
+
+    Übertragbarkeit nach § 6b: Die Gebäude-Rücklage geht nur auf das Gebäude, die
+    G+B-Rücklage zuerst auf G+B (mindert keine AfA), der Rest auf das Gebäude.
+    Übertragen wird so viel wie möglich. Nennen mehrere Neuobjekte dieselbe Rücklage,
+    bedienen die Zeilen darüber zuerst; deshalb laufen die Summen bis zur Vorzeile.
+    """
+    sp = {k: f"${v}{zeile}" for k, v in neu_spalten().items()}
+    id_, quelle, kaufjahr = sp["neu_id"], sp["quelle"], sp["kaufjahr"]
+    pflicht = [sp[f.key] for f in NEU_FELDER if f.pflicht]
+    treffer = f"MATCH({quelle},rl_RuecklageID,0)"
+    bisher = {k: f"${neu_spalten()[k]}$1:${neu_spalten()[k]}{zeile - 1}"
+              for k in ("quelle", "ueb_geb", "ueb_gub_gub", "ueb_gub_geb")}
+
+    def vorher(key: str) -> str:
+        return f'SUMIFS({bisher[key]},{bisher["quelle"]},{quelle})'
+
+    frei_geb = f"INDEX(rl_BetragGeb,{treffer})-{vorher('ueb_geb')}"
+    frei_gub = f"INDEX(rl_BetragGuB,{treffer})-{vorher('ueb_gub_gub')}-{vorher('ueb_gub_geb')}"
+
+    def nur_ok(formel: str) -> str:
+        return f'=IF({sp["status"]}<>"OK","",{formel})'
+
+    def mit_quelle(formel: str) -> str:
+        return nur_ok(f'IF({quelle}="",0,{formel})')
+
+    return {
+        "status": (
+            f'=IF({id_}="","",'
+            f'IF(OR(COUNTIF(neu_ID,{id_})>1,COUNTIF(obj_ID,{id_})>0),"NeuID doppelt",'
+            f'IF(COUNTA({",".join(pflicht)})<{len(pflicht)},"Pflichtfeld fehlt",'
+            f'IF(OR({kaufjahr}<par_Startjahr,{kaufjahr}>par_Endjahr),'
+            f'"Kaufjahr außerhalb Prognose",'
+            f'IF({quelle}="","OK",'
+            f'IF(COUNTIF(rl_RuecklageID,{quelle})=0,"Rücklage unbekannt",'
+            f'IF({kaufjahr}<INDEX(rl_Jahr,{treffer}),"Kauf vor Verkauf",'
+            f'IF({kaufjahr}>INDEX(rl_Fristjahr,{treffer}),"Kauf nach Fristjahr",'
+            f'"OK"))))))))'
+        ),
+        "ak_gesamt": nur_ok(f'{sp["kaufpreis"]}+IF({sp["nebenkosten"]}="",'
+                            f'{sp["kaufpreis"]}*par_GrESt,{sp["nebenkosten"]})'),
+        "ak_geb": nur_ok(f'{sp["ak_gesamt"]}*(1-{sp["anteil_gub"]})'),
+        "ak_gub": nur_ok(f'{sp["ak_gesamt"]}*{sp["anteil_gub"]}'),
+        "ueb_geb": mit_quelle(f'MIN({frei_geb},{sp["ak_geb"]})'),
+        "ueb_gub_gub": mit_quelle(f'MIN({frei_gub},{sp["ak_gub"]})'),
+        "ueb_gub_geb": mit_quelle(
+            f'MIN({frei_gub}-{sp["ueb_gub_gub"]},{sp["ak_geb"]}-{sp["ueb_geb"]})'),
+        "uebertrag": nur_ok(f'{sp["ueb_geb"]}+{sp["ueb_gub_gub"]}+{sp["ueb_gub_geb"]}'),
+        "afa_basis": nur_ok(f'{sp["ak_geb"]}-{sp["ueb_geb"]}-{sp["ueb_gub_geb"]}'),
+        "bw_gub": nur_ok(f'{sp["ak_gub"]}-{sp["ueb_gub_gub"]}'),
+    }
+
+
+def prognose_neu_zeile(zeile: int, neu_zeile_nr: int, jahr_index: int) -> dict:
+    """Prognosezeile eines Neuobjekts, gleiche Spalten wie beim Bestand.
+
+    Kauf zum Jahresende: Im Kaufjahr steht nur der Buchwert (= AfA-Basis), Miete,
+    Erhaltung und AfA laufen ab dem Folgejahr. Die Miete im ersten vollen Jahr ist
+    Kaufpreis × Mietrendite, danach steigt sie mit der Mietsteigerung.
+    """
+    sp = {k: f"Neuobjekte!${v}${neu_zeile_nr}" for k, v in neu_spalten().items()}
+    kaufjahr, jahr = sp["kaufjahr"], f"$B{zeile}"
+    ok = f'{sp["status"]}="OK"'
+    bw_vorjahr = "0" if jahr_index == 0 else f"$G{zeile - 1}"
+    jahre_seit_kauf = f"({jahr}-{kaufjahr}-1)"
+    return {
+        "id": f'=IF({sp["neu_id"]}="","",{sp["neu_id"]})',
+        "jahr": f"=par_Startjahr+{jahr_index}",
+        "aktiv": f"=IF({ok},IF({jahr}>{kaufjahr},1,0),0)",
+        "miete": f'=IF($C{zeile}=1,{sp["kaufpreis"]}*{sp["mietrendite"]}'
+                 f"*(1+par_Mietsteig)^{jahre_seit_kauf},0)",
+        "erhaltung": f'=IF($C{zeile}=1,{sp["kaufpreis"]}*{sp["erhaltungsquote"]}'
+                     f"*(1+par_Erhaltsteig)^{jahre_seit_kauf},0)",
+        "afa": f'=IF($C{zeile}=1,MIN({sp["afa_basis"]}*{sp["afa_satz"]},{bw_vorjahr}),0)',
+        "buchwert": f'=IF({ok},IF({jahr}<{kaufjahr},0,IF({jahr}={kaufjahr},{sp["afa_basis"]},'
+                    f"MAX({bw_vorjahr}-$F{zeile},0))),0)",
+        "ergebnis": f"=($D{zeile}-$E{zeile}-$F{zeile})*$C{zeile}",
     }
