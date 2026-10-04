@@ -27,14 +27,14 @@ Eingabe:  Parameter, Objekte, Verkäufe, Neuobjekte
             ↓
 Rechnung: Prognose ⇄ Rücklagen → Liquidität
             ↓
-Ausgabe:  Auswertung (inkl. Szenariovergleich)
+Ausgabe:  Auswertung (inkl. Szenariovergleich), Prüfung
 ```
 
 So bleibt nachvollziehbar, woher jede Zahl kommt: Alle Eingaben links, die Rechnung in der Mitte, die Ergebnisse rechts.
 
 ## 3. Blätter im Detail
 
-Neun Blätter, getrennt nach Eingabe, Rechnung und Ausgabe. Eingabeblätter sind die einzige Stelle, an der getippt wird.
+Zehn Blätter, getrennt nach Eingabe, Rechnung und Ausgabe. Eingabeblätter sind die einzige Stelle, an der getippt wird.
 
 | Blatt | Typ | Schlüsselfelder | Zweck |
 | --- | --- | --- | --- |
@@ -46,7 +46,8 @@ Neun Blätter, getrennt nach Eingabe, Rechnung und Ausgabe. Eingabeblätter sind
 | Rücklagen | Rechnung | RücklageID, Verkaufsjahr, Betrag G+B, Betrag Gebäude, Fristjahr, Übertrag, Auflösung, Zuschlag | § 6b-Spiegel je Rücklage |
 | Liquidität | Rechnung | Jahr, Buchwert-Rückfluss, Steuer, Eigenkapital Reinvest, Alternativanlage | Geldfluss je Jahr |
 | Auswertung | Ausgabe | Jahr, Gesamt-GuV, Steuer, stille Reserven, Alternativanlage, Vermögen nach Steuern | Kennzahlen je Jahr |
-| Vergleich | Ausgabe | Kennzahl, aktives Szenario, gespeichert A, gespeichert B, Differenz | Szenariovergleich (Abschnitt 15) |
+| Vergleich | Ausgabe | Kennzahl, aktives Szenario, gespeichert A, B, C, Differenzen | Szenariovergleich (Abschnitt 15) |
+| Prüfung | Ausgabe | Prüfung, Art, Anzahl betroffen, Ergebnis, Gesamtergebnis | Plausibilitätsprüfungen (Abschnitt 19) |
 
 Konvention: ObjektID ist der Schlüssel, der Objekte, Verkäufe, Rücklagen und Prognose verbindet. Neuobjekte bekommen eine eigene ID, laufen in der Prognose aber in derselben Matrix.
 
@@ -91,11 +92,13 @@ VBA steuert nur, es rechnet nicht. Die Makros schreiben Eingabewerte und lösen 
 
 | Modul | Aufgabe |
 | --- | --- |
-| modObjekte | Objekt anlegen, duplizieren, ausblenden; Prognosezeilen je Objekt erzeugen |
-| modSzenario | aktuelles Szenario speichern, laden und benennen; A gegen B vergleichen |
-| modPruefung | Plausibilitätsprüfungen vor der Rechnung (siehe unten) |
-| modRechnen | Neuberechnung anstoßen, Auswertung aktualisieren |
-| modStart | Menü bzw. Schaltflächen auf dem Parameterblatt |
+| modObjekte | Objekt anlegen, duplizieren, entfernen; leere Prognoseblöcke aus- und einblenden |
+| modSzenario | Szenario setzen und rechnen; Läufe A, B und C im Blatt Vergleich speichern und vergleichen |
+| modPruefung | Plausibilitätsprüfungen auslesen und melden (siehe unten) |
+| modRechnen | Neuberechnung anstoßen |
+| modStart | Schaltflächen auf dem Parameterblatt, gemeinsame Hilfsfunktionen |
+
+Umsetzung und Abweichungen vom ersten Entwurf: Abschnitt 19.
 
 **Plausibilitätsprüfungen in modPruefung**
 
@@ -106,7 +109,7 @@ VBA steuert nur, es rechnet nicht. Die Makros schreiben Eingabewerte und lösen 
 - mehr als 3 Verkäufe in 5 Jahren: Warnung wegen gewerblichem Grundstückshandel
 - fehlende Pflichtfelder je aktivem Objekt
 
-Prüfungen schreiben ihr Ergebnis in eine Statusspalte, nicht in Pop-ups allein, damit Fehler im Blatt sichtbar bleiben.
+Prüfungen schreiben ihr Ergebnis in eine Statusspalte, nicht in Pop-ups allein, damit Fehler im Blatt sichtbar bleiben. Umgesetzt sind sie deshalb als Formeln im Blatt Prüfung; das Makro liest nur das Ergebnis (Abschnitt 19).
 
 ## 6. Umsetzungsreihenfolge
 
@@ -218,7 +221,7 @@ Das Endprodukt ist eine eigenständige Excel-Datei, die ohne Python läuft und v
 - Die Formeln aus Abschnitt 4 und 8 als zentrale Bausteine pflegen, damit eine Änderung an einer Stelle greift.
 - Testfälle aus Abschnitt 7 als Prüfskript: Mappe generieren, mit einer Bibliothek wie formulas oder LibreOffice-Headless durchrechnen, Ergebnisse gegen die Handrechnung prüfen.
 
-**Grenze zu VBA:** Die VBA-Steuerung aus Abschnitt 5 ist davon unberührt. Sie wird als Makromodul mitgeliefert und kann ebenfalls per Skript in die Mappe eingebettet werden, sobald die Formel-Mappe steht.
+**Grenze zu VBA:** Die VBA-Steuerung aus Abschnitt 5 liegt als Quelltext in `prognosemodell/vba` und wird beim Generieren in die Mappe eingebettet; das Endprodukt ist dann eine .xlsm (Abschnitt 19).
 
 ## 10. Prüfskript gegen die Testfälle
 
@@ -242,6 +245,8 @@ openpyxl schreibt Formeln, berechnet sie aber nicht. Eine frisch generierte Date
 5. Bei Abweichung: Fall, Zelle, Soll und Ist ausgeben und das Skript mit Fehlercode beenden.
 
 Mit einem Aufrufparameter laufen nur die Fälle, deren Name ihn enthält, etwa `python -m pruefung.pruefen "Etappe 8"`.
+
+Ab Etappe 9 gibt es Fälle mit Makroaufrufen: Das Skript baut die Mappe als .xlsm, öffnet sie in LibreOffice mit Makros, ruft die Makros der Reihe nach auf, prüft ihre Rückgabewerte und danach die Zellen wie bei jedem anderen Fall.
 
 **Nutzen**
 
@@ -354,7 +359,7 @@ K2  =WENN(aktuelles_Jahr>=G2; J2; 0)
 L2  =WENN(aktuelles_Jahr>=G2; J2 * 0,06 * 4; 0)
 ```
 
-**Wichtige Regel zur Übertragbarkeit:** Der Gebäudegewinn in Spalte E darf nur auf den Gebäudeanteil eines Neuobjekts übertragen werden, der G+B-Gewinn in Spalte F auf Gebäude oder Grund und Boden. Diese Trennung prüft modPruefung in Etappe 9.
+**Wichtige Regel zur Übertragbarkeit:** Der Gebäudegewinn in Spalte E darf nur auf den Gebäudeanteil eines Neuobjekts übertragen werden, der G+B-Gewinn in Spalte F auf Gebäude oder Grund und Boden. Diese Trennung erzwingen die Übertragsformeln im Blatt Neuobjekte (Abschnitt 13); reicht der Gebäudeanteil nicht, meldet das Blatt Prüfung den Rest, der mit Gewinnzuschlag aufgelöst wird (Abschnitt 19).
 
 **Umsetzung (Stand Etappe 5):** Das Blatt Rücklagen hat zwei Teile. Links steht je Verkauf eine Zeile: Zeile n gehört zu Zeile n im Blatt Verkäufe, deshalb braucht es keine Suche. Rechts steht nach einer Leerspalte der Spiegel je Prognosejahr.
 
@@ -645,7 +650,7 @@ Entscheidend ist das Endvermögen nach Steuern, nicht die gesparte Steuer allein
 | --- | --- |
 | A | Kennzahl |
 | B | aktives Szenario (Formel): Bestände am Ende des letzten Jahres, sonst Summe über alle Jahre |
-| C, D, E | Szenario A, B bzw. C gespeichert (gelbe Eingabe, als Werte eingefügt; ab Etappe 9 per Makro) |
+| C, D, E | Szenario A, B bzw. C gespeichert (gelbe Eingabe, per Makro oder von Hand als Werte eingefügt) |
 | F | Differenz A − B, leer solange eine der beiden Spalten fehlt |
 | G | Differenz A − C, ebenso |
 | H | Erläuterung |
@@ -665,7 +670,7 @@ Im Prüfskript:
 - **Szenario B mit 4 %:** Anlage Ende 2046 = 1.227.100 € × 1,028^19, Zinsertrag und Zinssteuer als Summe.
 - **Szenario C, gleiche Eingaben:** Steuer 2027 wie B, Neuobjekt mit AfA-Basis 900.000 € und AfA 27.000 €, Buchwert Ende 2046 414.000 €. Endvermögen ohne Alternativrendite gleich A.
 - **A und C mit 4 %:** Endvermögen nach Handrechnung, A liegt vor C.
-- **Gespeicherter Vergleich:** Das Skript spielt das spätere Makro nach: Kennzahlen aus den Läufen A, B und C als Werte in die Spalten C bis E, dann beide Differenzen je Kennzahl prüfen; A − C beim Endvermögen ist null.
+- **Gespeicherter Vergleich:** Das Skript übernimmt die Kennzahlen aus den Läufen A, B und C als Werte in die Spalten C bis E und prüft beide Differenzen je Kennzahl; A − C beim Endvermögen ist null. Seit Etappe 9 prüft ein eigener Fall dasselbe mit dem Makro (Abschnitt 19).
 - Neuobjekt ohne Rücklage bleibt in Szenario B erhalten.
 
 ## 16. Datenanbindung: zwei Quellen
@@ -743,3 +748,84 @@ Der Schalter par\_Steuerwelt auf dem Parameterblatt legt die Rechtsform fest. Si
 **Spätere Etappe Privat/GbR:** Szenario A (§ 6b-Kette) entfällt; an seine Stelle tritt die 10-Jahres-Regel. Der Szenariovergleich wird zu "Verkauf vor oder nach Ablauf der Haltefrist". Bei der GbR entscheidet die Einordnung (vermögensverwaltend oder gewerblich, etwa durch gewerblichen Grundstückshandel), welche Spalte gilt; die Warnung zur Drei-Objekt-Grenze aus modPruefung liefert dafür den Hinweis.
 
 Einordnung und Sätze vor dem Echteinsatz mit dem zuständigen Berufsträger prüfen.
+
+## 19. VBA-Steuerung und Plausibilitätsprüfungen (Etappe 9)
+
+Etappe 9 macht die Mappe bedienbar, ohne an der Rechnung etwas zu ändern. Zwei Teile: ein Blatt Prüfung mit den Plausibilitätsprüfungen als Formeln und VBA-Makros, die nur Eingaben schreiben und neu rechnen lassen.
+
+**Plausibilitätsprüfungen als Formeln**
+
+Jede Prüfung zählt die betroffenen Zeilen. So sind Fehler auch ohne Makros sichtbar, und das Prüfskript kann jede Prüfung mit einem eingebauten Fehler auslösen.
+
+| Nr | Prüfung | Art | Formel (sinngemäß) |
+| --- | --- | --- | --- |
+| 1 | Objekte mit Status ungleich OK | Fehler | Statusspalte Objekte |
+| 2 | Verkäufe mit Status ungleich OK | Fehler | Statusspalte Verkäufe |
+| 3 | Neuobjekte mit Status ungleich OK, darunter Kauf nach Fristjahr (Fristverstoß) | Fehler | Statusspalte Neuobjekte, ohne „entfällt in Szenario B“ |
+| 4 | Steuerwelt außerhalb des MVP | Fehler | Status Steuerwelt |
+| 5 | § 6b gewählt, Vorbesitzzeit zu kurz | Warnung | 6b-Nutzung ja und Vorbesitzzeit < par\_6bVorbesitz |
+| 6 | Rücklage nicht voll übertragen, obwohl ein Neuobjekt sie nennt | Warnung | Restrücklage > 0 und Rücklage als Quelle genannt |
+| 7 | Rücklage ohne Neuobjekt | Warnung | Restrücklage > 0, keine Quelle |
+| 8 | Drei-Objekt-Grenze | Warnung | je Verkauf: Verkäufe im Fenster par\_DOJahre bis zum Verkaufsjahr > par\_DOGrenze |
+| 9 | Objekt ohne Verkehrswert | Hinweis | Verkehrswert leer bei Status OK |
+
+- **Fehler:** Die Zeile rechnet nicht mit. **Warnung:** rechnet, ist aber steuerlich ungünstig oder fachlich zu prüfen. **Hinweis:** zur Kenntnis, zählt nicht ins Gesamtergebnis.
+- Gesamtergebnis `pr_Gesamt`: „OK“, sonst Anzahl der Fehler, ohne Fehler die Anzahl der Warnungen. Es steht auch auf dem Parameterblatt (par\_StatusPruefung, rot sobald nicht OK).
+- Zuordnung zu Abschnitt 5: Reinvestitionsjahr ≤ Verkaufsjahr + 4 ist Prüfung 3. Gebäudeanteil ≥ übertragener Gebäudegewinn ist Prüfung 6, denn der Übertrag ist auf den Gebäudeanteil gedeckelt und der Rest bleibt stehen. Vorbesitzzeit ist Prüfung 5. Mehr als 3 Verkäufe in 5 Jahren ist Prüfung 8, mit Grenze und Zeitraum als Parameter. Fehlende Pflichtfelder fallen unter die Prüfungen 1 bis 3.
+- *Summe der Anteile G+B plus Gebäude = Kaufpreis* entfällt als eigene Prüfung. Beim Neuobjekt ergibt sie sich aus dem Aufbau (Anteil G+B, Rest Gebäude, Validierung 0 bis 100 %). Beim Bestandsobjekt werden AK Gebäude und AK G+B getrennt erfasst, einen Gesamtkaufpreis gibt es dort nicht.
+- Drei-Objekt-Grenze: Bei der GmbH ist der Gewinn ohnehin gewerblich, gewerblicher Grundstückshandel gefährdet aber die erweiterte Kürzung bei der Gewerbesteuer. Deshalb warnt die Prüfung auch bei der GmbH.
+- Formeln mit SUMPRODUCT statt COUNTIF(…;"<>"), weil Excel und LibreOffice Formelzellen mit leerem Text dort unterschiedlich zählen. Benannte Bereiche: `pr_Bezeichnung`, `pr_Art`, `pr_Anzahl`, `pr_Ergebnis`, `pr_Fehler`, `pr_Warnungen`, `pr_Gesamt`.
+
+**VBA-Module**
+
+| Modul | Makros (Kern, ohne Rückfrage) | Bedienung über Schaltfläche |
+| --- | --- | --- |
+| modStart | Einrichten, Bereich, Txt, Euro | legt beim Öffnen die Schaltflächen auf dem Parameterblatt an |
+| modRechnen | NeuBerechnen | Neu berechnen |
+| modSzenario | SzenarioSetzen, SzenarioSpeichern, SzenarienVergleichen, VergleichLeeren | Szenarien A, B, C vergleichen; Szenario A, B oder C rechnen |
+| modPruefung | AnzahlFehler, AnzahlWarnungen, Auffaelligkeiten, PruefungBestanden | Plausibilität prüfen |
+| modObjekte | ObjektPosition, FreiePosition, ObjektAnlegen, ObjektDuplizieren, ObjektEntfernen, LeereBloeckeAusblenden | Objekt anlegen, duplizieren, entfernen; leere Prognoseblöcke aus- und einblenden |
+
+- **Kein Formelbruch durch Makros:** Jede Objektzeile hat in der Prognose von Anfang an einen festen Block mit Formeln (Abschnitt 8). Die Makros schreiben deshalb nur in die gelben Eingabezellen (`obj_Eingabe`), fügen nie Zeilen ein und löschen keine. „Prognosezeilen erzeugen“ aus dem ersten Entwurf entfällt. „Ausblenden“ blendet die Prognosezeilen leerer Objektzeilen aus.
+- **Entfernen** leert die Eingaben eines Objekts. Nennt ein Verkauf das Objekt noch, fragt das Makro nach; danach meldet der Verkauf „ObjektID unbekannt“, und die Prüfung zeigt einen Fehler.
+- **Szenariovergleich per Makro:** Setzt nacheinander A, B und C, rechnet jeweils neu und speichert die Spalte `vg_Aktuell` als Werte in `vg_A`, `vg_B` bzw. `vg_C`. Danach stellt es das vorher aktive Szenario wieder ein. Bei Fehlern in der Plausibilitätsprüfung fragt es vorher, ob trotzdem verglichen werden soll.
+- Die Kernmakros haben Parameter und keine Dialoge. Die Bedienmakros (…Starten) fragen ab, melden und fangen Fehler ab. So lassen sich die Kernmakros im Prüfskript ausführen.
+- Gesperrte Blätter (Vergleich, Prognose) entsperrt das Makro kurz und sperrt sie danach wieder ohne Kennwort, im Blatt Prognose mit erlaubtem Filtern und Sortieren.
+- Die Makros greifen nur über benannte Bereiche und Codenamen (`wsParameter`, `wsObjekte` …, Mappe `ThisWorkbook`) zu, nicht über Blattnamen mit Umlauten. Der Quelltext ist reines ASCII; Umlaute in Meldungen entstehen über `Txt("Pr{ue}fung")`. Das hält den Quelltext unabhängig von der Codepage.
+
+**Einbetten in die Mappe**
+
+openpyxl kann kein VBA-Projekt erzeugen, nur ein vorhandenes übernehmen. Deshalb baut LibreOffice headless per UNO aus den Quelltexten ein VBA-Projekt (`vbaProject.bin`) in einer leeren Hilfsmappe mit denselben Blatt- und Codenamen. openpyxl schreibt die eigentliche Mappe wie bisher und übernimmt nur das VBA-Projekt. Das Modul ThisWorkbook wird dabei ausdrücklich als Arbeitsmappen-Modul angelegt, damit Workbook\_Open in Excel greift. LibreOffice braucht nur der Bau, die fertige .xlsm braucht nur Excel. `python -m prognosemodell --ohne-makros` erzeugt weiter eine reine .xlsx.
+
+**Im Prüfskript**
+
+- **Prüfung ohne Befund:** Der Abnahmefall Reinvestition zeigt alle Prüfungen OK, Gesamtergebnis und Parameterblatt „OK“.
+- **Je Prüfung ein eingebauter Fehler:**
+  - Prüfung 1: doppelte ObjektID und fehlende Miete, drei Zeilen betroffen.
+  - Prüfung 2: unbekanntes Objekt im Verkauf.
+  - Prüfung 3 mit 6: Kauf nach dem Fristjahr, die Rücklage bleibt stehen. Gesamtergebnis „1 Fehler“, Fehler vor Warnung.
+  - Prüfung 4: Steuerwelt außerhalb des MVP.
+  - Prüfung 5 und 7: zweiter Verkauf mit 3 Jahren Vorbesitz, erste Rücklage ohne Neuobjekt.
+  - Prüfung 6: Neuobjekt zu klein.
+  - Prüfung 8: vier Verkäufe 2027 bis 2031 lösen die Warnung aus; mit Zeitraum 4 Jahre ist sie weg.
+  - Prüfung 9: Objekt ohne Verkehrswert, nur Hinweis, Gesamtergebnis bleibt OK.
+- **Szenario B:** Entfallene Neuobjekte zählen nicht als Fehler.
+- **Makro Szenarien vergleichen** im Abnahmefall ohne Alternativrendite:
+  - Gespeichert werden A = C = 2.030.349 € und B = 1.227.100 €, also dieselben Werte wie die Handrechnung aus Abschnitt 15.
+  - A − C ist null, und danach ist wieder Szenario A aktiv.
+- **Makro Szenario wechseln:** Aus C wird B gesetzt, der Vergleich läuft, danach ist wieder B aktiv.
+- **Makro Vergleich leeren.**
+- **Makros Objekt anlegen, duplizieren, entfernen:**
+  - Die Kopie rechnet in ihrem eigenen Prognoseblock, der Verkehrswert in der Auswertung verdoppelt sich.
+  - Eine frei gewordene Zeile wird wieder belegt.
+  - Doppelte oder unbekannte IDs brechen ab und schreiben nichts.
+  - Leere Blöcke werden aus- und eingeblendet.
+  - Die Prüfung zählt die unvollständigen Objekte.
+- In LibreOffice kommt ein Err.Raise nicht als Ausnahme beim Aufrufer an; die Funktion bricht ab und liefert 0, was das Skript zusammen mit den unveränderten Zellen prüft. Excel zeigt an dieser Stelle die Meldung.
+
+**Grenzen**
+
+- Die Schaltflächen und Dialoge (InputBox, MsgBox) laufen nur in Excel und sind im Prüfskript nicht abgedeckt; geprüft werden die Kernmakros, die sie aufrufen.
+- Die .xlsm ist in LibreOffice gebaut und geprüft, nicht in Excel selbst. Vor der Auslieferung einmal in Excel öffnen, Makros aktivieren und die Schaltflächen durchklicken.
+- Excel sperrt Makros in Dateien aus dem Internet oder aus E-Mails. Dann in den Dateieigenschaften „Zulassen“ setzen oder die Datei an einem vertrauenswürdigen Speicherort ablegen.
+

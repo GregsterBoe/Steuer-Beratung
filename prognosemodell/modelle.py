@@ -81,12 +81,29 @@ PARAMETER = [
               "Fristjahr = Verkaufsjahr + Frist; Neubau-Verlängerung auf 6 Jahre hier eintragen"),
     Parameter("par_6bZuschlag", "§ 6b Gewinnzuschlag je Jahr", 0.06, FMT_PROZENT,
               "je volles Jahr des Bestehens, bei Auflösung ohne Reinvestition"),
+    Parameter("par_DOGrenze", "Drei-Objekt-Grenze: Verkäufe", 3, FMT_ZAHL,
+              "mehr Verkäufe als hier innerhalb des Zeitraums: Warnung im Blatt Prüfung "
+              "(gewerblicher Grundstückshandel, bei der GmbH Gefahr für die erweiterte "
+              "Kürzung); fachlich prüfen"),
+    Parameter("par_DOJahre", "Drei-Objekt-Grenze: Zeitraum (Jahre)", 5, FMT_ZAHL,
+              "gleitendes Fenster aus Verkaufsjahren, das jeweilige Verkaufsjahr eingeschlossen"),
     Parameter("par_Szenario", "aktives Szenario", SZENARIO_A, FMT_TEXT,
               "A = § 6b-Kette wie erfasst; B = jeder Veräußerungsgewinn sofort versteuert, "
               "Neuobjekte mit Quelle-Rücklage entfallen, das Kapital bleibt in der "
               "Alternativanlage; C = sofort versteuert, Neuobjekte trotzdem gekauft, ohne "
               "Übertrag mit voller AfA-Basis", SZENARIEN),
+    Parameter("par_StatusPruefung", "Plausibilitätsprüfung", "=pr_Gesamt", FMT_TEXT,
+              "berechnet; Einzelheiten im Blatt Prüfung"),
 ]
+
+# Codenamen für VBA: ASCII, unabhängig vom angezeigten Blattnamen
+CODENAME_MAPPE = "ThisWorkbook"
+CODENAMEN = {
+    "Parameter": "wsParameter", "Objekte": "wsObjekte", "Verkäufe": "wsVerkaeufe",
+    "Neuobjekte": "wsNeuobjekte", "Prognose": "wsPrognose", "Rücklagen": "wsRuecklagen",
+    "Liquidität": "wsLiquiditaet", "Auswertung": "wsAuswertung", "Vergleich": "wsVergleich",
+    "Prüfung": "wsPruefung",
+}
 
 
 @dataclass(frozen=True)
@@ -129,6 +146,8 @@ OBJEKT_FELDER = [
 # Berechnete Statusspalte direkt nach den Eingabefeldern
 STATUS_UEBERSCHRIFT = "Status"
 STATUS_NAME = "obj_Status"
+# alle Eingabespalten einer Objektzeile, ohne Status (für die Makros in modObjekte)
+EINGABE_NAME = "obj_Eingabe"
 
 
 @dataclass(frozen=True)
@@ -346,6 +365,46 @@ VERGLEICH_KENNZAHLEN = [
     Kennzahl("steuer_zins", "Steuer auf Zinsertrag gesamt", ""),
     Kennzahl("steuer_gesamt", "Steuer gesamt gezahlt", "ohne latente Steuer"),
     Kennzahl("reinvest", "Kauf Neuobjekte gesamt", "inklusive Nebenkosten"),
+]
+
+
+# Blatt Prüfung: Plausibilitätsprüfungen (Projektplan Abschnitt 5 und 19)
+FEHLER, WARNUNG, HINWEIS = "Fehler", "Warnung", "Hinweis"
+
+
+@dataclass(frozen=True)
+class Pruefung:
+    """Eine Zeile im Blatt Prüfung; die Formel für die Anzahl liefert formeln.py."""
+    key: str
+    bezeichnung: str
+    art: str             # Fehler, Warnung oder Hinweis
+    wo: str              # wo nachsehen
+
+
+PRUEFUNGEN = [
+    Pruefung("objekte", "Objekte mit Status ungleich OK (Pflichtfeld, doppelte ObjektID, "
+             "Kaufjahr, Restbuchwert)", FEHLER, "Blatt Objekte, Spalte Status"),
+    Pruefung("verkaeufe", "Verkäufe mit Status ungleich OK (Pflichtfeld, unbekanntes Objekt, "
+             "Preis oder Faktor, Verkaufsjahr)", FEHLER, "Blatt Verkäufe, Spalte Status"),
+    Pruefung("neuobjekte", "Neuobjekte mit Status ungleich OK, darunter Fristverstoß "
+             "(Kauf nach Fristjahr) und Kauf vor Verkauf", FEHLER,
+             "Blatt Neuobjekte, Spalte Status"),
+    Pruefung("steuerwelt", "Steuerwelt außerhalb des MVP, Ergebnisse gelten nur für GmbH",
+             FEHLER, "Blatt Parameter, Steuerwelt"),
+    Pruefung("vorbesitz", "§ 6b gewählt, aber Vorbesitzzeit unter der Mindestdauer: "
+             "Gewinn wird sofort versteuert", WARNUNG,
+             "Blatt Rücklagen, Spalte Vorbesitzzeit"),
+    Pruefung("teiluebertrag", "Rücklage nicht voll übertragen, obwohl ein Neuobjekt sie nennt "
+             "(Gebäudeanteil oder Kaufpreis zu klein): Rest wird im Fristjahr mit "
+             "Gewinnzuschlag aufgelöst", WARNUNG,
+             "Blatt Rücklagen, Spalte Restrücklage; Blatt Neuobjekte"),
+    Pruefung("ohne_reinvest", "Rücklage ohne Neuobjekt: Auflösung im Fristjahr mit "
+             "Gewinnzuschlag", WARNUNG, "Blatt Rücklagen, Spalte Restrücklage"),
+    Pruefung("grundstueckshandel", "mehr Verkäufe innerhalb des Zeitraums als die "
+             "Drei-Objekt-Grenze erlaubt (gewerblicher Grundstückshandel)", WARNUNG,
+             "Blatt Verkäufe, Spalte Verkaufsjahr; Grenze auf dem Parameterblatt"),
+    Pruefung("verkehrswert", "Objekte ohne Verkehrswert: Buchwert angesetzt, stille "
+             "Reserven null", HINWEIS, "Blatt Objekte, Spalte Verkehrswert"),
 ]
 
 

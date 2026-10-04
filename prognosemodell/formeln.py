@@ -6,8 +6,8 @@ Excel zeigt sie in der deutschen Oberfläche automatisch als WENN, ZÄHLENWENN u
 
 from openpyxl.utils import get_column_letter
 
-from .modelle import (AUSWERTUNG_SPALTEN, LIQUIDITAET_SPALTEN, NEU_FELDER, NEU_SPALTEN,
-                      OBJEKT_FELDER, RUECKLAGE_6B_GEBILDET, RUECKLAGE_JAHR_SPALTEN,
+from .modelle import (AUSWERTUNG_SPALTEN, FEHLER, LIQUIDITAET_SPALTEN, NEU_FELDER, NEU_SPALTEN,
+                      OBJEKT_FELDER, RUECKLAGE_6B_GEBILDET, WARNUNG, RUECKLAGE_JAHR_SPALTEN,
                       RUECKLAGE_SPALTEN, SZENARIO_A, SZENARIO_B, SZENARIO_C, VERKAUF_FELDER, VERKAUF_SPALTEN,
                       VERGLEICH_KENNZAHLEN)
 
@@ -418,4 +418,49 @@ def vergleich_aktuell(erste: int, spalte: str = "B") -> dict:
         "steuer_zins": "=SUM(aw_SteuerZins)",
         "steuer_gesamt": f'={z["steuer"]}+{z["steuer_zins"]}',
         "reinvest": "=SUM(liq_Reinvest)",
+    }
+
+
+def _nicht_ok(status: str, ausnahme: str = "") -> str:
+    """Anzahl gesetzter Status ungleich OK; SUMPRODUCT statt COUNTIF, weil Excel und
+    LibreOffice Formelzellen mit "" bei COUNTIF(…,"<>") unterschiedlich zählen."""
+    weitere = f'*({status}<>"{ausnahme}")' if ausnahme else ""
+    return f'=SUMPRODUCT(({status}<>"")*({status}<>"OK"){weitere})'
+
+
+def pruefung_anzahl() -> dict:
+    """Anzahl betroffener Zeilen je Plausibilitätsprüfung (Projektplan Abschnitt 19).
+
+    Blatt Rücklagen und Verkäufe haben dieselben Zeilen, deshalb lassen sich
+    rl_* und vk_* zeilenweise kombinieren.
+    """
+    genannt = "COUNTIF(neu_Quelle,rl_RuecklageID)"
+    rest = '(rl_RuecklageID<>"")*(rl_Rest>0)'
+    return {
+        "objekte": _nicht_ok("obj_Status"),
+        "verkaeufe": _nicht_ok("vk_Status"),
+        "neuobjekte": _nicht_ok("neu_Status", NEU_SZENARIO_B),
+        "steuerwelt": '=IF(par_StatusSteuerwelt="OK",0,1)',
+        "vorbesitz": '=SUMPRODUCT((rl_ID<>"")*(vk_6b="ja")*(rl_Vorbesitz<par_6bVorbesitz))',
+        "teiluebertrag": f"=SUMPRODUCT({rest}*({genannt}>0))",
+        "ohne_reinvest": f"=SUMPRODUCT({rest}*({genannt}=0))",
+        # je gültigem Verkauf: Verkäufe im Fenster, das mit seinem Verkaufsjahr endet
+        "grundstueckshandel": (
+            '=SUMPRODUCT((vk_Status="OK")*(COUNTIFS(vk_Jahr,">"&(vk_Jahr-par_DOJahre),'
+            'vk_Jahr,"<="&vk_Jahr,vk_Status,"OK")>par_DOGrenze))'),
+        "verkehrswert": '=SUMPRODUCT((obj_Status="OK")*(obj_Verkehrswert=""))',
+    }
+
+
+def pruefung_ergebnis(zeile: int) -> str:
+    """Ergebnis einer Prüfzeile: OK oder die Art (Fehler, Warnung, Hinweis)."""
+    return f'=IF($D{zeile}=0,"OK",$C{zeile})'
+
+
+def pruefung_summen() -> dict:
+    return {
+        "pr_Fehler": f'=COUNTIF(pr_Ergebnis,"{FEHLER}")',
+        "pr_Warnungen": f'=COUNTIF(pr_Ergebnis,"{WARNUNG}")',
+        "pr_Gesamt": f'=IF(pr_Fehler>0,pr_Fehler&" {FEHLER}",'
+                     f'IF(pr_Warnungen>0,pr_Warnungen&" Warnung(en)","OK"))',
     }

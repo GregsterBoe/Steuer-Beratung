@@ -1,9 +1,13 @@
 """Prüfskript: Mappe generieren, mit LibreOffice headless durchrechnen, gegen Sollwerte prüfen.
 
-Aufruf: python -m pruefung.pruefen
+Aufruf: python -m pruefung.pruefen ["Teil des Fallnamens"]
 Beendet sich mit Fehlercode 1, sobald ein Fall abweicht.
+
+Fälle mit Makroaufrufen (Etappe 9) werden als .xlsm gebaut, in LibreOffice mit
+Makros geöffnet, die Makros ausgeführt und das Ergebnis danach geprüft.
 """
 
+import contextlib
 import dataclasses
 import shutil
 import subprocess
@@ -13,14 +17,17 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
+from prognosemodell.makros import LibreOffice, speichere_mit_makros
 from prognosemodell.mappe import erstelle_mappe
 from prognosemodell.formeln import NEU_SZENARIO_B, RUECKLAGE_SOFORT
-from prognosemodell.modelle import (MAX_OBJEKTE, STEUERWELTEN, VERGLEICH_KENNZAHLEN, Modell,
-                                    Neuobjekt, Verkauf)
+from prognosemodell.modelle import (MAX_OBJEKTE, PRUEFUNGEN, STEUERWELTEN, VERGLEICH_KENNZAHLEN,
+                                    Modell, Neuobjekt, Verkauf)
 from prognosemodell.testdaten import testobjekt
 
 TOLERANZ = 0.01  # ein Cent
 STARTJAHR, JAHRE = 2027, 20
+FEHLT = object()        # Makro ohne Rückgabewert: nur prüfen, dass es fehlerfrei läuft
+AUSGEBLENDET = "Zeile ausgeblendet"
 
 
 def pz(objekt: int, jahr: int) -> int:
@@ -56,6 +63,22 @@ def wert(wb, name: str, zeile_im_bereich: int = 0):
 def vg(key: str) -> int:
     """Zeile einer Kennzahl in den Bereichen vg_* des Blatts Vergleich."""
     return next(i for i, k in enumerate(VERGLEICH_KENNZAHLEN) if k.key == key)
+
+
+def pr(key: str) -> int:
+    """Zeile einer Prüfung in den Bereichen pr_* des Blatts Prüfung."""
+    return next(i for i, p in enumerate(PRUEFUNGEN) if p.key == key)
+
+
+def befund(**anzahl) -> list:
+    """Sollwerte für alle Prüfungen: genannte mit Anzahl, alle übrigen 0 und OK."""
+    unbekannt = set(anzahl) - {p.key for p in PRUEFUNGEN}
+    assert not unbekannt, unbekannt
+    pruefungen = []
+    for p in PRUEFUNGEN:
+        n = anzahl.get(p.key, 0)
+        pruefungen += [("pr_Anzahl", pr(p.key), n), ("pr_Ergebnis", pr(p.key), p.art if n else "OK")]
+    return pruefungen
 
 
 def gleich(ist, soll) -> bool:
@@ -165,6 +188,12 @@ def faelle():
     vermoegen_c4 = vw_neu + anlage_verzinst([anlage_b, -900_000] + c_fluesse) \
         - (vw_neu - bw_c) * 0.30
     assert vermoegen_a4 > vermoegen_c4   # mit Zins: Vorteil aus der gestundeten Steuer
+
+    # Etappe 9: vier Verkäufe 2027, 2028, 2030, 2031; im Fenster 2027–2031 sind es vier
+    vier = [dataclasses.replace(obj, objekt_id=f"OBJ-00{n}") for n in range(1, 5)]
+    drei_objekt = Modell(vier, verkaeufe=[
+        Verkauf(o.objekt_id, jahr, preis=1_000_000, nutzung_6b="nein")
+        for o, jahr in zip(vier, (2027, 2028, 2030, 2031))])
 
     return [
         ("Etappe 1: Stammdaten vollständig", Modell([obj]), [
@@ -775,9 +804,125 @@ def faelle():
             ("neu_Status", 0, "OK"),
             ("liq_Reinvest", rj(2030), 525_000),
         ]),
+        ("Etappe 9: Prüfung ohne Befund, Abnahmefall", reinvest(neu()), befund() + [
+            ("pr_Gesamt", 0, "OK"),
+            ("pr_Fehler", 0, 0),
+            ("pr_Warnungen", 0, 0),
+            ("par_StatusPruefung", 0, "OK"),
+        ]),
+        ("Etappe 9: Prüfung meldet Objektfehler",
+         Modell([obj, zweites, dataclasses.replace(ohne_miete, objekt_id="OBJ-003")]),
+         befund(objekte=3) + [
+            ("pr_Gesamt", 0, "1 Fehler"),
+            ("pr_Fehler", 0, 1),
+            ("par_StatusPruefung", 0, "1 Fehler"),
+        ]),
+        ("Etappe 9: Prüfung meldet Verkaufsfehler",
+         Modell([obj], verkaeufe=[Verkauf("OBJ-999", 2030, preis=1, nutzung_6b="nein")]),
+         befund(verkaeufe=1)),
+        ("Etappe 9: Fristverstoß und Teilübertrag", reinvest(neu(kaufjahr=2032)),
+         befund(neuobjekte=1, teiluebertrag=1) + [
+            ("pr_Gesamt", 0, "1 Fehler"),       # Fehler vor Warnung
+            ("pr_Fehler", 0, 1),
+            ("pr_Warnungen", 0, 1),
+        ]),
+        ("Etappe 9: Neuobjekt zu klein",
+         reinvest(neu(kaufjahr=2029, kaufpreis=400_000, anteil_gub=0.25)),
+         befund(teiluebertrag=1) + [("pr_Gesamt", 0, "1 Warnung(en)")]),
+        ("Etappe 9: Rücklage ohne Neuobjekt, Vorbesitzzeit zu kurz",
+         Modell([vk_obj, dataclasses.replace(kurz, kaufjahr=2024)],
+                verkaeufe=[vk_2027, Verkauf("OBJ-002", 2027, preis=100_000, kosten=0,
+                                            nutzung_6b="ja")]),
+         befund(ohne_reinvest=1, vorbesitz=1) + [("pr_Gesamt", 0, "2 Warnung(en)")]),
+        ("Etappe 9: Drei-Objekt-Grenze überschritten", drei_objekt,
+         befund(grundstueckshandel=1)),
+        ("Etappe 9: Drei-Objekt-Grenze mit Zeitraum 4 Jahre",
+         dataclasses.replace(drei_objekt, parameter={"par_DOJahre": 4}), befund()),
+        ("Etappe 9: Szenario B meldet entfallene Neuobjekte nicht", szenario_b,
+         befund() + [("pr_Gesamt", 0, "OK")]),
+        ("Etappe 9: ohne Verkehrswert nur Hinweis",
+         Modell([dataclasses.replace(obj, verkehrswert=None)]),
+         befund(verkehrswert=1) + [("pr_Gesamt", 0, "OK")]),
+        # Makrofälle: vierter Eintrag sind die Aufrufe der Reihe nach,
+        # (Modul, Prozedur, Argumente, erwarteter Rückgabewert; FEHLT = ohne Rückgabewert)
+        ("Etappe 9: Makro Szenarien vergleichen", szenario_a, [
+            ("par_Szenario", 0, "A"),           # vorher aktives Szenario wieder eingestellt
+            ("vg_A", vg("vermoegen"), vermoegen_a),
+            ("vg_A", vg("anlage"), anlage_a),
+            ("vg_B", vg("vermoegen"), anlage_b),
+            ("vg_B", vg("steuer"), steuer_b_2027),
+            ("vg_C", vg("vermoegen"), vermoegen_c),
+            ("vg_C", vg("afa"), 20_000 + 18 * 27_000),
+            ("vg_DiffB", vg("vermoegen"), vermoegen_a - anlage_b),
+            ("vg_DiffC", vg("vermoegen"), 0),
+            ("vg_Aktuell", vg("vermoegen"), vermoegen_a),
+            ("vg_Vermoegen", 0, vermoegen_a),
+        ], [
+            ("modPruefung", "AnzahlFehler", (), 0),
+            ("modPruefung", "Auffaelligkeiten", (), ""),
+            ("modSzenario", "SzenarienVergleichen", (), FEHLT),
+        ]),
+        ("Etappe 9: Makro Szenario wechseln und zurückstellen", szenario_c, [
+            ("par_Szenario", 0, "B"),
+            ("neu_Status", 0, NEU_SZENARIO_B),
+            ("vg_Aktuell", vg("vermoegen"), anlage_b),
+            ("vg_A", vg("vermoegen"), vermoegen_a),
+            ("vg_C", vg("vermoegen"), vermoegen_c),
+        ], [
+            ("modSzenario", "SzenarioSetzen", ("B",), FEHLT),
+            ("modSzenario", "SzenarienVergleichen", (), FEHLT),
+        ]),
+        ("Etappe 9: Makro gespeicherten Vergleich leeren",
+         dataclasses.replace(szenario_a, vergleich={"A": {"vermoegen": 1}, "C": {"anlage": 2}}), [
+            ("vg_A", vg("vermoegen"), None),
+            ("vg_C", vg("anlage"), None),
+        ], [
+            ("modSzenario", "VergleichLeeren", (), FEHLT),
+        ]),
+        ("Etappe 9: Makros Objekt anlegen, duplizieren, entfernen", Modell([obj, kurz]), [
+            ("obj_ID", 0, "OBJ-001"),
+            ("obj_ID", 1, "OBJ-005"),           # frei gewordene Zeile wird wieder belegt
+            ("obj_ID", 2, "OBJ-003"),
+            ("obj_ID", 3, "OBJ-004"),
+            ("obj_ID", 4, None),                # weder OBJ-001 doppelt noch OBJ-006
+            ("obj_Name", 2, "Testobjekt"),
+            ("obj_Restbuchwert", 2, 400_000),
+            ("obj_Status", 2, "OK"),
+            ("obj_Status", 1, "Pflichtfeld fehlt"),
+            ("obj_Status", 3, "Pflichtfeld fehlt"),
+            ("obj_Restbuchwert", 1, None),      # Eingaben von OBJ-002 geleert
+            ("prg_Miete", pz(2, 2027), 61_200),  # Kopie rechnet im eigenen Block
+            ("prg_Buchwert", pz(2, 2046), 0),
+            ("prg_Miete", pz(1, 2027), 0),
+            ("aw_Verkehrswert", rj(2027), 2 * 1_428_000),
+            ("pr_Anzahl", pr("objekte"), 2),
+            ("pr_Gesamt", 0, "1 Fehler"),
+            (AUSGEBLENDET, 2 + 1 * JAHRE, False),  # Block OBJ-005 hat eine ID
+            (AUSGEBLENDET, 2 + 4 * JAHRE, True),   # leerer Block
+            (AUSGEBLENDET, 2 + 4 * JAHRE + JAHRE - 1, True),
+        ], [
+            ("modObjekte", "ObjektDuplizieren", ("OBJ-001", "OBJ-003"), 3),
+            ("modObjekte", "ObjektAnlegen", ("OBJ-004",), 4),
+            # Err.Raise: In LibreOffice bricht die Funktion ab und liefert 0, nichts wird
+            # geschrieben (geprüft über obj_ID); Excel zeigt die Meldung
+            ("modObjekte", "ObjektAnlegen", ("OBJ-001",), 0),       # ID doppelt
+            ("modObjekte", "ObjektDuplizieren", ("OBJ-999", "OBJ-006"), 0),  # Quelle fehlt
+            ("modObjekte", "ObjektEntfernen", ("OBJ-002",), FEHLT),
+            ("modObjekte", "ObjektAnlegen", ("OBJ-005",), 2),
+            ("modObjekte", "ObjektPosition", ("OBJ-003",), 3),
+            ("modObjekte", "LeereBloeckeAusblenden", (True,), FEHLT),
+            ("modObjekte", "LeereBloeckeAusgeblendet", (), True),
+            ("modObjekte", "LeereBloeckeAusblenden", (False,), FEHLT),
+            ("modObjekte", "LeereBloeckeAusgeblendet", (), False),
+            ("modObjekte", "LeereBloeckeAusblenden", (True,), FEHLT),
+            ("modPruefung", "AnzahlFehler", (), 1),
+            ("modPruefung", "AnzahlWarnungen", (), 0),
+        ]),
     ] + [
         (f"Etappe 1: Steuerwelt {welt}", Modell([obj], {"par_Steuerwelt": welt}),
-         [("par_StatusSteuerwelt", 0, "nicht im MVP – Ergebnisse gelten nur für GmbH")])
+         [("par_StatusSteuerwelt", 0, "nicht im MVP – Ergebnisse gelten nur für GmbH"),
+          ("pr_Anzahl", pr("steuerwelt"), 1),
+          ("pr_Gesamt", 0, "1 Fehler")])
         for welt in STEUERWELTEN[1:]
     ]
 
@@ -786,7 +931,10 @@ def pruefe(fall: str, wb, pruefungen) -> int:
     """Sollwerte eines Falls prüfen, Ergebnis ausgeben, Anzahl Abweichungen zurückgeben."""
     fehler = 0
     for name, zeile, soll in pruefungen:
-        ist = wert(wb, name, zeile)
+        if name == AUSGEBLENDET:             # Zeile im Blatt Prognose ausgeblendet?
+            ist = bool(wb["Prognose"].row_dimensions[zeile].hidden)
+        else:
+            ist = wert(wb, name, zeile)
         if ist == "":
             ist = None
         if gleich(ist, soll):
@@ -795,6 +943,37 @@ def pruefe(fall: str, wb, pruefungen) -> int:
             fehler += 1
             print(f"FEHLER  {fall}: {name}[{zeile}] Soll {soll!r}, Ist {ist!r}")
     return fehler
+
+
+def makro_lauf(lo, fall: str, modell: Modell, aufrufe, ordner: Path):
+    """Etappe 9: Mappe als .xlsm bauen, Makros in LibreOffice ausführen, Ergebnis lesen.
+
+    Liefert die neu berechnete Mappe (Werte) und die Anzahl abweichender Rückgabewerte.
+    """
+    ordner.mkdir(parents=True, exist_ok=True)
+    xlsm = speichere_mit_makros(erstelle_mappe(modell), ordner / "mappe.xlsm", lo)
+    fehler = 0
+    doc = lo.laden(xlsm, makros=True)
+    try:
+        for modul, prozedur, argumente, soll in aufrufe:
+            aufruf = f"{modul}.{prozedur}{argumente!r}"
+            try:
+                ist = lo.makro(doc, modul, prozedur, *argumente)
+            except Exception as e:  # Makro nicht gefunden oder Laufzeitfehler in UNO
+                fehler += 1
+                print(f"FEHLER  {fall}: {aufruf} bricht ab: {str(e).splitlines()[0]}")
+                continue
+            if soll is FEHLT:
+                print(f"OK      {fall}: {aufruf}")
+            elif gleich(ist, soll):
+                print(f"OK      {fall}: {aufruf} -> {ist!r}")
+            else:
+                fehler += 1
+                print(f"FEHLER  {fall}: {aufruf} Soll {soll!r}, Ist {ist!r}")
+        lo.speichern(doc, ordner / "gerechnet.xlsx")
+    finally:
+        doc.close(True)
+    return load_workbook(ordner / "gerechnet.xlsx", data_only=True), fehler
 
 
 def gespeicherter_vergleich(laeufe: dict, ordner: Path) -> int:
@@ -828,11 +1007,18 @@ def main() -> int:
     filter_ = sys.argv[1] if len(sys.argv) > 1 else ""
     fehler = 0
     laeufe = {}
-    with tempfile.TemporaryDirectory() as tmp:
-        for i, (fall, modell, pruefungen) in enumerate(faelle()):
+    with tempfile.TemporaryDirectory() as tmp, contextlib.ExitStack() as stapel:
+        lo = None
+        for i, (fall, modell, pruefungen, *aufrufe) in enumerate(faelle()):
             if filter_ not in fall:
                 continue
-            wb = durchrechnen(modell, Path(tmp) / f"fall{i}")
+            if aufrufe:
+                if lo is None:                   # eine LibreOffice-Sitzung für alle Makrofälle
+                    lo = stapel.enter_context(LibreOffice(Path(tmp) / "makros"))
+                wb, n = makro_lauf(lo, fall, modell, aufrufe[0], Path(tmp) / f"fall{i}")
+                fehler += n
+            else:
+                wb = durchrechnen(modell, Path(tmp) / f"fall{i}")
             fehler += pruefe(fall, wb, pruefungen)
             for sz in "ABC":
                 if fall.startswith(f"Etappe 8: Szenario {sz},"):
