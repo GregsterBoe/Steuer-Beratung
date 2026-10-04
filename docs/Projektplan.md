@@ -694,11 +694,25 @@ Das Modell speist sich aus zwei getrennten Quellen, weil die laufende Buchhaltun
 
 Wie bei der Pillar-2-Pipeline kapselt ein eigenes Modul das Einlesen. Ändert sich das Quellformat, wird nur diese Schicht angepasst, nicht der Rest.
 
+**Umsetzung: Vorlagen und Einleseschicht**
+
+- `prognosemodell/einlesen.py` liest beide Dateien zu einem Modell. Alle Layoutangaben (Kopfbeschriftungen, Spaltenüberschriften, Blattnamen) stehen als Konstanten oben im Modul.
+- `python -m prognosemodell.vorlagen` schreibt `vorlagen/Kostenstellen_Vorlage.xlsx` und `vorlagen/Stammdaten_Vorlage.xlsx` mit drei Beispielobjekten; OBJ-001 entspricht dem Testobjekt.
+- Kostenstellenblatt: im Kopf die Beschriftungen Kostenstelle, Bezeichnung und Geschäftsjahr in Spalte A, Wert in Spalte B. Darunter eine Kontentabelle mit Konto, Kontobezeichnung und Betrag Geschäftsjahr, Erlöse und Aufwand positiv. Zeilen ohne numerisches Konto (Summen, Leerzeilen) und Blätter ohne Kopf werden übergangen.
+- Stammdaten, Blatt Objekte: ObjektID, Kostenstelle und die steuerlichen Felder des Objektblatts. Die Spalten werden über die Überschrift gefunden, die Reihenfolge ist frei. Ein leerer Objektname wird aus der Bezeichnung der Kostenstelle übernommen.
+- Stammdaten, Blatt Kontenzuordnung: Konto von, Konto bis, Kategorie. Kategorien sind Miete, Erhaltung, weitere Einnahmen, weitere Ausgaben und nicht übernehmen (AfA rechnet das Modell selbst, Zinsen kommen mit Stufe 2).
+- Basisjahr = Geschäftsjahr der Kostenstellen; alle Blätter müssen dasselbe zeigen. Der Restbuchwert in den Stammdaten gilt zum Ende dieses Jahres.
+- Abbruch mit Liste aller Funde: Konto mit Betrag ohne Zuordnung, sich überschneidende Kontenbereiche, unbekannte Kategorie, Kostenstelle der Stammdaten fehlt in der Kostenstellendatei, doppelte ObjektID oder Kostenstelle, fehlende Pflichtfelder oder Spalten, verschiedene Geschäftsjahre. Eine Kostenstelle ohne Stammdaten ist nur ein Hinweis (etwa eine Verwaltungskostenstelle).
+- Verkäufe und Neuobjekte bleiben Eingaben in der Mappe.
+- Das Prüfskript liest die Vorlagen über Datei und im Speicher ein, rechnet das eingelesene Modell durch und spielt die Fehlerfälle oben einzeln durch.
+
 **Offene Punkte, nächste Woche in der Arbeit zu prüfen**
 
 - [ ] Gibt es ein Anlageverzeichnis mit Anschaffungskosten und Buchwerten je Objekt?
 - [ ] Ist darin die Aufteilung Gebäude zu Grund und Boden schon enthalten?
 - [ ] Haben die Kostenstellenblätter ein einheitliches Layout mit fester ObjektID?
+- [ ] Weicht die echte Kanzlei-Excel von der Vorlage ab (Kopf, Spaltenüberschriften, Monatsspalten statt Jahresbetrag, Vorzeichen)? Dann die Konstanten in `einlesen.py` anpassen.
+- [ ] Kontenrahmen (SKR03 oder SKR04) und die tatsächlichen Konten für die Kontenzuordnung.
 
 ## 17. Datenbedarf je Objekt
 

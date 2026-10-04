@@ -17,6 +17,7 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
+from prognosemodell import einlesen, vorlagen
 from prognosemodell.makros import LibreOffice, speichere_mit_makros
 from prognosemodell.mappe import erstelle_mappe
 from prognosemodell.formeln import NEU_SZENARIO_B, RUECKLAGE_SOFORT
@@ -918,6 +919,25 @@ def faelle():
             ("modPruefung", "AnzahlFehler", (), 1),
             ("modPruefung", "AnzahlWarnungen", (), 0),
         ]),
+        ("Einlesen: Vorlagen Stammdaten und Kostenstellen",
+         einlesen.lies_modell(vorlagen.stammdaten_vorlage(),
+                              vorlagen.kostenstellen_vorlage()).modell, [
+            ("par_Basisjahr", 0, 2026),
+            ("obj_ID", 0, "OBJ-001"),
+            ("obj_ID", 2, "OBJ-003"),
+            ("obj_Name", 1, "Gewerbeeinheit Hafenweg 7"),  # aus der Kostenstelle
+            ("obj_MieteBasis", 0, 60_000),                 # 4105 + 4106
+            ("obj_ErhBasis", 0, 8_000),                    # 6335 + 6460
+            ("obj_EinnBasis", 0, 9_500),
+            ("obj_AusgBasis", 0, 13_900),                  # ohne AfA 6222 und Zins 7310
+            ("obj_VKQuoteGeb", 2, None),
+            ("obj_Status", 1, "OK"),
+            ("prg_Miete", pz(0, 2027), 61_200),            # wie das Testobjekt
+            ("prg_AfA", pz(0, 2027), 20_000),
+            ("prg_Miete", pz(1, 2027), 95_000 * 1.02),
+            ("prg_AfA", pz(1, 2027), 36_000),
+            ("prg_Buchwert", pz(2, 2027), 240_000),
+        ] + befund()),
     ] + [
         (f"Etappe 1: Steuerwelt {welt}", Modell([obj], {"par_Steuerwelt": welt}),
          [("par_StatusSteuerwelt", 0, "nicht im MVP – Ergebnisse gelten nur für GmbH"),
@@ -1002,6 +1022,116 @@ def gespeicherter_vergleich(laeufe: dict, ordner: Path) -> int:
     return fehler
 
 
+def _einlesen_fall(fall: str, stamm, kst, soll_fehler=(), soll_hinweise=()):
+    """Einlesen ohne Mappe: erwartete Meldungen (Textteile) und sonst keine."""
+    try:
+        ergebnis = einlesen.lies_modell(stamm, kst)
+        fehler, hinweise, modell = [], ergebnis.hinweise, ergebnis.modell
+    except einlesen.EinleseFehler as e:
+        fehler, hinweise, modell = e.meldungen, [], None
+    abweichungen = 0
+    for art, soll, ist in (("Fehler", soll_fehler, fehler), ("Hinweis", soll_hinweise, hinweise)):
+        offen = [m for m in ist if not any(t in m for t in soll)]
+        fehlend = [t for t in soll if not any(t in m for m in ist)]
+        if offen or fehlend:
+            abweichungen += 1
+            print(f"FEHLER  {fall}: {art} erwartet {list(soll)}, gemeldet {ist}")
+        else:
+            print(f"OK      {fall}: {art} {list(soll) or 'keine'}")
+    return abweichungen, modell
+
+
+def pruefe_einlesen(ordner: Path) -> int:
+    """Einleseschicht: Vorlagen über Datei, Abweichungen und Fehlerfälle."""
+    def stamm():
+        return vorlagen.stammdaten_vorlage()
+
+    def kst():
+        return vorlagen.kostenstellen_vorlage()
+
+    def zelle(wb, blatt, ref, wert):
+        wb[blatt][ref] = wert
+        return wb
+
+    def kopie_mit(wb, blatt, zeile, werte):
+        for spalte, w in enumerate(werte, start=1):
+            wb[blatt].cell(row=zeile, column=spalte, value=w)
+        return wb
+
+    fehler = 0
+    stamm_pfad, kst_pfad = vorlagen.erstelle_vorlagen(ordner)
+    n, ueber_datei = _einlesen_fall("Einlesen: Vorlagen über Datei", stamm_pfad, kst_pfad)
+    fehler += n
+    _, im_speicher = _einlesen_fall("Einlesen: Vorlagen im Speicher", stamm(), kst())
+    if ueber_datei != im_speicher:
+        fehler += 1
+        print("FEHLER  Einlesen: Datei und Speicher liefern verschiedene Modelle")
+    else:
+        print("OK      Einlesen: Datei und Speicher liefern dasselbe Modell")
+    soll = dataclasses.replace(testobjekt(), weitere_einnahmen=9_500, weitere_ausgaben=13_900)
+    if im_speicher and im_speicher.objekte[0] == soll:
+        print("OK      Einlesen: OBJ-001 entspricht dem Testobjekt")
+    else:
+        fehler += 1
+        print(f"FEHLER  Einlesen: OBJ-001 {im_speicher and im_speicher.objekte[0]}")
+
+    # Spalten umgestellt: ObjektID ans Ende, Ergebnis gleich
+    umgestellt = stamm()
+    ws = umgestellt[einlesen.BLATT_STAMMDATEN]
+    ws.move_range(f"A1:A{ws.max_row}", cols=ws.max_column)
+    ws.delete_cols(1)
+    n, modell = _einlesen_fall("Einlesen: Spalten umgestellt", umgestellt, kst())
+    fehler += n + (modell != im_speicher)
+    if modell != im_speicher:
+        print("FEHLER  Einlesen: umgestellte Spalten ändern das Modell")
+
+    # Kostenstelle als Text, Summenzeile und Konto ohne Betrag ohne Zuordnung: kein Fehler
+    wb = zelle(stamm(), einlesen.BLATT_STAMMDATEN, "B4", "1001")
+    k = kopie_mit(kst(), "KST 1001", 30, ["Summe", None, 999_999])
+    kopie_mit(k, "KST 1001", 31, [6999, "Konto ohne Betrag", 0])
+    n, modell = _einlesen_fall("Einlesen: Text-Kostenstelle, Summenzeile, Nullkonto", wb, k)
+    fehler += n + (modell != im_speicher)
+
+    k = kopie_mit(kst(), "KST 1002", 20, [6999, "Sonstiges", 500])
+    fehler += _einlesen_fall("Einlesen: Konto ohne Zuordnung", stamm(), k,
+                             ["Konto 6999 (Sonstiges) ohne Kontenzuordnung"])[0]
+    fehler += _einlesen_fall("Einlesen: unbekannte Kostenstelle",
+                             zelle(stamm(), einlesen.BLATT_STAMMDATEN, "B5", 1009), kst(),
+                             ["Kostenstelle 1009 nicht in der Kostenstellendatei"])[0]
+    k = kst()
+    neu = k.copy_worksheet(k["KST 1003"])
+    neu["B3"], neu["B4"] = 9000, "Verwaltung allgemein"
+    fehler += _einlesen_fall("Einlesen: Kostenstelle ohne Stammdaten", stamm(), k,
+                             soll_hinweise=["Kostenstelle 9000 (Verwaltung allgemein"])[0]
+    fehler += _einlesen_fall("Einlesen: Kostenstelle doppelt", stamm(),
+                             zelle(kst(), "KST 1003", "B3", 1002),
+                             ["Kostenstelle 1002 doppelt",
+                              "Kostenstelle 1003 nicht in der Kostenstellendatei"])[0]
+    fehler += _einlesen_fall("Einlesen: Geschäftsjahre verschieden", stamm(),
+                             zelle(kst(), "KST 1002", "B5", 2025),
+                             ["unterschiedliche Geschäftsjahre 2025, 2026"])[0]
+    fehler += _einlesen_fall("Einlesen: ObjektID doppelt",
+                             zelle(stamm(), einlesen.BLATT_STAMMDATEN, "A5", "OBJ-001"), kst(),
+                             ["ObjektID OBJ-001 doppelt (Zeilen 4, 5)"])[0]
+    fehler += _einlesen_fall("Einlesen: Pflichtfeld fehlt",
+                             zelle(stamm(), einlesen.BLATT_STAMMDATEN, "D6", None), kst(),
+                             ["Zeile 6: AK Gebäude fehlt"])[0]
+    fehler += _einlesen_fall("Einlesen: keine Zahl",
+                             zelle(stamm(), einlesen.BLATT_STAMMDATEN, "F4", "2007a"), kst(),
+                             ["Kaufjahr: keine Zahl", "Zeile 4: Kaufjahr fehlt"])[0]
+    fehler += _einlesen_fall("Einlesen: Spalte fehlt",
+                             zelle(stamm(), einlesen.BLATT_STAMMDATEN, "D3", "AK Haus"), kst(),
+                             ["Spalte 'AK Gebäude' fehlt", "keine Objekte"])[0]
+    fehler += _einlesen_fall("Einlesen: Kontenbereiche überschneiden sich",
+                             zelle(stamm(), einlesen.BLATT_ZUORDNUNG, "B4", 4250), kst(),
+                             ["Zeile 5: Kontenbereich überschneidet sich mit Zeile 4"])[0]
+    fehler += _einlesen_fall("Einlesen: Kategorie unbekannt",
+                             zelle(stamm(), einlesen.BLATT_ZUORDNUNG, "C5", "Umlagen"), kst(),
+                             ["Kategorie 'Umlagen' unbekannt",
+                              "Konto 4210 (Umlagen Nebenkosten) ohne Kontenzuordnung"])[0]
+    return fehler
+
+
 def main() -> int:
     """Alle Fälle prüfen; optional nur Fälle, deren Name den ersten Aufrufparameter enthält."""
     filter_ = sys.argv[1] if len(sys.argv) > 1 else ""
@@ -1025,6 +1155,8 @@ def main() -> int:
                     laeufe[sz] = (modell, wb)
         if len(laeufe) == 3:
             fehler += gespeicherter_vergleich(laeufe, Path(tmp) / "vergleich")
+        if filter_ in "Einlesen: Fehlerfälle":
+            fehler += pruefe_einlesen(Path(tmp) / "einlesen")
     print(f"\n{fehler} Abweichung(en)" if fehler else "\nAlle Prüfungen bestanden.")
     return 1 if fehler else 0
 

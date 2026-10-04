@@ -1,12 +1,18 @@
 """Mappe generieren: python -m prognosemodell [--ausgabe PFAD] [--ohne-testdaten] [--ohne-makros]
+                                             [--stammdaten DATEI --kostenstellen DATEI]
+
+Mit --stammdaten und --kostenstellen kommen die Objekte aus den beiden
+Eingabedateien (Vorlagen: python -m prognosemodell.vorlagen), sonst das Testobjekt.
 
 Standard ist die .xlsm mit eingebetteter VBA-Steuerung; dafür braucht der Bau
 LibreOffice (siehe makros.py). Mit --ohne-makros entsteht eine reine .xlsx.
 """
 
 import argparse
+import sys
 from pathlib import Path
 
+from .einlesen import EinleseFehler, lies_modell
 from .mappe import erstelle_mappe
 from .modelle import Modell
 from .testdaten import testmodell
@@ -21,9 +27,25 @@ def main() -> None:
                     help="leeres Objektblatt statt Testobjekt")
     ap.add_argument("--ohne-makros", action="store_true",
                     help="reine .xlsx ohne VBA, kein LibreOffice nötig")
+    ap.add_argument("--stammdaten", help="Stammdatendatei (Objekte, Kontenzuordnung)")
+    ap.add_argument("--kostenstellen", help="Kostenstellendatei, ein Blatt je Objekt")
     args = ap.parse_args()
 
-    modell = Modell() if args.ohne_testdaten else testmodell()
+    if bool(args.stammdaten) != bool(args.kostenstellen):
+        ap.error("--stammdaten und --kostenstellen nur zusammen angeben.")
+    if args.stammdaten:
+        try:
+            ergebnis = lies_modell(args.stammdaten, args.kostenstellen)
+        except EinleseFehler as e:
+            print("Einlesen abgebrochen:", *e.meldungen, sep="\n  ", file=sys.stderr)
+            sys.exit(1)
+        for hinweis in ergebnis.hinweise:
+            print(f"Hinweis: {hinweis}")
+        modell = ergebnis.modell
+        print(f"eingelesen: {len(modell.objekte)} Objekte, Basisjahr "
+              f"{modell.parameter.get('par_Basisjahr')}")
+    else:
+        modell = Modell() if args.ohne_testdaten else testmodell()
     endung = ".xlsx" if args.ohne_makros else ".xlsm"
     ziel = Path(args.ausgabe or AUSGABE + endung)
     if ziel.suffix != endung:
