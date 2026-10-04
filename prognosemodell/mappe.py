@@ -8,8 +8,9 @@ from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from . import formeln
-from .modelle import (MAX_OBJEKTE, OBJEKT_FELDER, PARAMETER, PROGNOSE_SPALTEN,
-                      STATUS_NAME, STATUS_UEBERSCHRIFT, Modell)
+from .modelle import (MAX_OBJEKTE, MAX_VERKAEUFE, OBJEKT_FELDER, PARAMETER, PROGNOSE_SPALTEN,
+                      STATUS_NAME, STATUS_UEBERSCHRIFT, VERKAUF_FELDER, VERKAUF_SPALTEN,
+                      VERKAUF_STATUS_NAME, Modell)
 
 HINWEIS_FINANZIERUNG = "Alle Werte vor Finanzierung (ohne Zins und Tilgung)."
 
@@ -74,17 +75,13 @@ def _blatt_parameter(wb, modell: Modell) -> None:
     ws.freeze_panes = "A5"
 
 
-def _blatt_objekte(wb, modell: Modell) -> None:
-    ws = wb.create_sheet("Objekte")
-    erste, letzte = 2, MAX_OBJEKTE + 1
-    status_spalte = len(OBJEKT_FELDER) + 1
-    _kopf(ws, 1, [f.ueberschrift for f in OBJEKT_FELDER] + [STATUS_UEBERSCHRIFT])
-    ws.row_dimensions[1].height = 32
-
-    for i, f in enumerate(OBJEKT_FELDER, start=1):
+def _eingabespalten(wb, ws, blatt: str, felder, erste: int, letzte: int) -> None:
+    """Eingabespalten: Breite, benannter Bereich, Format, gelbe Füllung, Validierung."""
+    for i, f in enumerate(felder, start=1):
         bst = get_column_letter(i)
         ws.column_dimensions[bst].width = f.breite
-        _name(wb, f.name, f"Objekte!${bst}${erste}:${bst}${letzte}")
+        _name(wb, f.name, f"'{blatt}'!${bst}${erste}:${bst}${letzte}")
+        bereich = f"{bst}{erste}:{bst}{letzte}"
         if f.minimum is not None or f.maximum is not None:
             dv = DataValidation(
                 type="whole" if f.ganzzahl else "decimal",
@@ -96,34 +93,88 @@ def _blatt_objekte(wb, modell: Modell) -> None:
                 error=f"{f.ueberschrift}: Wert außerhalb des zulässigen Bereichs.",
             )
             ws.add_data_validation(dv)
-            dv.add(f"{bst}{erste}:{bst}{letzte}")
-
-    st = get_column_letter(status_spalte)
-    ws.column_dimensions[st].width = 26
-    _name(wb, STATUS_NAME, f"Objekte!${st}${erste}:${st}${letzte}")
-    letzte_spalte = get_column_letter(status_spalte)
-    _name(wb, "obj_Basis", f"Objekte!$A${erste}:${letzte_spalte}${letzte}")
-
-    for zeile in range(erste, letzte + 1):
-        for i, f in enumerate(OBJEKT_FELDER, start=1):
+            dv.add(bereich)
+        if f.auswahl:
+            dv = DataValidation(type="list", formula1='"' + ",".join(f.auswahl) + '"',
+                                allow_blank=True, showErrorMessage=True)
+            ws.add_data_validation(dv)
+            dv.add(bereich)
+        for zeile in range(erste, letzte + 1):
             c = ws.cell(row=zeile, column=i)
             c.number_format = f.format
             c.fill = FILL_EINGABE
-        c = ws.cell(row=zeile, column=status_spalte, value=formeln.status_objekt(zeile))
-        c.fill = FILL_BERECHNET
 
-    # Status rot, sobald er gesetzt ist und nicht OK lautet
+
+def _datensaetze(ws, felder, datensaetze, erste: int) -> None:
+    for zeile, satz in enumerate(datensaetze, start=erste):
+        for i, f in enumerate(felder, start=1):
+            wert = getattr(satz, f.key)
+            if wert is not None:
+                ws.cell(row=zeile, column=i, value=wert)
+
+
+def _status_rot(ws, st: str, erste: int, letzte: int) -> None:
+    """Status rot, sobald er gesetzt ist und nicht OK lautet."""
     ws.conditional_formatting.add(
         f"{st}{erste}:{st}{letzte}",
         FormulaRule(formula=[f'AND({st}{erste}<>"",{st}{erste}<>"OK")'], fill=FILL_FEHLER),
     )
 
-    for zeile, obj in enumerate(modell.objekte, start=erste):
-        for i, f in enumerate(OBJEKT_FELDER, start=1):
-            wert = getattr(obj, f.key)
-            if wert is not None:
-                ws.cell(row=zeile, column=i, value=wert)
 
+def _blatt_objekte(wb, modell: Modell) -> None:
+    ws = wb.create_sheet("Objekte")
+    erste, letzte = 2, MAX_OBJEKTE + 1
+    status_spalte = len(OBJEKT_FELDER) + 1
+    _kopf(ws, 1, [f.ueberschrift for f in OBJEKT_FELDER] + [STATUS_UEBERSCHRIFT])
+    ws.row_dimensions[1].height = 32
+    _eingabespalten(wb, ws, "Objekte", OBJEKT_FELDER, erste, letzte)
+
+    st = get_column_letter(status_spalte)
+    ws.column_dimensions[st].width = 26
+    _name(wb, STATUS_NAME, f"Objekte!${st}${erste}:${st}${letzte}")
+    _name(wb, "obj_Basis", f"Objekte!$A${erste}:${st}${letzte}")
+    for zeile in range(erste, letzte + 1):
+        c = ws.cell(row=zeile, column=status_spalte, value=formeln.status_objekt(zeile))
+        c.fill = FILL_BERECHNET
+    _status_rot(ws, st, erste, letzte)
+
+    _datensaetze(ws, OBJEKT_FELDER, modell.objekte, erste)
+    ws.freeze_panes = "B2"
+
+
+def _blatt_verkaeufe(wb, modell: Modell) -> None:
+    """Je Zeile ein geplanter Verkauf; Aufteilung des Erlöses in Buchwert und Gewinn."""
+    blatt = "Verkäufe"
+    ws = wb.create_sheet(blatt)
+    erste, letzte = 2, MAX_VERKAEUFE + 1
+    sp = formeln.verkauf_spalten()
+    _kopf(ws, 1, [f.ueberschrift for f in VERKAUF_FELDER] + [STATUS_UEBERSCHRIFT]
+          + [s.ueberschrift for s in VERKAUF_SPALTEN])
+    ws.row_dimensions[1].height = 45
+    _eingabespalten(wb, ws, blatt, VERKAUF_FELDER, erste, letzte)
+
+    st = sp["status"]
+    ws.column_dimensions[st].width = 28
+    _name(wb, VERKAUF_STATUS_NAME, f"'{blatt}'!${st}${erste}:${st}${letzte}")
+    for s in VERKAUF_SPALTEN:
+        bst = sp[s.key]
+        ws.column_dimensions[bst].width = s.breite
+        _name(wb, s.name, f"'{blatt}'!${bst}${erste}:${bst}${letzte}")
+
+    for zeile in range(erste, letzte + 1):
+        zelle_formeln = formeln.verkauf_zeile(zeile)
+        c = ws.cell(row=zeile, column=len(VERKAUF_FELDER) + 1, value=zelle_formeln["status"])
+        c.fill = FILL_BERECHNET
+        for i, s in enumerate(VERKAUF_SPALTEN, start=len(VERKAUF_FELDER) + 2):
+            c = ws.cell(row=zeile, column=i, value=zelle_formeln[s.key])
+            c.number_format = s.format
+            c.fill = FILL_BERECHNET
+    _status_rot(ws, st, erste, letzte)
+
+    _datensaetze(ws, VERKAUF_FELDER, modell.verkaeufe, erste)
+    ws.cell(row=1, column=len(VERKAUF_FELDER) + len(VERKAUF_SPALTEN) + 3,
+            value="Verkauf zum Jahresende; das Objekt rechnet ab dem Folgejahr nicht mehr. "
+                  + HINWEIS_FINANZIERUNG)
     ws.freeze_panes = "B2"
 
 
@@ -167,5 +218,6 @@ def erstelle_mappe(modell: Modell) -> Workbook:
     wb = Workbook()
     _blatt_parameter(wb, modell)
     _blatt_objekte(wb, modell)
+    _blatt_verkaeufe(wb, modell)
     _blatt_prognose(wb, modell)
     return wb

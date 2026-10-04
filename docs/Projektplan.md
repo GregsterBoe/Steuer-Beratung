@@ -193,7 +193,7 @@ Für Buchwert\_Vorjahr empfehle ich einen SUMMEWENNS-Verweis auf dieselbe Matrix
 - Die Zeilen verweisen direkt auf ihre Objektzeile (`Objekte!$J$2` usw.) statt per SVERWEIS über die ObjektID. Das ist schneller und eindeutig, auch bei doppelten IDs.
 - Buchwert\_Vorjahr ist die Spalte G der Zeile darüber, im ersten Jahr der Restbuchwert. SUMMEWENNS ist dafür nicht nötig.
 
-Das aktiv-Flag ist vorerst 1, wenn der Status der Objektzeile „OK“ lautet; Objekte mit Fehlern rechnen also nicht mit. Etappe 4 ergänzt das Verkaufsjahr. Neuobjekte (Etappe 6) bekommen eigene Blöcke in derselben Matrix. Miete und Erhaltung werden bereits wie oben indexiert; Etappe 3 prüft das gezielt. Die Spalten sind als `prg_ID`, `prg_Jahr`, `prg_Aktiv`, `prg_Miete`, `prg_Erhaltung`, `prg_AfA`, `prg_Buchwert` und `prg_Ergebnis` benannt; das Blatt ist ohne Kennwort geschützt, Filtern bleibt möglich.
+Das aktiv-Flag ist 1, wenn der Status der Objektzeile „OK“ lautet und das Jahr nicht nach einem gültigen Verkauf liegt (Etappe 4); Objekte mit Fehlern rechnen also nicht mit. Neuobjekte (Etappe 6) bekommen eigene Blöcke in derselben Matrix. Miete und Erhaltung werden bereits wie oben indexiert; Etappe 3 prüft das gezielt. Die Spalten sind als `prg_ID`, `prg_Jahr`, `prg_Aktiv`, `prg_Miete`, `prg_Erhaltung`, `prg_AfA`, `prg_Buchwert` und `prg_Ergebnis` benannt; das Blatt ist ohne Kennwort geschützt, Filtern bleibt möglich.
 
 **Abnahme Etappe 2:** Für ein Objekt mit Gebäude 800.000, AfA 2,5 % (40 Jahre), Kauf 2007 muss der Buchwert Ende 2046 null erreichen; die AfA beträgt bis dahin 20.000 je Jahr. Miete und Erhaltung laufen unabhängig davon weiter. Den AfA-Stopp bei Buchwert null prüft zusätzlich ein Fall mit kleinerem Restbuchwert, dessen Ende innerhalb des Rasters liegt.
 
@@ -287,7 +287,25 @@ K2  =I2 + J2
 
 **Verknüpfung zur Prognose:** Das aktiv-Flag in Spalte C der Prognose greift bereits auf Verkaeufe Spalte B zu. Damit endet das laufende Ergebnis des Objekts automatisch im Jahr nach dem Verkauf. Der Veräußerungsgewinn K fließt in Etappe 5 in den Rücklagenspiegel oder, bei 6b-Nutzung nein, direkt in die Steuer.
 
-**Abnahme Etappe 4:** Preis 1,4 Mio, Verkaufskosten 0, Buchwert gesamt 680.000 muss einen Veräußerungsgewinn von 720.000 ergeben. Bei hälftiger Aufteilung liegt der Gebäudeanteil des Gewinns korrekt getrennt vom G+B-Anteil vor.
+**Umsetzung (Stand Etappe 4):** Gegenüber dem Layout oben hat das Blatt Verkäufe getrennte Eingaben für Preis und Faktor sowie eine Statusspalte; die Formelspalten rücken dadurch nach hinten.
+
+| Spalte | Feld | Quelle |
+| --- | --- | --- |
+| A–G | ObjektID, Verkaufsjahr, Verkaufspreis, Faktor × Jahresmiete, Verkaufskosten, Aufteilung, 6b-Nutzung | Eingabe |
+| H | Status | Formel |
+| I | Verkaufspreis angesetzt | Preis, sonst Faktor × Miete des Verkaufsjahrs aus der Prognose |
+| J | Buchwert Gebäude Verkaufsjahr | Buchwert Ende Verkaufsjahr aus der Prognose |
+| K | Buchwert gesamt | J + AK G+B |
+| L | Erlösanteil Gebäude | wie H2 oben, Erlös netto = Preis − Kosten |
+| M, N, O | Gewinn Gebäude, Gewinn G+B, Veräußerungsgewinn gesamt | wie I2 bis K2 oben |
+
+- Der Status meldet „ObjektID unbekannt“, „Objekt nicht OK“, „Verkauf doppelt“, „Pflichtfeld fehlt“ (Verkaufsjahr oder 6b-Nutzung), „Preis oder Faktor angeben“ (genau eins von beiden), „Verkaufsjahr außerhalb Prognose“ und „Gebäudeanteil fehlt“ (Verkehrswert-Aufteilung ohne Anteil im Objektblatt). Nur Zeilen mit Status OK rechnen und schalten das Objekt ab.
+- Bleibt die Aufteilung leer, gilt `par_Aufteilung` vom Parameterblatt.
+- Das aktiv-Flag liest das Verkaufsjahr per SUMMEWENNS über gültige Verkäufe statt per SVERWEIS. Der Status selbst greift nicht auf die Prognose zu, so entsteht kein Zirkelbezug.
+- Nach dem Verkauf ist auch der Buchwert in der Prognose null; das Objekt steht nicht mehr in der Bilanz.
+- Benannte Bereiche: `vk_ID`, `vk_Jahr`, `vk_Preis`, `vk_Faktor`, `vk_Kosten`, `vk_Aufteilung`, `vk_6b`, `vk_Status`, `vk_PreisAngesetzt`, `vk_BuchwertGeb`, `vk_BuchwertGesamt`, `vk_ErloesGeb`, `vk_GewinnGeb`, `vk_GewinnGuB`, `vk_Gewinn`.
+
+**Abnahme Etappe 4:** Preis 1,4 Mio, Verkaufskosten 0, Buchwert gesamt 680.000 muss einen Veräußerungsgewinn von 720.000 ergeben. Bei hälftiger Aufteilung liegt der Gebäudeanteil des Gewinns korrekt getrennt vom G+B-Anteil vor. Im Prüfskript: Objekt mit Restbuchwert 500.000, Verkauf Ende 2027 (Gebäude 480.000 + G+B 200.000). Nach Buchwert entfallen 988.235,29 € Erlös und 508.235,29 € Gewinn auf das Gebäude, nach Verkehrswert mit Anteil 50 % 700.000 € Erlös und 220.000 € Gewinn; G+B trägt 211.764,71 € bzw. 500.000 €. Dazu: Verkauf 2030 über Mietfaktor mit Kosten, Verkauf eines von zwei Objekten, alle Statusmeldungen, und ab dem Folgejahr sind Miete, AfA, Buchwert und Ergebnis null.
 
 ## 12. Rücklagenspiegel § 6b (Etappe 5)
 

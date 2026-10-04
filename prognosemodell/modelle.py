@@ -16,6 +16,7 @@ FMT_TEXT = "@"
 
 # Feste Zeilenzahl des Objektblatts; benannte Bereiche laufen über alle Zeilen.
 MAX_OBJEKTE = 200
+MAX_VERKAEUFE = MAX_OBJEKTE  # höchstens ein Verkauf je Objekt
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,7 @@ class Parameter:
 
 
 STEUERWELT_GMBH = "GmbH"
+AUFTEILUNGEN = ("Buchwert", "Verkehrswert")
 STEUERWELTEN = (STEUERWELT_GMBH, "Privat / GbR vermögensverwaltend",
                 "gewerblich (Personengesellschaft)")
 
@@ -67,7 +69,8 @@ PARAMETER = [
     Parameter("par_Alternativrendite", "Rendite Alternativanlage p. a.", 0.04, FMT_PROZENT,
               "für Szenario B; Platzhalter"),
     Parameter("par_Aufteilung", "Erlösaufteilung Standard", "Buchwert", FMT_TEXT,
-              "Aufteilung Verkaufserlös auf Gebäude und G+B", ("Buchwert", "Verkehrswert")),
+              "Aufteilung Verkaufserlös auf Gebäude und G+B; gilt, wenn im Blatt Verkäufe "
+              "keine Methode steht", AUFTEILUNGEN),
     Parameter("par_6bVorbesitz", "§ 6b Mindest-Vorbesitzzeit (Jahre)", 6, FMT_ZAHL, ""),
     Parameter("par_6bFrist", "§ 6b Reinvestitionsfrist (Jahre)", 4, FMT_ZAHL, ""),
     Parameter("par_6bZuschlag", "§ 6b Gewinnzuschlag je Jahr", 0.06, FMT_PROZENT,
@@ -89,6 +92,7 @@ class Feld:
     minimum: Optional[float] = None  # Datenvalidierung
     maximum: Optional[float] = None
     ganzzahl: bool = False
+    auswahl: Optional[tuple] = None  # Dropdown-Werte
 
 
 OBJEKT_FELDER = [
@@ -118,8 +122,8 @@ STATUS_NAME = "obj_Status"
 
 
 @dataclass(frozen=True)
-class PrognoseSpalte:
-    """Eine Spalte des Blatts Prognose (Long-Format: Zeile je Objekt und Jahr)."""
+class Rechenspalte:
+    """Eine Formelspalte (Prognose, berechneter Teil der Verkäufe)."""
     key: str
     ueberschrift: str
     name: str            # benannter Bereich über die Spalte
@@ -127,6 +131,9 @@ class PrognoseSpalte:
     breite: int = 14
 
 
+PrognoseSpalte = Rechenspalte
+
+# Blatt Prognose, Long-Format: Zeile je Objekt und Jahr
 PROGNOSE_SPALTEN = [
     PrognoseSpalte("id", "ObjektID", "prg_ID", FMT_TEXT, 12),
     PrognoseSpalte("jahr", "Jahr", "prg_Jahr", FMT_JAHR, 8),
@@ -137,6 +144,44 @@ PROGNOSE_SPALTEN = [
     PrognoseSpalte("buchwert", "Buchwert Gebäude Ende", "prg_Buchwert", FMT_EURO, 16),
     PrognoseSpalte("ergebnis", "Ergebnis vor Finanzierung", "prg_Ergebnis", FMT_EURO, 16),
 ]
+
+
+# Blatt Verkäufe: erst die Eingaben, dann Status und Formeln
+VERKAUF_FELDER = [
+    Feld("objekt_id", "ObjektID", "vk_ID", FMT_TEXT, True, 12),
+    Feld("jahr", "Verkaufsjahr", "vk_Jahr", FMT_JAHR, True, 10,
+         minimum=1900, maximum=2100, ganzzahl=True),
+    Feld("preis", "Verkaufspreis", "vk_Preis", FMT_EURO, False, minimum=0),
+    Feld("faktor", "oder Faktor × Jahresmiete", "vk_Faktor", "0.0", False, 12,
+         minimum=0, maximum=100),
+    Feld("kosten", "Verkaufskosten", "vk_Kosten", FMT_EURO, False, minimum=0),
+    Feld("aufteilung", "Aufteilung (leer = Parameter)", "vk_Aufteilung", FMT_TEXT, False, 14,
+         auswahl=AUFTEILUNGEN),
+    Feld("nutzung_6b", "6b-Nutzung", "vk_6b", FMT_TEXT, True, 10, auswahl=("ja", "nein")),
+]
+VERKAUF_STATUS_NAME = "vk_Status"
+
+VERKAUF_SPALTEN = [
+    Rechenspalte("preis_angesetzt", "Verkaufspreis angesetzt", "vk_PreisAngesetzt", FMT_EURO, 16),
+    Rechenspalte("bw_geb", "Buchwert Gebäude Verkaufsjahr", "vk_BuchwertGeb", FMT_EURO, 16),
+    Rechenspalte("bw_gesamt", "Buchwert gesamt (mit G+B)", "vk_BuchwertGesamt", FMT_EURO, 16),
+    Rechenspalte("erloes_geb", "Erlösanteil Gebäude", "vk_ErloesGeb", FMT_EURO, 16),
+    Rechenspalte("gewinn_geb", "Gewinn Gebäude", "vk_GewinnGeb", FMT_EURO, 16),
+    Rechenspalte("gewinn_gub", "Gewinn G+B", "vk_GewinnGuB", FMT_EURO, 16),
+    Rechenspalte("gewinn", "Veräußerungsgewinn gesamt", "vk_Gewinn", FMT_EURO, 16),
+]
+
+
+@dataclass
+class Verkauf:
+    """Ein geplanter Verkauf. None = Feld leer lassen."""
+    objekt_id: Optional[str]
+    jahr: Optional[int] = None
+    preis: Optional[float] = None
+    faktor: Optional[float] = None
+    kosten: Optional[float] = None
+    aufteilung: Optional[str] = None
+    nutzung_6b: Optional[str] = None
 
 
 @dataclass
@@ -162,3 +207,4 @@ class Modell:
     objekte: list = field(default_factory=list)
     # Abweichende Parameterwerte, z. B. {"par_Steuerwelt": "..."}
     parameter: dict = field(default_factory=dict)
+    verkaeufe: list = field(default_factory=list)

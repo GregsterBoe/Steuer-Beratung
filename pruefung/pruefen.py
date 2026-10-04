@@ -14,7 +14,7 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 from prognosemodell.mappe import erstelle_mappe
-from prognosemodell.modelle import STEUERWELTEN, Modell
+from prognosemodell.modelle import STEUERWELTEN, Modell, Verkauf
 from prognosemodell.testdaten import testobjekt
 
 TOLERANZ = 0.01  # ein Cent
@@ -69,6 +69,20 @@ def faelle():
     miete_2046 = 60_000 * 1.02 ** 20
     afa = 20_000
     erh_2030 = 8_000 * 1.025 ** 4
+    # Abnahmefall Projektplan: Restbuchwert 500.000, Ende 2027 Gebäude 480.000 + G+B 200.000
+    vk_obj = dataclasses.replace(obj, restbuchwert=500_000)
+    vk_2027 = Verkauf("OBJ-001", 2027, preis=1_400_000, kosten=0, aufteilung="Buchwert",
+                      nutzung_6b="ja")
+    erloes_geb_bw = 1_400_000 * 480_000 / 680_000
+    # Verkauf 2030 über Mietfaktor 20, Kosten 30.000, Aufteilung aus dem Parameterblatt
+    miete_2030 = 60_000 * 1.02 ** 4
+    vk_2030 = Verkauf("OBJ-001", 2030, faktor=20, kosten=30_000, nutzung_6b="nein")
+    netto_2030 = 20 * miete_2030 - 30_000
+    ohne_quote = dataclasses.replace(obj, vk_quote_gebaeude=None)
+
+    def vk_status(verkauf, objekte=(obj,)):
+        return Modell(list(objekte), verkaeufe=[verkauf])
+
     return [
         ("Etappe 1: Stammdaten vollständig", Modell([obj]), [
             ("par_Startjahr", 0, 2027),
@@ -147,6 +161,76 @@ def faelle():
             ("prg_Miete", pz(0, 2027), 61_200),   # Index zählt ab Basisjahr, nicht ab 2026
             ("prg_Erhaltung", pz(0, 2027), 8_200),
         ]),
+        ("Etappe 4: Verkauf mit Gewinn, Aufteilung nach Buchwert",
+         Modell([vk_obj], verkaeufe=[vk_2027]), [
+            ("vk_Status", 0, "OK"),
+            ("vk_Status", 1, None),              # leere Zeile bleibt leer
+            ("vk_PreisAngesetzt", 0, 1_400_000),
+            ("vk_BuchwertGeb", 0, 480_000),
+            ("vk_BuchwertGesamt", 0, 680_000),
+            ("vk_Gewinn", 0, 720_000),
+            ("vk_ErloesGeb", 0, erloes_geb_bw),
+            ("vk_GewinnGeb", 0, erloes_geb_bw - 480_000),
+            ("vk_GewinnGuB", 0, 1_400_000 - erloes_geb_bw - 200_000),
+            ("prg_Aktiv", pz(0, 2027), 1),       # Verkaufsjahr rechnet noch voll
+            ("prg_Ergebnis", pz(0, 2027), 61_200 - 8_200 - 20_000),
+            ("prg_Aktiv", pz(0, 2028), 0),
+            ("prg_Miete", pz(0, 2028), 0),
+            ("prg_AfA", pz(0, 2028), 0),
+            ("prg_Buchwert", pz(0, 2028), 0),
+            ("prg_Ergebnis", pz(0, 2046), 0),
+        ]),
+        ("Etappe 4: hälftige Aufteilung nach Verkehrswert",
+         Modell([vk_obj], verkaeufe=[dataclasses.replace(vk_2027, aufteilung="Verkehrswert")]), [
+            ("vk_ErloesGeb", 0, 700_000),
+            ("vk_GewinnGeb", 0, 220_000),
+            ("vk_GewinnGuB", 0, 500_000),
+            ("vk_Gewinn", 0, 720_000),
+        ]),
+        ("Etappe 4: Verkauf 2030 über Mietfaktor, mit Kosten", Modell([obj], verkaeufe=[vk_2030]), [
+            ("vk_Status", 0, "OK"),
+            ("vk_PreisAngesetzt", 0, 20 * miete_2030),
+            ("vk_BuchwertGeb", 0, 320_000),
+            ("vk_BuchwertGesamt", 0, 520_000),
+            ("vk_ErloesGeb", 0, netto_2030 * 320_000 / 520_000),
+            ("vk_Gewinn", 0, netto_2030 - 520_000),
+            ("prg_Aktiv", pz(0, 2030), 1),
+            ("prg_Buchwert", pz(0, 2030), 320_000),
+            ("prg_Aktiv", pz(0, 2031), 0),
+            ("prg_Ergebnis", pz(0, 2031), 0),
+        ]),
+        ("Etappe 4: Verkauf eines von zwei Objekten",
+         Modell([obj, kurz], verkaeufe=[dataclasses.replace(vk_2030, objekt_id="OBJ-002")]), [
+            ("prg_Aktiv", pz(0, 2031), 1),       # erstes Objekt läuft weiter
+            ("prg_AfA", pz(0, 2031), 20_000),
+            ("prg_Aktiv", pz(1, 2031), 0),
+            ("vk_BuchwertGeb", 0, 0),            # OBJ-002 ist 2029 abgeschrieben
+            ("vk_Gewinn", 0, netto_2030 - 200_000),
+        ]),
+        ("Etappe 4: ObjektID unbekannt", vk_status(dataclasses.replace(vk_2027, objekt_id="X")),
+         [("vk_Status", 0, "ObjektID unbekannt"), ("vk_Gewinn", 0, None),
+          ("prg_Aktiv", pz(0, 2046), 1)]),
+        ("Etappe 4: Objekt mit Fehlerstatus", vk_status(vk_2027, [ohne_miete]),
+         [("vk_Status", 0, "Objekt nicht OK")]),
+        ("Etappe 4: Verkauf doppelt", Modell([obj], verkaeufe=[vk_2027, vk_2030]),
+         [("vk_Status", 0, "Verkauf doppelt"), ("vk_Status", 1, "Verkauf doppelt"),
+          ("prg_Aktiv", pz(0, 2046), 1)]),  # ungültige Verkäufe schalten nichts ab
+        ("Etappe 4: 6b-Angabe fehlt", vk_status(dataclasses.replace(vk_2027, nutzung_6b=None)),
+         [("vk_Status", 0, "Pflichtfeld fehlt")]),
+        ("Etappe 4: Preis und Faktor zugleich",
+         vk_status(dataclasses.replace(vk_2027, faktor=20)),
+         [("vk_Status", 0, "Preis oder Faktor angeben")]),
+        ("Etappe 4: weder Preis noch Faktor", vk_status(dataclasses.replace(vk_2027, preis=None)),
+         [("vk_Status", 0, "Preis oder Faktor angeben")]),
+        ("Etappe 4: Verkaufsjahr außerhalb", vk_status(dataclasses.replace(vk_2027, jahr=2050)),
+         [("vk_Status", 0, "Verkaufsjahr außerhalb Prognose")]),
+        ("Etappe 4: Verkehrswert ohne Gebäudeanteil",
+         vk_status(dataclasses.replace(vk_2027, aufteilung="Verkehrswert"), [ohne_quote]),
+         [("vk_Status", 0, "Gebäudeanteil fehlt")]),
+        ("Etappe 4: Standardaufteilung Verkehrswert vom Parameterblatt",
+         Modell([vk_obj], {"par_Aufteilung": "Verkehrswert"},
+                [dataclasses.replace(vk_2027, aufteilung=None)]),
+         [("vk_ErloesGeb", 0, 700_000), ("vk_Gewinn", 0, 720_000)]),
     ] + [
         (f"Etappe 1: Steuerwelt {welt}", Modell([obj], {"par_Steuerwelt": welt}),
          [("par_StatusSteuerwelt", 0, "nicht im MVP – Ergebnisse gelten nur für GmbH")])
