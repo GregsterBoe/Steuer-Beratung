@@ -38,7 +38,8 @@ PARAMETER = [
     Parameter("par_Basisjahr", "Basisjahr (Ist)", 2026, FMT_JAHR,
               "Letztes Ist-Jahr; Stammdaten beziehen sich auf dessen Ende"),
     Parameter("par_Prognosejahre", "Prognosejahre", 20, FMT_ZAHL,
-              "Länge des Jahresrasters"),
+              "Länge des Jahresrasters; legt der Generator fest, eine Änderung "
+              "in Excel verlängert die Prognose nicht"),
     Parameter("par_Startjahr", "erstes Prognosejahr", "=par_Basisjahr+1", FMT_JAHR,
               "berechnet"),
     Parameter("par_Endjahr", "letztes Prognosejahr", "=par_Basisjahr+par_Prognosejahre",
@@ -109,6 +110,28 @@ OBJEKT_FELDER = [
 # Berechnete Statusspalte direkt nach den Eingabefeldern
 STATUS_UEBERSCHRIFT = "Status"
 STATUS_NAME = "obj_Status"
+
+
+@dataclass(frozen=True)
+class PrognoseSpalte:
+    """Eine Spalte des Blatts Prognose (Long-Format: Zeile je Objekt und Jahr)."""
+    key: str
+    ueberschrift: str
+    name: str            # benannter Bereich über die Spalte
+    format: str
+    breite: int = 14
+
+
+PROGNOSE_SPALTEN = [
+    PrognoseSpalte("id", "ObjektID", "prg_ID", FMT_TEXT, 12),
+    PrognoseSpalte("jahr", "Jahr", "prg_Jahr", FMT_JAHR, 8),
+    PrognoseSpalte("aktiv", "aktiv", "prg_Aktiv", FMT_ZAHL, 7),
+    PrognoseSpalte("miete", "Miete", "prg_Miete", FMT_EURO),
+    PrognoseSpalte("erhaltung", "Erhaltung", "prg_Erhaltung", FMT_EURO),
+    PrognoseSpalte("afa", "AfA", "prg_AfA", FMT_EURO),
+    PrognoseSpalte("buchwert", "Buchwert Gebäude Ende", "prg_Buchwert", FMT_EURO, 16),
+    PrognoseSpalte("ergebnis", "Ergebnis vor Finanzierung", "prg_Ergebnis", FMT_EURO, 16),
+]
 
 
 @dataclass

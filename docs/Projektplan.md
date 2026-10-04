@@ -188,6 +188,13 @@ H2  =(D2 - E2 - F2)*C2
 
 Für Buchwert\_Vorjahr empfehle ich einen SUMMEWENNS-Verweis auf dieselbe Matrix: Buchwert der Zeile mit gleicher ObjektID und Jahr gleich B2 minus 1. Im ersten Jahr greift stattdessen der Restbuchwert aus dem Objektblatt. Das lässt sich mit einem WENN(B2=Startjahr; …; SUMMEWENNS(…)) lösen.
 
+**Umsetzung (Stand Etappe 2):** Der Generator legt je Zeile des Objektblatts einen festen Block von 20 Jahreszeilen an, also 200 × 20 = 4.000 Zeilen. Daraus ergeben sich zwei Vereinfachungen gegenüber den Beispielformeln oben:
+
+- Die Zeilen verweisen direkt auf ihre Objektzeile (`Objekte!$J$2` usw.) statt per SVERWEIS über die ObjektID. Das ist schneller und eindeutig, auch bei doppelten IDs.
+- Buchwert\_Vorjahr ist die Spalte G der Zeile darüber, im ersten Jahr der Restbuchwert. SUMMEWENNS ist dafür nicht nötig.
+
+Das aktiv-Flag ist vorerst 1, wenn der Status der Objektzeile „OK“ lautet; Objekte mit Fehlern rechnen also nicht mit. Etappe 4 ergänzt das Verkaufsjahr. Neuobjekte (Etappe 6) bekommen eigene Blöcke in derselben Matrix. Miete und Erhaltung werden bereits wie oben indexiert; Etappe 3 prüft das gezielt. Die Spalten sind als `prg_ID`, `prg_Jahr`, `prg_Aktiv`, `prg_Miete`, `prg_Erhaltung`, `prg_AfA`, `prg_Buchwert` und `prg_Ergebnis` benannt; das Blatt ist ohne Kennwort geschützt, Filtern bleibt möglich.
+
 **Abnahme Etappe 2:** Für ein Objekt mit Gebäude 800.000, AfA 2,5 % (40 Jahre), Kauf 2007 muss der Buchwert Ende 2046 null erreichen; die AfA beträgt bis dahin 20.000 je Jahr. Miete und Erhaltung laufen unabhängig davon weiter. Den AfA-Stopp bei Buchwert null prüft zusätzlich ein Fall mit kleinerem Restbuchwert, dessen Ende innerhalb des Rasters liegt.
 
 ## 9. Generierung per Python, Endprodukt autarke Excel-Datei

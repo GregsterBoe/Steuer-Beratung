@@ -18,6 +18,12 @@ from prognosemodell.modelle import STEUERWELTEN, Modell
 from prognosemodell.testdaten import testobjekt
 
 TOLERANZ = 0.01  # ein Cent
+STARTJAHR, JAHRE = 2027, 20
+
+
+def pz(objekt: int, jahr: int) -> int:
+    """Zeile im Prognosebereich für die n-te Objektzeile (ab 0) und ein Jahr."""
+    return objekt * JAHRE + (jahr - STARTJAHR)
 
 
 def durchrechnen(modell: Modell, arbeitsordner: Path):
@@ -58,6 +64,10 @@ def faelle():
     zu_hoch = dataclasses.replace(obj, restbuchwert=900_000)
     spaet = dataclasses.replace(obj, kaufjahr=2030)
     zweites = dataclasses.replace(obj, name="Duplikat")
+    # 50.000 Restbuchwert: 2027 und 2028 volle AfA, 2029 Rest 10.000, ab 2030 null
+    kurz = dataclasses.replace(obj, objekt_id="OBJ-002", restbuchwert=50_000)
+    miete_2046 = 60_000 * 1.02 ** 20
+    erh_2030 = 8_000 * 1.025 ** 4
     return [
         ("Etappe 1: Stammdaten vollständig", Modell([obj]), [
             ("par_Startjahr", 0, 2027),
@@ -75,6 +85,40 @@ def faelle():
          [("obj_Status", 0, "Kaufjahr nach Basisjahr")]),
         ("Etappe 1: ObjektID doppelt", Modell([obj, zweites]),
          [("obj_Status", 0, "ObjektID doppelt"), ("obj_Status", 1, "ObjektID doppelt")]),
+        ("Etappe 2: AfA-Ende 2046", Modell([obj]), [
+            ("prg_ID", pz(0, 2027), "OBJ-001"),
+            ("prg_Jahr", pz(0, 2027), 2027),
+            ("prg_Jahr", pz(0, 2046), 2046),
+            ("prg_Aktiv", pz(0, 2027), 1),
+            ("prg_AfA", pz(0, 2027), 20_000),
+            ("prg_Buchwert", pz(0, 2027), 380_000),
+            ("prg_AfA", pz(0, 2046), 20_000),
+            ("prg_Buchwert", pz(0, 2045), 20_000),
+            ("prg_Buchwert", pz(0, 2046), 0),
+            ("prg_Miete", pz(0, 2027), 61_200),
+            ("prg_Erhaltung", pz(0, 2027), 8_200),
+            ("prg_Ergebnis", pz(0, 2027), 61_200 - 8_200 - 20_000),
+            ("prg_Miete", pz(0, 2046), miete_2046),
+            ("prg_ID", pz(1, 2027), None),       # leerer Block bleibt leer
+            ("prg_Aktiv", pz(1, 2027), 0),
+            ("prg_Ergebnis", pz(1, 2027), 0),
+        ]),
+        ("Etappe 2: AfA-Stopp im Raster (zweites Objekt)", Modell([obj, kurz]), [
+            ("prg_ID", pz(1, 2027), "OBJ-002"),
+            ("prg_AfA", pz(1, 2028), 20_000),
+            ("prg_AfA", pz(1, 2029), 10_000),
+            ("prg_Buchwert", pz(1, 2029), 0),
+            ("prg_AfA", pz(1, 2030), 0),
+            ("prg_Buchwert", pz(1, 2046), 0),
+            ("prg_Erhaltung", pz(1, 2030), erh_2030),
+            ("prg_Ergebnis", pz(1, 2030), 60_000 * 1.02 ** 4 - erh_2030),
+            ("prg_AfA", pz(0, 2030), 20_000),    # erstes Objekt unberührt
+        ]),
+        ("Etappe 2: Objekt mit Fehlerstatus rechnet nicht", Modell([ohne_miete]), [
+            ("prg_Aktiv", pz(0, 2027), 0),
+            ("prg_AfA", pz(0, 2027), 0),
+            ("prg_Ergebnis", pz(0, 2027), 0),
+        ]),
     ] + [
         (f"Etappe 1: Steuerwelt {welt}", Modell([obj], {"par_Steuerwelt": welt}),
          [("par_StatusSteuerwelt", 0, "nicht im MVP – Ergebnisse gelten nur für GmbH")])

@@ -8,8 +8,8 @@ from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from . import formeln
-from .modelle import (MAX_OBJEKTE, OBJEKT_FELDER, PARAMETER, STATUS_NAME,
-                      STATUS_UEBERSCHRIFT, Modell)
+from .modelle import (MAX_OBJEKTE, OBJEKT_FELDER, PARAMETER, PROGNOSE_SPALTEN,
+                      STATUS_NAME, STATUS_UEBERSCHRIFT, Modell)
 
 HINWEIS_FINANZIERUNG = "Alle Werte vor Finanzierung (ohne Zins und Tilgung)."
 
@@ -119,8 +119,45 @@ def _blatt_objekte(wb, modell: Modell) -> None:
     ws.freeze_panes = "B2"
 
 
+def prognosejahre(modell: Modell) -> int:
+    standard = next(p.wert for p in PARAMETER if p.name == "par_Prognosejahre")
+    return int(modell.parameter.get("par_Prognosejahre", standard))
+
+
+def _blatt_prognose(wb, modell: Modell) -> None:
+    """Long-Format: je Objektzeile ein Block mit einer Zeile je Prognosejahr."""
+    ws = wb.create_sheet("Prognose")
+    jahre = prognosejahre(modell)
+    erste, letzte = 2, MAX_OBJEKTE * jahre + 1
+    _kopf(ws, 1, [s.ueberschrift for s in PROGNOSE_SPALTEN])
+    ws.row_dimensions[1].height = 32
+
+    for i, s in enumerate(PROGNOSE_SPALTEN, start=1):
+        bst = get_column_letter(i)
+        ws.column_dimensions[bst].width = s.breite
+        _name(wb, s.name, f"Prognose!${bst}${erste}:${bst}${letzte}")
+
+    zeile = erste
+    for objekt_zeile in range(2, MAX_OBJEKTE + 2):
+        for jahr_index in range(jahre):
+            zelle_formeln = formeln.prognose_zeile(zeile, objekt_zeile, jahr_index)
+            for i, s in enumerate(PROGNOSE_SPALTEN, start=1):
+                c = ws.cell(row=zeile, column=i, value=zelle_formeln[s.key])
+                c.number_format = s.format
+            zeile += 1
+
+    ws.cell(row=1, column=len(PROGNOSE_SPALTEN) + 2, value=HINWEIS_FINANZIERUNG)
+    ws.auto_filter.ref = f"A1:{get_column_letter(len(PROGNOSE_SPALTEN))}{letzte}"
+    ws.freeze_panes = "C2"
+    # Rechenblatt: schützen, Filtern bleibt erlaubt (ohne Kennwort)
+    ws.protection.sheet = True
+    ws.protection.autoFilter = False
+    ws.protection.sort = False
+
+
 def erstelle_mappe(modell: Modell) -> Workbook:
     wb = Workbook()
     _blatt_parameter(wb, modell)
     _blatt_objekte(wb, modell)
+    _blatt_prognose(wb, modell)
     return wb
