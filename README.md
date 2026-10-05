@@ -28,7 +28,12 @@
 8. Szenariovergleich
 9. VBA-Steuerung und Plausibilitätsprüfungen
 
-Stand: Etappen 1 bis 3 umgesetzt: Parameter- und Objektblatt mit Statusprüfung, Prognoseblatt mit AfA-Fortschreibung und Indexierung je Objekt und Jahr. Die Einleseschicht für die Kostenstellenblätter (DATEV-BWA) steht. Dazu kommen ein Übersichtsblatt mit Diagramm und ein Verkaufsblatt, das vorerst nur ObjektID und Verkaufsjahr aufnimmt (Teil von Etappe 4).
+Stand: Etappen 1 bis 4 sind umgesetzt.
+- Parameter- und Objektblatt mit Statusprüfung
+- Prognoseblatt mit AfA-Fortschreibung und Indexierung je Objekt und Jahr
+- Verkaufsblatt mit Aufteilung des Erlöses und Veräußerungsgewinn getrennt nach Gebäude und G+B
+- Übersichtsblatt mit Diagramm
+- Einleseschicht für die Kostenstellenblätter (DATEV-BWA)
 
 ## Nutzung
 
@@ -52,7 +57,14 @@ Das Blatt **Übersicht** öffnet als erstes. Es zeigt den Gesamtwert aller Objek
 - **Baseline:** alles halten, nichts verkaufen.
 - **Plan:** mit den Verkäufen aus dem Blatt Verkäufe.
 
-Der Wert ist der Verkehrswert aus dem Objektblatt, fortgeschrieben mit der Wertsteigerung vom Parameterblatt. Objekte ohne Verkehrswert zählen mit 0, die Übersicht zeigt ihre Anzahl rot an. Ein Verkauf gilt zum Jahresende. Miete und AfA laufen im Verkaufsjahr noch, ab dem Folgejahr ist das Objekt inaktiv. Erlös, Steuer und Neuobjekte fließen erst mit den Etappen 4 bis 7 ein. Bis dahin vergleicht die Übersicht nur den Immobilienbestand, nicht das Gesamtvermögen.
+Der Wert ist der Verkehrswert aus dem Objektblatt, fortgeschrieben mit der Wertsteigerung vom Parameterblatt. Objekte ohne Verkehrswert zählen mit 0, die Übersicht zeigt ihre Anzahl rot an. Ein Verkauf gilt zum Jahresende. Miete und AfA laufen im Verkaufsjahr noch, ab dem Folgejahr ist das Objekt inaktiv. Steuer, Rücklage und Neuobjekte fließen erst mit den Etappen 5 bis 7 ein. Bis dahin vergleicht die Übersicht nur den Immobilienbestand, nicht das Gesamtvermögen.
+
+Im Blatt **Verkäufe** stehen je Verkauf ObjektID, Jahr, Preis, Kosten, optional der Anteil G+B laut Kaufvertrag und § 6b ja/nein. Daraus rechnet das Blatt:
+- den Gebäudebuchwert am Ende des Verkaufsjahrs aus der Prognose
+- die Aufteilung des Nettoerlöses auf Gebäude und G+B
+- den Gewinn je Teil
+
+Die Aufteilung folgt dem Kaufvertrag, sonst dem Verkehrswertanteil aus dem Objektblatt. Der Status meldet unter anderem eine fehlende Aufteilung und eine zu kurze Vorbesitzzeit für § 6b.
 
 Gelb = Eingabe, grau = Formel. Die Statusspalte im Objektblatt meldet fehlende Pflichtfelder, doppelte IDs, ein Kaufjahr nach dem Basisjahr und einen Restbuchwert über den AK.
 

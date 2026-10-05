@@ -76,6 +76,9 @@ def faelle():
     obj2 = dataclasses.replace(obj, objekt_id="OBJ-002", weitere_einnahmen=1_000,
                                weitere_ausgaben=2_000)
     obj3 = dataclasses.replace(obj, objekt_id="OBJ-003", verkehrswert=None)
+    abnahme4 = dataclasses.replace(obj, restbuchwert=496_000)  # Buchwert Ende 2027: 480.000
+    ohne_quote = dataclasses.replace(obj, objekt_id="OBJ-005", vk_quote_gebaeude=None)
+    jung = dataclasses.replace(obj, objekt_id="OBJ-004", kaufjahr=2024)
     return [
         ("Etappe 1: Stammdaten vollständig", [obj], [
             ("par_Startjahr", 0, 2027),
@@ -149,7 +152,7 @@ def faelle():
             ("ueb_Verkaeufe", 0, 0),
         ]),
         ("Verkauf OBJ-001 Ende 2030: Plan verliert den Wert, Baseline hält",
-         Modell(objekte=[obj, obj2], verkaeufe=[Verkauf("OBJ-001", 2030)]), [
+         Modell(objekte=[obj, obj2], verkaeufe=[Verkauf("OBJ-001", 2030, preis=1_500_000)]), [
             ("vk_Status", 0, "OK"),
             ("prg_Aktiv", prg(1, 2030), 1),  # Miete und AfA laufen im Verkaufsjahr noch
             ("prg_Miete", prg(1, 2030), 64_945.93),
@@ -186,6 +189,46 @@ def faelle():
             ("prg_Aktiv", prg(3, 2046), 1),  # ohne Verkaufsjahr kein Verkauf
             ("ueb_OhneWert", 0, 1),
             ("ueb_Baseline", ueb(2026), 2_800_000),  # OBJ-003 zählt mit 0
+        ]),
+        ("Etappe 4: Abnahme Preis 1,4 Mio, Buchwert gesamt 680.000, hälftig",
+         Modell(objekte=[abnahme4],
+                verkaeufe=[Verkauf("OBJ-001", 2027, preis=1_400_000, nutzung_6b="ja")]), [
+            ("vk_Status", 0, "OK"),
+            ("vk_Vorbesitz", 0, 20),
+            ("vk_BuchwertGeb", 0, 480_000),
+            ("vk_AKGuB", 0, 200_000),
+            ("vk_Nettoerloes", 0, 1_400_000),
+            ("vk_AnteilGuB", 0, 0.5),  # aus Verkehrswertanteil Gebäude 50 %
+            ("vk_ErloesGeb", 0, 700_000),
+            ("vk_ErloesGuB", 0, 700_000),
+            ("vk_GewinnGeb", 0, 220_000),
+            ("vk_GewinnGuB", 0, 500_000),
+            ("vk_Gewinn", 0, 720_000),
+            ("vk_Gewinn", 1, None),  # leere Zeile bleibt leer
+        ]),
+        ("Etappe 4: Kaufvertrag 30 % G+B, Kosten 40.000, Verkauf Ende 2030",
+         Modell(objekte=[obj], verkaeufe=[Verkauf("OBJ-001", 2030, preis=1_400_000,
+                                                  kosten=40_000, anteil_gub=0.3)]), [
+            ("vk_Status", 0, "OK"),
+            ("vk_BuchwertGeb", 0, 416_000),  # 480.000 − 4 × 16.000, AfA 2030 noch enthalten
+            ("vk_Nettoerloes", 0, 1_360_000),
+            ("vk_AnteilGuB", 0, 0.3),  # Kaufvertrag vor Verkehrswert
+            ("vk_ErloesGuB", 0, 408_000),
+            ("vk_ErloesGeb", 0, 952_000),
+            ("vk_GewinnGeb", 0, 536_000),
+            ("vk_GewinnGuB", 0, 208_000),
+            ("vk_Gewinn", 0, 744_000),
+        ]),
+        ("Etappe 4: Statusprüfung Preis, Aufteilung, § 6b-Vorbesitzzeit",
+         Modell(objekte=[obj, jung, ohne_quote],
+                verkaeufe=[Verkauf("OBJ-001", 2028),
+                           Verkauf("OBJ-005", 2028, preis=1_000_000),
+                           Verkauf("OBJ-004", 2029, preis=1_000_000, nutzung_6b="ja")]), [
+            ("vk_Status", 0, "Verkaufspreis fehlt"),
+            ("vk_Status", 1, "Aufteilung fehlt: Anteil G+B oder Verkehrswertanteil"),
+            ("vk_Gewinn", 1, None),
+            ("vk_Vorbesitz", 2, 5),
+            ("vk_Status", 2, "§ 6b unzulässig: Vorbesitzzeit zu kurz"),
         ]),
     ]
 

@@ -53,8 +53,6 @@ PARAMETER = [
               "abhängig vom Bundesland; Platzhalter"),
     Parameter("par_Alternativrendite", "Rendite Alternativanlage p. a.", 0.04, FMT_PROZENT,
               "für Szenario B; Platzhalter"),
-    Parameter("par_Aufteilung", "Erlösaufteilung Standard", "Buchwert", FMT_TEXT,
-              "Aufteilung Verkaufserlös auf Gebäude und G+B", ("Buchwert", "Verkehrswert")),
     Parameter("par_6bVorbesitz", "§ 6b Mindest-Vorbesitzzeit (Jahre)", 6, FMT_ZAHL, ""),
     Parameter("par_6bFrist", "§ 6b Reinvestitionsfrist (Jahre)", 4, FMT_ZAHL, ""),
     Parameter("par_6bZuschlag", "§ 6b Gewinnzuschlag je Jahr", 0.06, FMT_PROZENT,
@@ -76,6 +74,7 @@ class Feld:
     minimum: Optional[float] = None  # Datenvalidierung
     maximum: Optional[float] = None
     ganzzahl: bool = False
+    auswahl: Optional[tuple] = None  # Dropdown-Werte
 
 
 OBJEKT_FELDER = [
@@ -106,7 +105,7 @@ STATUS_NAME = "obj_Status"
 
 @dataclass(frozen=True)
 class Spalte:
-    """Eine Spalte des Prognoseblatts."""
+    """Eine berechnete Spalte (Prognose, berechneter Teil der Verkäufe)."""
     key: str
     ueberschrift: str
     name: str            # benannter Bereich über die Spalte
@@ -132,12 +131,29 @@ PROGNOSE_SPALTEN = [
     Spalte("bestand", "im Bestand Ende", "prg_Bestand", FMT_ZAHL, 10),
 ]
 
-# Blatt Verkäufe: vorerst nur ObjektID und Verkaufsjahr; Preis, Kosten und Gewinn folgen in Etappe 4
+# Blatt Verkäufe (Etappe 4, Projektplan Abschnitt 11): Eingaben, dann berechnete Spalten
 MAX_VERKAEUFE = 50
 VERKAUF_FELDER = [
     Feld("objekt_id", "ObjektID", "vk_ID", FMT_TEXT, True, 14),
     Feld("jahr", "Verkaufsjahr", "vk_Jahr", FMT_JAHR, True, 12,
          minimum=1900, maximum=2100, ganzzahl=True),
+    Feld("preis", "Verkaufspreis", "vk_Preis", FMT_EURO, True, minimum=0),
+    Feld("kosten", "Verkaufskosten", "vk_Kosten", FMT_EURO, False, minimum=0),
+    Feld("anteil_gub", "Anteil G+B lt. Kaufvertrag", "vk_AnteilGuBVertrag", FMT_PROZENT, False,
+         minimum=0, maximum=1),
+    Feld("nutzung_6b", "§ 6b nutzen", "vk_6b", FMT_TEXT, False, 10, auswahl=("ja", "nein")),
+]
+VERKAUF_SPALTEN = [
+    Spalte("vorbesitz", "Vorbesitzzeit Jahre", "vk_Vorbesitz", FMT_ZAHL, 11),
+    Spalte("buchwert_geb", "Buchwert Gebäude Ende Verkaufsjahr", "vk_BuchwertGeb", FMT_EURO, 16),
+    Spalte("ak_gub", "AK G+B", "vk_AKGuB", FMT_EURO),
+    Spalte("nettoerloes", "Nettoerlös", "vk_Nettoerloes", FMT_EURO),
+    Spalte("quote_gub", "Anteil G+B verwendet", "vk_AnteilGuB", FMT_PROZENT, 11),
+    Spalte("erloes_geb", "Erlösanteil Gebäude", "vk_ErloesGeb", FMT_EURO),
+    Spalte("erloes_gub", "Erlösanteil G+B", "vk_ErloesGuB", FMT_EURO),
+    Spalte("gewinn_geb", "Gewinn Gebäude", "vk_GewinnGeb", FMT_EURO),
+    Spalte("gewinn_gub", "Gewinn G+B", "vk_GewinnGuB", FMT_EURO),
+    Spalte("gewinn", "Veräußerungsgewinn", "vk_Gewinn", FMT_EURO, 16),
 ]
 VERKAUF_STATUS_NAME = "vk_Status"
 
@@ -167,9 +183,13 @@ class Objekt:
 
 @dataclass
 class Verkauf:
-    """Geplanter Verkauf zum Ende des Verkaufsjahrs."""
+    """Geplanter Verkauf zum Ende des Verkaufsjahrs. None = Feld leer lassen."""
     objekt_id: str
     jahr: Optional[int]
+    preis: Optional[float] = None
+    kosten: Optional[float] = None
+    anteil_gub: Optional[float] = None   # Kaufvertrag; leer = Verkehrswertanteil aus Objekte
+    nutzung_6b: Optional[str] = None
 
 
 @dataclass

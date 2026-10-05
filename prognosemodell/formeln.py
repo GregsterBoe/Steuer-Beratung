@@ -6,7 +6,7 @@ Excel zeigt sie in der deutschen Oberfläche automatisch als WENN, ZÄHLENWENN u
 
 from openpyxl.utils import get_column_letter
 
-from .modelle import OBJEKT_FELDER, PROGNOSE_SPALTEN
+from .modelle import OBJEKT_FELDER, PROGNOSE_SPALTEN, VERKAUF_FELDER, VERKAUF_SPALTEN
 
 
 def spalte(key: str) -> str:
@@ -110,14 +110,70 @@ def prognose_zeile(zeile: int, objekt_nr: int, erstes_jahr: bool) -> dict:
     }
 
 
-def status_verkauf(zeile: int, sp_id: str, sp_jahr: str) -> str:
+# --- Verkäufe (Etappe 4, Projektplan Abschnitt 11) ---
+#
+# Verkauf zum Jahresende: Der Gebäudebuchwert ist der Prognosewert am Ende des
+# Verkaufsjahrs, also nach dessen AfA. Den Erlös teilt der Anteil G+B laut
+# Kaufvertrag auf, ersatzweise der Verkehrswertanteil aus dem Objektblatt.
+
+
+def vspalte(key: str) -> str:
+    """Spaltenbuchstabe im Blatt Verkäufe (Eingaben, dann berechnete Spalten)."""
+    for i, s in enumerate(VERKAUF_FELDER + VERKAUF_SPALTEN, start=1):
+        if s.key == key:
+            return get_column_letter(i)
+    raise KeyError(key)
+
+
+def _v(key: str, zeile: int) -> str:
+    return f"${vspalte(key)}{zeile}"
+
+
+def verkauf_zeile(zeile: int) -> dict:
+    """Formeln der berechneten Verkaufsspalten; leer ohne ObjektID oder bei unbekannter ID."""
+    id_ = _v("objekt_id", zeile)
+
+    def obj(name):
+        return f"INDEX({name},MATCH({id_},obj_ID,0))"
+
+    def wenn(ausdruck):
+        return f'=IF(OR({id_}="",COUNTIF(obj_ID,{id_})=0),"",{ausdruck})'
+
+    quote_vertrag = _v("anteil_gub", zeile)
+    return {
+        "vorbesitz": wenn(f"{_v('jahr', zeile)}-{obj('obj_Kaufjahr')}"),
+        "buchwert_geb": wenn(f"SUMIFS(prg_Buchwert,prg_ID,{id_},prg_Jahr,{_v('jahr', zeile)})"),
+        "ak_gub": wenn(obj("obj_AKGuB")),
+        "nettoerloes": wenn(f"{_v('preis', zeile)}-{_v('kosten', zeile)}"),
+        # Kaufvertrag vor Verkehrswert; ohne beides leer, der Status meldet es
+        "quote_gub": wenn(f'IF({quote_vertrag}<>"",{quote_vertrag},'
+                          f'IF({obj("obj_VKQuoteGeb")}="","",1-{obj("obj_VKQuoteGeb")}))'),
+        "erloes_gub": wenn(f'IF({_v("quote_gub", zeile)}="","",'
+                           f'{_v("nettoerloes", zeile)}*{_v("quote_gub", zeile)})'),
+        "erloes_geb": wenn(f'IF({_v("quote_gub", zeile)}="","",'
+                           f'{_v("nettoerloes", zeile)}-{_v("erloes_gub", zeile)})'),
+        "gewinn_geb": wenn(f'IF({_v("quote_gub", zeile)}="","",'
+                           f'{_v("erloes_geb", zeile)}-{_v("buchwert_geb", zeile)})'),
+        # G+B wird nicht abgeschrieben: Buchwert = AK
+        "gewinn_gub": wenn(f'IF({_v("quote_gub", zeile)}="","",'
+                           f'{_v("erloes_gub", zeile)}-{_v("ak_gub", zeile)})'),
+        "gewinn": wenn(f'IF({_v("quote_gub", zeile)}="","",'
+                       f'{_v("gewinn_geb", zeile)}+{_v("gewinn_gub", zeile)})'),
+    }
+
+
+def status_verkauf(zeile: int) -> str:
     """Plausibilitätsstatus je Verkaufszeile; leer, solange keine ObjektID steht."""
-    id_, jahr = f"${sp_id}{zeile}", f"${sp_jahr}{zeile}"
+    id_, jahr = _v("objekt_id", zeile), _v("jahr", zeile)
     return (
         f'=IF({id_}="","",'
         f'IF(COUNTIF(obj_ID,{id_})=0,"ObjektID unbekannt",'
         f'IF(COUNTIF(vk_ID,{id_})>1,"Objekt mehrfach verkauft",'
         f'IF({jahr}="","Verkaufsjahr fehlt",'
         f'IF(OR({jahr}<par_Startjahr,{jahr}>par_Endjahr),"Verkaufsjahr außerhalb Raster",'
-        f'"OK")))))'
+        f'IF({_v("preis", zeile)}="","Verkaufspreis fehlt",'
+        f'IF({_v("quote_gub", zeile)}="","Aufteilung fehlt: Anteil G+B oder Verkehrswertanteil",'
+        f'IF(AND({_v("nutzung_6b", zeile)}="ja",{_v("vorbesitz", zeile)}<par_6bVorbesitz),'
+        f'"§ 6b unzulässig: Vorbesitzzeit zu kurz",'
+        f'"OK"))))))))'
     )
