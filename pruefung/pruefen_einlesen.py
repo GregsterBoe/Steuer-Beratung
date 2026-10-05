@@ -40,9 +40,11 @@ def kostenstellenblatt(ws, kst: str, objekt: str, werte: dict, formel_statt_wert
 def schreibe(pfad: Path, blaetter: list, annahmen: bool = False) -> Path:
     wb = Workbook()
     wb.remove(wb.active)
-    if annahmen:  # Fremdblatt wie in der Kanzlei-Excel: B2 belegt, kein "Nr." in B4
+    if annahmen:  # Fremdblätter: B2 belegt; einmal ohne "Nr.", einmal mit, aber ohne Jahr
         ws = wb.create_sheet("Annahmen")
         ws["B2"], ws["B4"], ws["C4"] = "Mietsteigerung", "Jahr", 2025
+        ws = wb.create_sheet("Übersicht")
+        ws["B2"], ws["B4"], ws["C4"] = "Summe", "Nr.", "Bezeichnung"
     for titel, kst, objekt, werte, formel in blaetter:
         kostenstellenblatt(wb.create_sheet(titel), kst, objekt, werte, formel)
     wb.save(pfad)
@@ -66,7 +68,9 @@ def main() -> int:
             ("KSt 2", "KSt 2", "Objekt B", ohne_1090, None),
         ], annahmen=True)
         (lw1, lw2), uebersprungen = lese_kostenstellen(pfad, 2026)
-        pruefe("Blatt ohne Kennung Nr. wird übersprungen", uebersprungen, ["Annahmen"])
+        pruefe("Blätter mit anderem Format werden mit Grund übersprungen", uebersprungen, [
+            ("Annahmen", "kein 'Nr.' in Zeile 4, Spalte B"),
+            ("Übersicht", "keine Spalte 2026 in Zeile 4")])
         pruefe("ID aus B2", lw1.objekt_id, "KSt 1")
         pruefe("Name aus C2", lw1.name, "KC 24+26")
         pruefe("Miete = BWA 1020", lw1.miete, 120_000.0)
@@ -79,9 +83,9 @@ def main() -> int:
 
         try:
             lese_kostenstellen(pfad, 2030)
-            pruefe("Basisjahr ohne Spalte meldet Fehler", "kein Fehler", "EinleseFehler")
+            pruefe("Basisjahr in keinem Blatt meldet Fehler", "kein Fehler", "EinleseFehler")
         except EinleseFehler:
-            pruefe("Basisjahr ohne Spalte meldet Fehler", "EinleseFehler", "EinleseFehler")
+            pruefe("Basisjahr in keinem Blatt meldet Fehler", "EinleseFehler", "EinleseFehler")
 
         nur_annahmen = schreibe(tmp / "annahmen.xlsx", [], annahmen=True)
         try:

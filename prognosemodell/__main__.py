@@ -26,8 +26,8 @@ def main() -> None:
     modell = Modell() if args.ohne_testdaten or args.kostenstellen else testmodell()
     if args.kostenstellen:
         laufende, uebersprungen = lese_kostenstellen(args.kostenstellen, _basisjahr())
-        for titel in uebersprungen:
-            print(f"übersprungen: Blatt {titel!r} (kein Kostenstellenblatt)")
+        for titel, grund in uebersprungen:
+            print(f"übersprungen: Blatt {titel!r} ({grund})")
         modell.objekte = zusammenfuehren(modell.objekte, laufende)
         for lw in laufende:
             print(f"eingelesen: {lw.objekt_id} ({lw.name}) aus Blatt {lw.blatt!r}: "
