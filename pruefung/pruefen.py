@@ -14,7 +14,7 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 from prognosemodell.mappe import erstelle_mappe
-from prognosemodell.modelle import Modell, Verkauf, prognosejahre
+from prognosemodell.modelle import MAX_OBJEKTE, Modell, Neuobjekt, Verkauf, prognosejahre
 from prognosemodell.testdaten import testobjekt
 
 TOLERANZ = 0.01  # ein Cent
@@ -54,6 +54,16 @@ def gleich(ist, soll) -> bool:
 def prg(objekt_nr: int, jahr: int) -> int:
     """Zeile im Prognosebereich für Objekt objekt_nr (1 = erstes) und Jahr."""
     return (objekt_nr - 1) * prognosejahre() + jahr - 2027
+
+
+def prg_neu(neu_nr: int, jahr: int) -> int:
+    """Zeile im Prognosebereich für Neuobjekt neu_nr; die Neuobjekte folgen auf alle Objektblöcke."""
+    return prg(MAX_OBJEKTE + neu_nr, jahr)
+
+
+def rls(jahr: int) -> int:
+    """Zeile im Rücklagenspiegel je Jahr; erste Zeile ist das erste Prognosejahr."""
+    return jahr - 2027
 
 
 def ueb(jahr: int) -> int:
@@ -229,6 +239,241 @@ def faelle():
             ("vk_Gewinn", 1, None),
             ("vk_Vorbesitz", 2, 5),
             ("vk_Status", 2, "§ 6b unzulässig: Vorbesitzzeit zu kurz"),
+            ("rl_ID", 2, None),  # keine Rücklage, Gewinn wird sofort steuerwirksam
+            # Buchwert Ende 2029 432.000, Erlös je 500.000: 68.000 + 300.000
+            ("rls_Gewinne", rls(2029), 368_000),
+            ("rls_Bildung", rls(2029), 0),
+            ("rls_Steuerwirksam", rls(2029), 368_000),
+            ("rls_Gewinne", rls(2028), 0),  # Zeilen ohne Status OK zählen nicht
+        ]),
+        # Etappe 5: Gewinn 720.000 aus dem Abnahmefall der Etappe 4, Fristjahr 2027 + 4
+        ("Etappe 5: Abnahme Rücklage voll, Auflösung mit Zuschlag im Fristjahr",
+         Modell(objekte=[abnahme4],
+                verkaeufe=[Verkauf("OBJ-001", 2027, preis=1_400_000, nutzung_6b="ja")]), [
+            ("par_6bFristNeubau", 0, 6),
+            ("rl_ID", 0, "RL-OBJ-001"),
+            ("rl_ObjektID", 0, "OBJ-001"),
+            ("rl_Jahr", 0, 2027),
+            ("rl_Geb", 0, 220_000),
+            ("rl_GuB", 0, 500_000),
+            ("rl_Betrag", 0, 720_000),
+            ("rl_Fristjahr", 0, 2031),
+            ("rl_Aufloesung", 0, 720_000),
+            ("rl_Zuschlag", 0, 172_800),  # 720.000 × 6 % × 4
+            ("rl_Hinweis", 0, None),
+            ("rl_ID", 1, None),
+            ("rls_Jahr", rls(2027), 2027),
+            ("rls_Jahr", rls(2046), 2046),
+            ("rls_Gewinne", rls(2027), 720_000),
+            ("rls_Bildung", rls(2027), 720_000),
+            ("rls_Steuerwirksam", rls(2027), 0),  # Steuer im Verkaufsjahr null
+            ("rls_Bestand", rls(2027), 720_000),
+            ("rls_Bestand", rls(2030), 720_000),
+            ("rls_Steuerwirksam", rls(2030), 0),
+            ("rls_Aufloesung", rls(2031), 720_000),
+            ("rls_Zuschlag", rls(2031), 172_800),
+            ("rls_Steuerwirksam", rls(2031), 892_800),
+            ("rls_Bestand", rls(2031), 0),
+            ("rls_Bestand", rls(2046), 0),
+        ]),
+        ("Etappe 5: Neubau begonnen, Frist sechs Jahre",
+         Modell(objekte=[abnahme4],
+                verkaeufe=[Verkauf("OBJ-001", 2027, preis=1_400_000, nutzung_6b="ja",
+                                   neubau_6b="ja")]), [
+            ("vk_Status", 0, "OK"),
+            ("rl_Fristjahr", 0, 2033),
+            ("rl_Zuschlag", 0, 259_200),  # 720.000 × 6 % × 6
+            ("rls_Aufloesung", rls(2031), 0),
+            ("rls_Bestand", rls(2032), 720_000),
+            ("rls_Steuerwirksam", rls(2033), 979_200),
+            ("rls_Bestand", rls(2033), 0),
+        ]),
+        ("Etappe 5: § 6b nein, Gewinn sofort steuerwirksam",
+         Modell(objekte=[obj], verkaeufe=[Verkauf("OBJ-001", 2030, preis=1_400_000,
+                                                  kosten=40_000, anteil_gub=0.3,
+                                                  nutzung_6b="nein")]), [
+            ("rl_ID", 0, None),
+            ("rl_Betrag", 0, None),
+            ("rls_Gewinne", rls(2030), 744_000),
+            ("rls_Bildung", rls(2030), 0),
+            ("rls_Steuerwirksam", rls(2030), 744_000),
+            ("rls_Bestand", rls(2030), 0),
+        ]),
+        # Kaufvertrag 80 % G+B: Gebäude 280.000 − 416.000, G+B 1.120.000 − 200.000
+        ("Etappe 5: Verlust Gebäude mindert die Rücklage G+B nicht",
+         Modell(objekte=[obj], verkaeufe=[Verkauf("OBJ-001", 2030, preis=1_400_000,
+                                                  anteil_gub=0.8, nutzung_6b="ja")]), [
+            ("vk_GewinnGeb", 0, -136_000),
+            ("vk_GewinnGuB", 0, 920_000),
+            ("rl_Geb", 0, 0),
+            ("rl_GuB", 0, 920_000),
+            ("rl_Betrag", 0, 920_000),
+            ("rls_Gewinne", rls(2030), 784_000),
+            ("rls_Bildung", rls(2030), 920_000),
+            ("rls_Steuerwirksam", rls(2030), -136_000),  # Verlust wirkt sofort
+            ("rls_Bestand", rls(2030), 920_000),
+        ]),
+        # Buchwert Ende 2044: 480.000 − 18 × 16.000 = 192.000; Gewinn 508.000 + 500.000
+        ("Etappe 5: Frist endet nach Prognoseende",
+         Modell(objekte=[obj], verkaeufe=[Verkauf("OBJ-001", 2044, preis=1_400_000,
+                                                  nutzung_6b="ja")]), [
+            ("rl_Betrag", 0, 1_008_000),
+            ("rl_Fristjahr", 0, 2048),
+            ("rl_Hinweis", 0, "Frist endet nach Prognoseende"),
+            ("rls_Bestand", rls(2046), 1_008_000),
+            ("rls_Aufloesung", rls(2046), 0),
+        ]),
+        # Etappe 6: Rücklage aus dem Abnahmefall (Gebäude 220.000, G+B 500.000), Kauf Ende 2028
+        ("Etappe 6: Abnahme Übertragung, AfA-Basis 480.000, AK G+B 0",
+         Modell(objekte=[abnahme4],
+                verkaeufe=[Verkauf("OBJ-001", 2027, preis=1_400_000, nutzung_6b="ja")],
+                neuobjekte=[Neuobjekt("NEU-001", 2028, kaufpreis=1_200_000, anteil_gub=0.3,
+                                      afa_satz=0.03, mietrendite=0.05, erhaltungsquote=0.01,
+                                      quelle="RL-OBJ-001")]), [
+            ("ne_Status", 0, "OK"),
+            ("ne_Gueltig", 0, 1),
+            ("ne_AKGuBNeu", 0, 360_000),
+            ("ne_AKGebNeu", 0, 840_000),
+            ("ne_RLGeb", 0, 220_000),
+            ("ne_RLGuB", 0, 500_000),
+            ("ne_Ue1", 0, 220_000),
+            ("ne_Ue2", 0, 360_000),
+            ("ne_Ue3", 0, 140_000),
+            ("ne_UeGesamt", 0, 720_000),
+            ("ne_AfABasis", 0, 480_000),
+            ("ne_AKGuB", 0, 0),
+            ("ne_Status", 1, None),
+            ("rl_UebGeb", 0, 220_000),
+            ("rl_UebGuB", 0, 500_000),
+            ("rl_Aufloesung", 0, 0),
+            ("rl_Zuschlag", 0, 0),
+            ("rls_Bestand", rls(2027), 720_000),
+            ("rls_Uebertragung", rls(2028), 720_000),
+            ("rls_Bestand", rls(2028), 0),
+            ("rls_Steuerwirksam", rls(2028), 0),
+            ("rls_Steuerwirksam", rls(2031), 0),  # nichts mehr aufzulösen
+            # Prognose: Bestand ab Ende 2028, Miete und AfA ab 2029, AfA 3 % von 480.000
+            ("prg_ID", prg_neu(1, 2027), "NEU-001"),
+            ("prg_Neu", prg_neu(1, 2027), 1),
+            ("prg_Neu", prg(1, 2027), 0),
+            ("prg_Bestand", prg_neu(1, 2027), 0),
+            ("prg_Bestand", prg_neu(1, 2028), 1),
+            ("prg_Aktiv", prg_neu(1, 2028), 0),
+            ("prg_Miete", prg_neu(1, 2028), 0),
+            ("prg_Buchwert", prg_neu(1, 2027), 0),
+            ("prg_Buchwert", prg_neu(1, 2028), 480_000),
+            ("prg_AfA", prg_neu(1, 2028), 0),
+            ("prg_Aktiv", prg_neu(1, 2029), 1),
+            ("prg_AfA", prg_neu(1, 2029), 14_400),
+            ("prg_Buchwert", prg_neu(1, 2029), 465_600),
+            ("prg_Miete", prg_neu(1, 2029), 61_200),  # 1,2 Mio × 5 % × 1,02
+            ("prg_Erhaltung", prg_neu(1, 2029), 12_300),  # 1,2 Mio × 1 % × 1,025
+            ("prg_Ergebnis", prg_neu(1, 2029), 34_500),
+            ("prg_Verkehrswert", prg_neu(1, 2028), 1_200_000),
+            ("prg_Verkehrswert", prg_neu(1, 2029), 1_224_000),
+            ("prg_Buchwert", prg_neu(1, 2046), 480_000 - 18 * 14_400),  # AfA 2029 bis 2046
+            # Übersicht: Neuobjekt nur im Plan
+            ("ueb_Neuobjekte", 0, 1),
+            ("ueb_Plan", ueb(2027), 0),
+            ("ueb_Baseline", ueb(2028), 1_456_560),
+            ("ueb_Plan", ueb(2028), 1_200_000),
+            ("ueb_Plan", ueb(2029), 1_224_000),
+            ("prg_ID", prg_neu(2, 2027), None),
+        ]),
+        # NEU-001: G+B 100.000, Gebäude 400.000, nimmt 220.000 + 100.000 + 180.000.
+        # NEU-002 mit Nebenkosten: AK 1.040.000, G+B 260.000, Gebäude 780.000,
+        # bekommt den Rest G+B-Gewinn 500.000 − 100.000 − 180.000 = 220.000
+        ("Etappe 6: zwei Neuobjekte teilen sich eine Rücklage",
+         Modell(objekte=[abnahme4],
+                verkaeufe=[Verkauf("OBJ-001", 2027, preis=1_400_000, nutzung_6b="ja")],
+                neuobjekte=[
+                    Neuobjekt("NEU-001", 2028, kaufpreis=500_000, anteil_gub=0.2, afa_satz=0.02,
+                              quelle="RL-OBJ-001"),
+                    Neuobjekt("NEU-002", 2030, kaufpreis=1_000_000, anteil_gub=0.25,
+                              nebenkosten=40_000, afa_satz=0.02, quelle="RL-OBJ-001")]), [
+            ("ne_Ue1", 0, 220_000),
+            ("ne_Ue2", 0, 100_000),
+            ("ne_Ue3", 0, 180_000),
+            ("ne_AfABasis", 0, 0),
+            ("ne_AKGuB", 0, 0),
+            ("ne_AKGuBNeu", 1, 260_000),
+            ("ne_AKGebNeu", 1, 780_000),
+            ("ne_RLGeb", 1, 0),
+            ("ne_RLGuB", 1, 220_000),
+            ("ne_Ue1", 1, 0),
+            ("ne_Ue2", 1, 220_000),
+            ("ne_Ue3", 1, 0),
+            ("ne_AfABasis", 1, 780_000),
+            ("ne_AKGuB", 1, 40_000),
+            ("rl_UebGeb", 0, 220_000),
+            ("rl_UebGuB", 0, 500_000),
+            ("rl_Aufloesung", 0, 0),
+            ("rls_Uebertragung", rls(2028), 500_000),
+            ("rls_Bestand", rls(2028), 220_000),
+            ("rls_Uebertragung", rls(2030), 220_000),
+            ("rls_Bestand", rls(2030), 0),
+            ("prg_AfA", prg_neu(1, 2029), 0),  # AfA-Basis 0
+            ("prg_AfA", prg_neu(2, 2031), 15_600),
+        ]),
+        # Neuobjekt G+B 150.000, Gebäude 150.000: Rest Gebäude 70.000 + G+B 350.000
+        ("Etappe 6: Teilübertragung, Rest wird im Fristjahr aufgelöst",
+         Modell(objekte=[abnahme4],
+                verkaeufe=[Verkauf("OBJ-001", 2027, preis=1_400_000, nutzung_6b="ja")],
+                neuobjekte=[Neuobjekt("NEU-001", 2029, kaufpreis=300_000, anteil_gub=0.5,
+                                      afa_satz=0.02, quelle="RL-OBJ-001")]), [
+            ("ne_Ue1", 0, 150_000),
+            ("ne_Ue2", 0, 150_000),
+            ("ne_Ue3", 0, 0),
+            ("ne_AfABasis", 0, 0),
+            ("rl_UebGeb", 0, 150_000),
+            ("rl_UebGuB", 0, 150_000),
+            ("rl_Aufloesung", 0, 420_000),
+            ("rl_Zuschlag", 0, 100_800),  # 420.000 × 6 % × 4
+            ("rls_Bestand", rls(2029), 420_000),
+            ("rls_Steuerwirksam", rls(2031), 520_800),
+            ("rls_Bestand", rls(2031), 0),
+        ]),
+        ("Etappe 6: Statusprüfung Neuobjekte",
+         Modell(objekte=[abnahme4],
+                verkaeufe=[Verkauf("OBJ-001", 2027, preis=1_400_000, nutzung_6b="ja")],
+                neuobjekte=[
+                    Neuobjekt("NEU-001", 2032, kaufpreis=500_000, anteil_gub=0.2, afa_satz=0.02,
+                              quelle="RL-OBJ-001"),
+                    Neuobjekt("NEU-002", 2028, kaufpreis=500_000, anteil_gub=0.2, afa_satz=0.02,
+                              quelle="RL-XYZ"),
+                    Neuobjekt("OBJ-001", 2028, kaufpreis=500_000, anteil_gub=0.2, afa_satz=0.02),
+                    Neuobjekt("NEU-004", 2028, kaufpreis=500_000, anteil_gub=0.2),
+                    Neuobjekt("NEU-005", 2050, kaufpreis=500_000, anteil_gub=0.2, afa_satz=0.02),
+                    Neuobjekt("NEU-006", 2028, kaufpreis=500_000, anteil_gub=0.2, afa_satz=0.02),
+                    Neuobjekt("NEU-006", 2029, kaufpreis=500_000, anteil_gub=0.2, afa_satz=0.02),
+                ]), [
+            ("ne_Status", 0, "Kauf nach Fristjahr, keine Übertragung"),
+            ("ne_Gueltig", 0, 1),  # bleibt im Modell, nur ohne Übertragung
+            ("ne_Ue1", 0, 0),
+            ("ne_AfABasis", 0, 400_000),
+            ("prg_Bestand", prg_neu(1, 2032), 1),
+            ("ne_Status", 1, "Rücklage unbekannt, keine Übertragung"),
+            ("ne_Ue2", 1, 0),
+            ("ne_Status", 2, "NeuID wie Bestandsobjekt"),
+            ("ne_Gueltig", 2, 0),
+            ("prg_Bestand", prg_neu(3, 2046), 0),
+            ("vk_BuchwertGeb", 0, 480_000),  # Bestandsobjekt bleibt unverfälscht
+            ("ne_Status", 3, "Pflichtfeld fehlt"),
+            ("ne_Gueltig", 3, 0),
+            ("ne_Status", 4, "Kaufjahr außerhalb Raster"),
+            ("ne_Status", 5, "NeuID doppelt"),
+            ("ne_Status", 6, "NeuID doppelt"),
+            ("rl_Aufloesung", 0, 720_000),
+            ("ueb_Neuobjekte", 0, 2),
+        ]),
+        # Verkauf Ende 2030, Neuobjekt Ende 2028: Rücklage gab es da noch nicht
+        ("Etappe 6: Kauf vor Bildung der Rücklage",
+         Modell(objekte=[obj],
+                verkaeufe=[Verkauf("OBJ-001", 2030, preis=1_400_000, nutzung_6b="ja")],
+                neuobjekte=[Neuobjekt("NEU-001", 2028, kaufpreis=500_000, anteil_gub=0.2,
+                                      afa_satz=0.02, quelle="RL-OBJ-001")]), [
+            ("ne_Status", 0, "Kauf vor Bildung der Rücklage, keine Übertragung"),
+            ("ne_UeGesamt", 0, 0),
         ]),
     ]
 

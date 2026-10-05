@@ -28,10 +28,12 @@
 8. Szenariovergleich
 9. VBA-Steuerung und Plausibilitätsprüfungen
 
-Stand: Etappen 1 bis 4 sind umgesetzt.
+Stand: Etappen 1 bis 6 sind umgesetzt.
 - Parameter- und Objektblatt mit Statusprüfung
 - Prognoseblatt mit AfA-Fortschreibung und Indexierung je Objekt und Jahr
 - Verkaufsblatt mit Aufteilung des Erlöses und Veräußerungsgewinn getrennt nach Gebäude und G+B
+- Rücklagenblatt mit § 6b-Rücklage je Verkauf und Spiegel je Jahr
+- Neuobjektblatt mit Übertragung der Rücklage und geminderter AfA-Basis
 - Übersichtsblatt mit Diagramm
 - Einleseschicht für die Kostenstellenblätter (DATEV-BWA)
 
@@ -55,9 +57,9 @@ Das Prognoseblatt hat je Objektzeile einen Block mit 20 Jahreszeilen: Miete, wei
 Das Blatt **Übersicht** öffnet als erstes. Es zeigt den Gesamtwert aller Objekte am Jahresende von 2026 bis 2046 als Tabelle und Liniendiagramm, und zwar in zwei Linien:
 
 - **Baseline:** alles halten, nichts verkaufen.
-- **Plan:** mit den Verkäufen aus dem Blatt Verkäufe.
+- **Plan:** mit den Verkäufen und Neuobjekten aus den Blättern Verkäufe und Neuobjekte.
 
-Der Wert ist der Verkehrswert aus dem Objektblatt, fortgeschrieben mit der Wertsteigerung vom Parameterblatt. Objekte ohne Verkehrswert zählen mit 0, die Übersicht zeigt ihre Anzahl rot an. Ein Verkauf gilt zum Jahresende. Miete und AfA laufen im Verkaufsjahr noch, ab dem Folgejahr ist das Objekt inaktiv. Steuer, Rücklage und Neuobjekte fließen erst mit den Etappen 5 bis 7 ein. Bis dahin vergleicht die Übersicht nur den Immobilienbestand, nicht das Gesamtvermögen.
+Der Wert ist der Verkehrswert aus dem Objektblatt, fortgeschrieben mit der Wertsteigerung vom Parameterblatt. Objekte ohne Verkehrswert zählen mit 0, die Übersicht zeigt ihre Anzahl rot an. Ein Verkauf gilt zum Jahresende. Miete und AfA laufen im Verkaufsjahr noch, ab dem Folgejahr ist das Objekt inaktiv. Der Plan enthält auch die Neuobjekte. Verkaufserlöse, Steuer und Liquidität kommen mit Etappe 7. Bis dahin vergleicht die Übersicht nur den Immobilienbestand, nicht das Gesamtvermögen.
 
 Im Blatt **Verkäufe** stehen je Verkauf ObjektID, Jahr, Preis, Kosten, optional der Anteil G+B laut Kaufvertrag und § 6b ja/nein. Daraus rechnet das Blatt:
 - den Gebäudebuchwert am Ende des Verkaufsjahrs aus der Prognose
@@ -65,6 +67,15 @@ Im Blatt **Verkäufe** stehen je Verkauf ObjektID, Jahr, Preis, Kosten, optional
 - den Gewinn je Teil
 
 Die Aufteilung folgt dem Kaufvertrag, sonst dem Verkehrswertanteil aus dem Objektblatt. Der Status meldet unter anderem eine fehlende Aufteilung und eine zu kurze Vorbesitzzeit für § 6b.
+
+Das Blatt **Rücklagen** bildet bei § 6b ja und Status OK eine Rücklage aus den positiven Teilgewinnen, getrennt nach Gebäude und G+B. Die Frist beträgt vier Jahre, mit „§ 6b Neubau begonnen = ja“ sechs Jahre. Was bis zum Fristjahr nicht auf Neuobjekte übertragen ist, wird dort aufgelöst, mit 6 % Zuschlag je Jahr. Der Spiegel je Jahr zeigt Gewinne, Einstellung, Übertragung, Auflösung, Zuschlag, Bestand und den steuerwirksamen Betrag, der in Etappe 7 die Steuer ergibt.
+
+Im Blatt **Neuobjekte** stehen je Reinvestition Kaufjahr, Kaufpreis, Anteil G+B, Nebenkosten, AfA-Satz, Mietrendite, Erhaltungsquote und die Quelle-Rücklage. Gekauft wird zum Jahresende, Miete und AfA laufen ab dem Folgejahr. Die Rücklage wird in fester Reihenfolge übertragen:
+1. Gebäudegewinn auf das neue Gebäude
+2. G+B-Gewinn auf den neuen G+B (bis auf 0)
+3. Rest des G+B-Gewinns auf das Gebäude
+
+Die AfA läuft von der geminderten AfA-Basis. Neuobjekte erscheinen in der Prognose und in der Plan-Linie der Übersicht, nicht in der Baseline.
 
 Gelb = Eingabe, grau = Formel. Die Statusspalte im Objektblatt meldet fehlende Pflichtfelder, doppelte IDs, ein Kaufjahr nach dem Basisjahr und einen Restbuchwert über den AK.
 
