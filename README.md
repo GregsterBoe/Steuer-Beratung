@@ -75,7 +75,7 @@ Die Aufteilung folgt dem Kaufvertrag, sonst dem Verkehrswertanteil aus dem Objek
 
 Das Blatt **Rücklagen** bildet bei § 6b ja und Status OK eine Rücklage aus den positiven Teilgewinnen, getrennt nach Gebäude und G+B. Die Frist beträgt vier Jahre, mit „§ 6b Neubau begonnen = ja“ sechs Jahre. Was bis zum Fristjahr nicht auf Neuobjekte übertragen ist, wird dort aufgelöst, mit 6 % Zuschlag je Jahr. Der Spiegel je Jahr zeigt Gewinne, Einstellung, Übertragung, Auflösung, Zuschlag, Bestand und den steuerwirksamen Betrag, der in Etappe 7 die Steuer ergibt.
 
-Im Blatt **Neuobjekte** stehen je Reinvestition Kaufjahr, Kaufpreis, Anteil G+B, Nebenkosten, AfA-Satz, Mietrendite, Erhaltungsquote und die Quelle-Rücklage. Gekauft wird zum Jahresende, Miete und AfA laufen ab dem Folgejahr. Die Rücklage wird in fester Reihenfolge übertragen:
+Im Blatt **Neuobjekte** stehen je Reinvestition Kaufjahr, Kaufpreis, Anteil G+B, Nebenkosten, AfA-Satz, AfA-Methode (linear oder degressiv 5 % nach § 7 Abs. 5a EStG mit Wechsel zur linearen AfA), Mietrendite, Erhaltungsquote und die Quelle-Rücklage. Gekauft wird zum Jahresende, Miete und AfA laufen ab dem Folgejahr. Die Rücklage wird in fester Reihenfolge übertragen:
 1. Gebäudegewinn auf das neue Gebäude
 2. G+B-Gewinn auf den neuen G+B (bis auf 0)
 3. Rest des G+B-Gewinns auf das Gebäude

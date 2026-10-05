@@ -480,6 +480,33 @@ def faelle():
             ("ne_Status", 0, "Kauf vor Bildung der Rücklage, keine Übertragung"),
             ("ne_UeGesamt", 0, 0),
         ]),
+        # AfA-Basis je 800.000 (Kaufpreis 1 Mio, G+B 20 %), Kauf Ende 2027, AfA ab 2028.
+        # NEU-001 degressiv 5 % bei Nutzungsdauer 33⅓ Jahre (3 %): 2028 40.000, dann × 0,95;
+        # 2042 Restnutzungsdauer 19⅓ < 20, Wechsel zu linear: 800.000 × 0,95^14 / 19⅓ = 20.179,65
+        # und gleich bleibend. NEU-002 linear 3 % = 24.000. NEU-003 degressiv bei
+        # Nutzungsdauer 20 Jahre (5 %): ab dem 2. Jahr ist linear höher, also stets 40.000.
+        ("Etappe 6: degressive AfA mit Wechsel zur linearen AfA",
+         Modell(objekte=[obj], neuobjekte=[
+             Neuobjekt("NEU-001", 2027, kaufpreis=1_000_000, anteil_gub=0.2, afa_satz=0.03,
+                       afa_methode="degressiv"),
+             Neuobjekt("NEU-002", 2027, kaufpreis=1_000_000, anteil_gub=0.2, afa_satz=0.03),
+             Neuobjekt("NEU-003", 2027, kaufpreis=1_000_000, anteil_gub=0.2, afa_satz=0.05,
+                       afa_methode="degressiv")]), [
+            ("prg_AfA", prg_neu(1, 2027), 0),
+            ("prg_Buchwert", prg_neu(1, 2027), 800_000),
+            ("prg_AfA", prg_neu(1, 2028), 40_000),
+            ("prg_AfA", prg_neu(1, 2029), 38_000),
+            ("prg_AfA", prg_neu(1, 2041), 20_533.68),
+            ("prg_AfA", prg_neu(1, 2042), 20_179.65),
+            ("prg_AfA", prg_neu(1, 2046), 20_179.65),
+            ("prg_Buchwert", prg_neu(1, 2046), 289_241.71),
+            ("prg_AfA", prg_neu(2, 2028), 24_000),
+            ("prg_Buchwert", prg_neu(2, 2046), 344_000),
+            ("prg_AfA", prg_neu(3, 2028), 40_000),
+            ("prg_AfA", prg_neu(3, 2040), 40_000),
+            ("prg_Buchwert", prg_neu(3, 2046), 40_000),
+            ("ne_Status", 0, "OK"),
+        ]),
         # Etappe 7: Steuersatz 30 %. Zwei Objekte 2027: Ergebnis 37.000 + 35.980,
         # Einnahmen 2 × 61.200 + 1.020, Ausgaben 2 × 8.200 + 2.040
         ("Etappe 7: Abnahme Summen über alle Objekte, Plan gleich Baseline",

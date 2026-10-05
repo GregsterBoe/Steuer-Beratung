@@ -51,6 +51,8 @@ PARAMETER = [
     Parameter("par_Wertsteig", "Wertsteigerung p. a.", 0.02, FMT_PROZENT, "Platzhalter"),
     Parameter("par_GrESt", "Grunderwerbsteuersatz", 0.05, FMT_PROZENT,
               "abhängig vom Bundesland; Platzhalter"),
+    Parameter("par_AfADegressiv", "AfA degressiv (Neuobjekte)", 0.05, FMT_PROZENT,
+              "§ 7 Abs. 5a EStG, Wohngebäude mit Baubeginn 10/2023 bis 9/2029; vom Restbuchwert"),
     Parameter("par_Alternativrendite", "Rendite Alternativanlage p. a.", 0.04, FMT_PROZENT,
               "für Szenario B; Platzhalter"),
     Parameter("par_6bVorbesitz", "§ 6b Mindest-Vorbesitzzeit (Jahre)", 6, FMT_ZAHL, ""),
@@ -202,6 +204,9 @@ RUECKLAGE_JAHR_SPALTEN = [
 ]
 
 
+AFA_LINEAR = "linear"
+AFA_DEGRESSIV = "degressiv"
+
 # Blatt Neuobjekte (Etappe 6, Projektplan Abschnitt 13): Kauf zum Jahresende,
 # Miete und AfA ab dem Folgejahr
 MAX_NEUOBJEKTE = 50
@@ -214,6 +219,10 @@ NEU_FELDER = [
     Feld("anteil_gub", "Anteil G+B", "ne_AnteilGuB", FMT_PROZENT, True, 10, minimum=0, maximum=1),
     Feld("nebenkosten", "Kaufnebenkosten", "ne_Nebenkosten", FMT_EURO, False, minimum=0),
     Feld("afa_satz", "AfA-Satz", "ne_AfASatz", FMT_PROZENT, True, 10, minimum=0, maximum=0.2),
+    # leer = linear; degressiv: par_AfADegressiv vom Restbuchwert, Wechsel zur linearen AfA,
+    # sobald Restbuchwert / Restnutzungsdauer höher ist; Nutzungsdauer = 1 / AfA-Satz
+    Feld("afa_methode", "AfA-Methode", "ne_AfAMethode", FMT_TEXT, False, 11,
+         auswahl=(AFA_LINEAR, AFA_DEGRESSIV)),
     Feld("mietrendite", "Mietrendite auf Kaufpreis", "ne_Mietrendite", FMT_PROZENT, False, 11,
          minimum=0, maximum=1),
     Feld("erhaltungsquote", "Erhaltung auf Kaufpreis", "ne_ErhQuote", FMT_PROZENT, False, 11,
@@ -348,6 +357,7 @@ class Neuobjekt:
     anteil_gub: Optional[float] = None
     afa_satz: Optional[float] = None
     name: Optional[str] = None
+    afa_methode: Optional[str] = None    # "linear" (leer) oder "degressiv"
     nebenkosten: Optional[float] = None
     mietrendite: Optional[float] = None
     erhaltungsquote: Optional[float] = None

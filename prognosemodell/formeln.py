@@ -6,7 +6,7 @@ Excel zeigt sie in der deutschen Oberfläche automatisch als WENN, ZÄHLENWENN u
 
 from openpyxl.utils import get_column_letter
 
-from .modelle import (AUSWERTUNG_BASIS_SPALTEN, AUSWERTUNG_SPALTEN, LIQ_BASIS_SPALTEN,
+from .modelle import (AFA_DEGRESSIV, AUSWERTUNG_BASIS_SPALTEN, AUSWERTUNG_SPALTEN, LIQ_BASIS_SPALTEN,
                       LIQ_SPALTEN, NEU_FELDER, NEU_SPALTEN, OBJEKT_FELDER, PROGNOSE_SPALTEN,
                       RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN, STATUS_6B_UNZULAESSIG,
                       STATUS_OK, VERKAUF_FELDER, VERKAUF_SPALTEN)
@@ -134,6 +134,11 @@ def prognose_zeile_neu(zeile: int, neu_nr: int, erstes_jahr: bool) -> dict:
     aktiv = f"{_p('aktiv', zeile)}=1"
     bw_vor = "0" if erstes_jahr else _p("buchwert", zeile - 1)
 
+    # Degressiv vom Restbuchwert; linear über die Restnutzungsdauer, sobald das mehr ist
+    # (§ 7 Abs. 5a Satz 4 EStG). Restnutzungsdauer zu Jahresbeginn, mindestens 1 Jahr.
+    rnd = f'MAX(1/{ne("ne_AfASatz")}-({t}-{kj}-1),1)'
+    degressiv = f"MIN(MAX({bw_vor}*par_AfADegressiv,{bw_vor}/{rnd}),{bw_vor})"
+
     def ab_kauf(basis, satz):
         return _leer_oder(zeile, f"IF({aktiv},{basis}*(1+{satz})^({t}-{kj}),0)")
 
@@ -145,8 +150,9 @@ def prognose_zeile_neu(zeile: int, neu_nr: int, erstes_jahr: bool) -> dict:
         "einnahmen": _leer_oder(zeile, "0"),
         "erhaltung": ab_kauf(f'{ne("ne_Kaufpreis")}*{ne("ne_ErhQuote")}', "par_Erhaltsteig"),
         "ausgaben": _leer_oder(zeile, "0"),
-        "afa": _leer_oder(zeile, f'IF({aktiv},MIN({ne("ne_AfABasis")}*{ne("ne_AfASatz")},'
-                                 f'{bw_vor}),0)'),
+        "afa": _leer_oder(zeile, f'IF({aktiv},IF({ne("ne_AfAMethode")}="{AFA_DEGRESSIV}",'
+                                 f'{degressiv},MIN({ne("ne_AfABasis")}*{ne("ne_AfASatz")},'
+                                 f'{bw_vor})),0)'),
         "buchwert": _leer_oder(zeile, f'IF({gueltig},IF({t}<{kj},0,IF({t}={kj},'
                                       f'{ne("ne_AfABasis")},MAX({bw_vor}-{_p("afa", zeile)},0))),0)'),
         "ergebnis": _leer_oder(

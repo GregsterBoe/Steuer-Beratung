@@ -269,6 +269,8 @@ def _blatt_neuobjekte(wb, modell: Modell) -> None:
     ws[f"{hinweis}3"] = ("Nutzen mehrere Neuobjekte dieselbe Rücklage, gilt die Zeilenreihenfolge: "
                          "jede Zeile erhält, was die Zeilen darüber übrig lassen.")
     ws[f"{hinweis}4"] = "Kaufnebenkosten werden im Verhältnis G+B zu Gebäude aktiviert; leer = 0."
+    ws[f"{hinweis}5"] = ("AfA-Methode degressiv: par_AfADegressiv vom Restbuchwert, Wechsel zur "
+                         "linearen AfA über die Restnutzungsdauer (1 / AfA-Satz), sobald höher.")
     ws.freeze_panes = "B2"
 
 

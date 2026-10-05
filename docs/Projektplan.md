@@ -41,7 +41,7 @@ Acht Blätter, getrennt nach Eingabe, Rechnung und Ausgabe. Eingabeblätter sind
 | Parameter | Eingabe | Steuerwelt-Schalter, Grenzsteuersatz, Mietsteigerung, Erhaltungssteigerung, Kostensteigerung, Wertsteigerung, GrESt-Satz, aktives Szenario | alle globalen Annahmen und Schalter |
 | Objekte | Eingabe | ObjektID, AK Gebäude, AK G+B, AfA-Satz, Kaufjahr, Restbuchwert 2026, Miete 2026, Erhaltung 2026 | Stammdaten je Bestandsobjekt |
 | Verkäufe | Eingabe | ObjektID, Verkaufsjahr, Verkaufspreis oder Faktor, Verkaufskosten, 6b-Nutzung (ja/nein), Neubau begonnen (ja/nein) | ein Datensatz je geplantem Verkauf |
-| Neuobjekte | Eingabe | NeuID, Kaufjahr, Kaufpreis, Anteil G+B, Nebenkosten, AfA-Satz, Mietrendite, Erhaltungsquote, Quelle-Rücklage | Reinvestitionsobjekte |
+| Neuobjekte | Eingabe | NeuID, Kaufjahr, Kaufpreis, Anteil G+B, Nebenkosten, AfA-Satz, AfA-Methode, Mietrendite, Erhaltungsquote, Quelle-Rücklage | Reinvestitionsobjekte |
 | Prognose | Rechnung | ObjektID × Jahr (2027-2046), Miete, Erhaltung, AfA, Buchwert, Ergebnis, aktiv-Flag | Jahresmatrix je Objekt, Herzstück |
 | Rücklagen | Rechnung | RücklageID, Verkaufsjahr, Betrag G+B, Betrag Gebäude, Fristjahr, übertragen Gebäude und G+B, Auflösung, Zuschlag; Spiegel je Jahr | § 6b-Spiegel je Rücklage und je Jahr |
 | Liquidität | Rechnung | Jahr, Steuer mit Verlustvortrag, Verkaufserlöse, Buchwert-Rückfluss, Kauf Neuobjekte, Liquidität kumuliert; Plan und Baseline | Steuer und Geldfluss je Jahr |
@@ -124,9 +124,9 @@ In Etappen, jede mit prüfbarem Zwischenstand. Erst wenn eine Etappe an einem Ob
 8. **Szenariovergleich:** A gegen B über 20 Jahre. Prüfbar: beide Pfade nachvollziehbar.
 9. **VBA-Steuerung und Prüfungen:** erst wenn die Formeln stehen. Prüfbar: Objekt anlegen und Szenario wechseln ohne Formelbruch.
 
-Dazu kommt die Ausgabe im DATEV-BWA-Format mit dem Sonderbereich Verkauf und Kauf (Abschnitt 18). Sie baut auf Etappe 8 auf und zieht Teile der Finanzierung vor (Restschuld, Darlehen für die Reinvestition).
+Dazu kommt die Ausgabe im DATEV-BWA-Format mit dem Sonderbereich Verkauf und Kauf (Abschnitt 18). Sie baut auf Etappe 8 auf.
 
-Erst nach Etappe 9 folgt die zweite Stufe mit der Finanzierung.
+Erst nach Etappe 9 folgt die zweite Stufe mit der Finanzierung. Vorrang hat dort die Restschuld der verkauften Objekte und das Darlehen für den Teil der Reinvestition, den der Erlös nicht deckt (Abschnitt 18).
 
 ## 7. Testfälle und Abnahme
 
@@ -391,24 +391,25 @@ Ein Neuobjekt nimmt die Rücklage auf. Der übertragene Gewinn mindert die AfA-B
 | D | Kaufpreis | ne\_Kaufpreis | Eingabe |
 | E | Anteil G+B | ne\_AnteilGuB | Eingabe, Prozent |
 | F | Kaufnebenkosten | ne\_Nebenkosten | Eingabe, leer = 0 |
-| G | AfA-Satz | ne\_AfASatz | Eingabe, linear |
-| H | Mietrendite auf Kaufpreis | ne\_Mietrendite | Eingabe, optional |
-| I | Erhaltung auf Kaufpreis | ne\_ErhQuote | Eingabe, optional |
-| J | Quelle RücklageID | ne\_Quelle | Dropdown aus rl\_ID, optional |
-| K | im Modell | ne\_Gueltig | 1 bei vollständigen Pflichtfeldern, eindeutiger ID, Kaufjahr im Raster |
-| L | AK G+B neu | ne\_AKGuBNeu | (D + F) × E |
-| M | AK Gebäude neu | ne\_AKGebNeu | (D + F) × (1 − E) |
-| N | Rücklage Gebäude verfügbar | ne\_RLGeb | rl\_Geb minus ü1 der Zeilen darüber mit gleicher Quelle |
-| O | Rücklage G+B verfügbar | ne\_RLGuB | rl\_GuB minus ü2 und ü3 der Zeilen darüber |
-| P | ü1 | ne\_Ue1 | MIN(N; M) |
-| Q | ü2 | ne\_Ue2 | MIN(O; L) |
-| R | ü3 | ne\_Ue3 | MIN(O − Q; M − P) |
-| S | übertragen gesamt | ne\_UeGesamt | P + Q + R |
-| T | AfA-Basis Gebäude | ne\_AfABasis | M − P − R |
-| U | steuerliche AK G+B | ne\_AKGuB | L − Q |
-| V | Status | ne\_Status | Plausibilität |
+| G | AfA-Satz | ne\_AfASatz | Eingabe; bei degressiver AfA bestimmt er die Nutzungsdauer (1 / Satz) |
+| H | AfA-Methode | ne\_AfAMethode | Dropdown linear oder degressiv, leer = linear |
+| I | Mietrendite auf Kaufpreis | ne\_Mietrendite | Eingabe, optional |
+| J | Erhaltung auf Kaufpreis | ne\_ErhQuote | Eingabe, optional |
+| K | Quelle RücklageID | ne\_Quelle | Dropdown aus rl\_ID, optional |
+| L | im Modell | ne\_Gueltig | 1 bei vollständigen Pflichtfeldern, eindeutiger ID, Kaufjahr im Raster |
+| M | AK G+B neu | ne\_AKGuBNeu | (D + F) × E |
+| N | AK Gebäude neu | ne\_AKGebNeu | (D + F) × (1 − E) |
+| O | Rücklage Gebäude verfügbar | ne\_RLGeb | rl\_Geb minus ü1 der Zeilen darüber mit gleicher Quelle |
+| P | Rücklage G+B verfügbar | ne\_RLGuB | rl\_GuB minus ü2 und ü3 der Zeilen darüber |
+| Q | ü1 | ne\_Ue1 | MIN(O; N) |
+| R | ü2 | ne\_Ue2 | MIN(P; M) |
+| S | ü3 | ne\_Ue3 | MIN(P − R; N − Q) |
+| T | übertragen gesamt | ne\_UeGesamt | Q + R + S |
+| U | AfA-Basis Gebäude | ne\_AfABasis | N − Q − S |
+| V | steuerliche AK G+B | ne\_AKGuB | M − R |
+| W | Status | ne\_Status | Plausibilität |
 
-Nebenkosten wie Grunderwerbsteuer und Notar werden aktiviert und im Verhältnis des Kaufpreises auf G+B und Gebäude verteilt. Die verfügbare Rücklage (N, O) ist nur gefüllt, wenn das Kaufjahr zwischen Bildungsjahr und Fristjahr der Quelle liegt, sonst 0. Statt der AfA-Methode aus dem ersten Entwurf gibt es einen linearen AfA-Satz; die degressive AfA ist noch offen.
+Nebenkosten wie Grunderwerbsteuer und Notar werden aktiviert und im Verhältnis des Kaufpreises auf G+B und Gebäude verteilt. Die verfügbare Rücklage (O, P) ist nur gefüllt, wenn das Kaufjahr zwischen Bildungsjahr und Fristjahr der Quelle liegt, sonst 0. Die AfA-Methode ist linear (Satz × AfA-Basis) oder degressiv nach § 7 Abs. 5a EStG.
 
 **Übertragung in fester Reihenfolge (korrigiert).** Der erste Entwurf übertrug nur den Gebäudegewinn und nur auf das Gebäude (`I2 = MIN(Rücklage Spalte E; H2)`). Der G+B-Gewinn ging dabei verloren. Richtig nach § 6b Abs. 1 EStG ist: Ein Gebäudegewinn darf nur auf ein Gebäude übertragen werden, ein G+B-Gewinn auf Gebäude oder auf G+B. Steuerlich günstig ist diese Reihenfolge:
 
@@ -440,6 +441,7 @@ Die ersten vier nehmen das Objekt aus dem Modell (ne\_Gueltig = 0). Bei den letz
 - im Kaufjahr: Buchwert = AfA-Basis, im Bestand, noch keine Miete, Erhaltung und AfA
 - ab dem Folgejahr: AfA = MIN(AfA-Basis × Satz; Vorjahresbuchwert); Miete = Kaufpreis × Mietrendite × (1 + Mietsteigerung)^(Jahr − Kaufjahr), Erhaltung entsprechend
 - Verkehrswert = Kaufpreis, ab dem Kaufjahr mit der Wertsteigerung fortgeschrieben
+- degressive AfA (Methode „degressiv“): AfA = MIN(MAX(Vorjahresbuchwert × par\_AfADegressiv; Vorjahresbuchwert / Restnutzungsdauer); Vorjahresbuchwert). Die Restnutzungsdauer zu Jahresbeginn ist 1 / AfA-Satz − (Jahr − Kaufjahr − 1), mindestens 1. Das bildet den Wechsel zur linearen AfA nach § 7 Abs. 5a Satz 4 EStG ab, sobald dieser günstiger ist; danach bleibt die AfA gleich. Die AfA-Basis nach Übertragung der Rücklage ist dieselbe wie bei linearer AfA.
 
 Ein Neuobjekt gehört nur in die Plan-Linie der Übersicht, nicht in die Baseline. Die Baseline summiert deshalb nur Zeilen mit prg\_Neu = 0.
 
@@ -456,11 +458,11 @@ Weitere geprüfte Fälle in `pruefung/pruefen.py`:
 - zwei Neuobjekte teilen sich die Rücklage: das erste nimmt 500.000, das zweite (Nebenkosten 40.000, G+B 260.000) den Rest 220.000 als ü2; AfA-Basis 780.000, AK G+B 40.000
 - Teilübertragung 300.000: Rest 420.000 wird 2031 mit Zuschlag 100.800 aufgelöst
 - Statusfälle, darunter Kauf nach Fristjahr und vor Bildung der Rücklage
+- degressive AfA 5 %, AfA-Basis 800.000, Nutzungsdauer 33⅓ Jahre: 2028 40.000, 2029 38.000, 2041 20.533,68; ab 2042 linear 20.179,65 (Restnutzungsdauer 19⅓ < 20), Buchwert 2046 289.241,71. Linear 3 % zum Vergleich 24.000, Buchwert 2046 344.000. Bei Nutzungsdauer 20 Jahre ist linear ab dem zweiten Jahr höher, die AfA bleibt 40.000.
 
 **Offen:**
 - Verkauf eines Neuobjekts innerhalb des Rasters
 - mehrere Quellen für ein Neuobjekt
-- degressive AfA (§ 7 Abs. 5a EStG)
 - Übertragung auf Anschaffungen im Vorjahr der Veräußerung (§ 6b Abs. 1)
 - „§ 6b Neubau begonnen“ aus dem Neuobjekt ableiten statt im Blatt Verkäufe eingeben
 
@@ -756,10 +758,10 @@ Je Vorgang gibt es zwei Sichten. In der Referenz stehen sie rechts neben der BWA
 
 **Abweichungen zum bisherigen Modell, offen zu klären**
 
-- [ ] **Handels- und Steuerbilanz:** Das Modell rechnet nur die Steuerbilanz. Die Referenz zeigt beide; in der Handelsbilanz gibt es keinen § 6b-Abzug. Soll die HB-Sicht mitgeführt werden (zweite AfA-Spalte je Objekt)?
-- [ ] **Degressive AfA 5 %** für das Neuobjekt: im Modell bisher nur linear.
-- [ ] **Übertrag auf die gesamten AK:** Die Referenz kürzt die AfA-Basis um den ganzen Übertrag. Das Modell trennt Gebäude- und G+B-Gewinn nach § 6b Abs. 1 (G+B-Gewinn zuerst auf G+B). Ergebnis gleich, solange G+B-Gewinn auf das Gebäude passt; die AfA-Basis unterscheidet sich, wenn das Neuobjekt einen G+B-Anteil hat.
-- [ ] **Finanzierung und Restschuld:** In der Referenz schon Teil der Rechnung (Ablösung der Restschuld, Darlehen für den nicht gedeckten Teil). Im Plan war das Stufe 2; für den Sonderbereich wird es vorgezogen.
+- [x] **Handels- und Steuerbilanz:** Entschieden: im ersten Durchlauf nur die Steuerbilanz. Steuer, Liquidität und Endvermögen hängen nur an ihr. Die Handelsbilanz ändert das ausgewiesene Jahresergebnis (keine § 6b-Kürzung, höhere AfA) und damit das Ausschüttungspotenzial und die latenten Steuern im Jahresabschluss. Sie kann später als zweite AfA-Spalte dazukommen.
+- [x] **Degressive AfA 5 %** für das Neuobjekt: umgesetzt als AfA-Methode im Blatt Neuobjekte (Abschnitt 13), mit Wechsel zur linearen AfA.
+- [x] **Übertrag auf die gesamten AK:** Entschieden: das Modell bleibt bei der Trennung. Die Referenz kürzt die AfA-Basis um den ganzen Übertrag. Das Modell trennt Gebäude- und G+B-Gewinn nach § 6b Abs. 1 (G+B-Gewinn zuerst auf G+B). Ergebnis gleich, solange G+B-Gewinn auf das Gebäude passt; die AfA-Basis unterscheidet sich, wenn das Neuobjekt einen G+B-Anteil hat.
+- [x] **Finanzierung und Restschuld:** Entschieden: bleibt in Stufe 2, dort mit Vorrang. In der Referenz ist es schon Teil der Rechnung (Ablösung der Restschuld, Darlehen für den nicht gedeckten Teil). Bis dahin zeigt der Sonderbereich Restschuld und Finanzierung nicht.
 - [ ] **Mietnebenkosten:** Die Referenz neutralisiert Umlagen gegen den Aufwand. Im Modell zählt BWA 1020 komplett als Miete. Klären, auf welchem Konto oder welcher BWA-Zeile die Umlagen stehen.
 - [ ] **Steuersatz:** Die Referenz rechnet mit etwa 45 %, das Parameterblatt mit 30 % (GmbH ohne erweiterte Kürzung wäre rund 30 %). Die 45 % der Alternative lassen sich nicht aus den angezeigten Werten herleiten.
 - [ ] **Zeitpunkt:** Die Referenz vergleicht ein Jahr (Basis 2025) statisch; das Modell rechnet 20 Jahre. Die Ergebnissicht zeigt deshalb das erste volle Jahr nach dem Vorgang und zusätzlich das Endvermögen nach 20 Jahren.
