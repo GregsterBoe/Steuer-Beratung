@@ -20,6 +20,7 @@ from .modelle import Objekt
 ZELLE_ID = "B2"        # Kostenstelle, z. B. "KSt 1"
 ZELLE_NAME = "C2"      # Objektbezeichnung, z. B. "KC 24+26"
 KOPFZEILE = 4          # B "Nr.", danach Jahres- und Monatsspalten
+KENNUNG = "Nr."        # Inhalt von B4; nur Blätter mit dieser Kennung sind Kostenstellen
 SPALTE_NR = 2          # B
 
 # BWA-Zeilen je Modellfeld; fehlende Zeilen zählen als 0
@@ -47,12 +48,12 @@ class LaufendeWerte:
     abschreibung: float
 
 
-def _jahresspalte(ws, basisjahr: int) -> int:
+def _jahresspalte(ws, basisjahr: int) -> Optional[int]:
     for zelle in ws[KOPFZEILE]:
         if isinstance(zelle.value, (int, float)) and not isinstance(zelle.value, bool) \
                 and int(zelle.value) == basisjahr:
             return zelle.column
-    raise EinleseFehler(f"Blatt {ws.title!r}: keine Spalte {basisjahr} in Zeile {KOPFZEILE}")
+    return None
 
 
 def _bwa_zeilen(ws) -> dict:
@@ -83,17 +84,36 @@ def _summe(ws, ws_formeln, zeilen: dict, nummern: tuple, spalte: int) -> float:
     return summe
 
 
-def lese_kostenstellen(pfad, basisjahr: int) -> list:
-    """Liest alle Blätter der Kanzlei-Excel; je Blatt eine LaufendeWerte-Zeile."""
+def _formatfehler(ws, basisjahr: int) -> Optional[str]:
+    """Grund, warum das Blatt kein lesbares Kostenstellenblatt ist; None = Format passt."""
+    kennung = ws.cell(row=KOPFZEILE, column=SPALTE_NR).value
+    if not (isinstance(kennung, str) and kennung.strip().lower() == KENNUNG.lower()):
+        return f"kein {KENNUNG!r} in Zeile {KOPFZEILE}, Spalte B"
+    objekt_id = ws[ZELLE_ID].value
+    if objekt_id is None or str(objekt_id).strip() == "":
+        return f"keine Kostenstelle in {ZELLE_ID}"
+    if _jahresspalte(ws, basisjahr) is None:
+        return f"keine Spalte {basisjahr} in Zeile {KOPFZEILE}"
+    return None
+
+
+def lese_kostenstellen(pfad, basisjahr: int) -> tuple:
+    """Liest alle Kostenstellenblätter der Kanzlei-Excel.
+
+    Blätter mit anderem Format (etwa Annahmen oder Übersichten) werden übersprungen.
+    Rückgabe: (je Kostenstellenblatt eine LaufendeWerte-Zeile,
+    Liste (Blatttitel, Grund) der übersprungenen Blätter).
+    """
     pfad = Path(pfad)
     werte_wb = load_workbook(pfad, data_only=True)   # berechnete Werte
     formel_wb = load_workbook(pfad, data_only=False)  # nur für Fehlermeldungen
-    ergebnis, gesehen = [], {}
+    ergebnis, gesehen, uebersprungen = [], {}, []
     for ws in werte_wb.worksheets:
-        objekt_id = ws[ZELLE_ID].value
-        if objekt_id is None or str(objekt_id).strip() == "":
-            raise EinleseFehler(f"Blatt {ws.title!r}: keine Kostenstelle in {ZELLE_ID}")
-        objekt_id = str(objekt_id).strip()
+        grund = _formatfehler(ws, basisjahr)
+        if grund:
+            uebersprungen.append((ws.title, grund))
+            continue
+        objekt_id = str(ws[ZELLE_ID].value).strip()
         if objekt_id in gesehen:
             raise EinleseFehler(
                 f"Kostenstelle {objekt_id!r} doppelt (Blätter {gesehen[objekt_id]!r} "
@@ -117,7 +137,10 @@ def lese_kostenstellen(pfad, basisjahr: int) -> list:
             weitere_ausgaben=summe(BWA_AUSGABEN),
             abschreibung=summe(BWA_ABSCHREIBUNG),
         ))
-    return ergebnis
+    if not ergebnis:
+        gruende = "; ".join(f"{t!r}: {g}" for t, g in uebersprungen)
+        raise EinleseFehler(f"{pfad.name}: kein lesbares Kostenstellenblatt ({gruende})")
+    return ergebnis, uebersprungen
 
 
 def zusammenfuehren(stammdaten: list, laufende: list) -> list:

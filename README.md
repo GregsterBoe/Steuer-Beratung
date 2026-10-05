@@ -43,7 +43,7 @@ python -m pruefung.pruefen_einlesen  # prüft die Einleseschicht, ohne LibreOffi
 
 Das Prüfskript braucht LibreOffice mit Calc (`soffice`, unter Debian/Ubuntu Paket `libreoffice-calc`).
 
-`--kostenstellen` liest je Blatt B2 (Kostenstelle = ObjektID), C2 (Objektname) und aus der Spalte des Basisjahrs die BWA-Zeilen 1020 (Miete), 1090 (weitere Einnahmen), 1250 (Erhaltung) sowie 1100–1220 und 1260 (weitere Ausgaben). Die Datei muss in Excel gespeichert sein, damit berechnete Werte vorliegen. Steuerliche Stammdaten (AK, Kaufjahr, AfA, Restbuchwert) kommen nicht aus diesen Blättern; solange sie fehlen, meldet die Statusspalte „Pflichtfeld fehlt“.
+`--kostenstellen` überspringt jedes Blatt, das nicht im Kostenstellenformat ist (kein „Nr.“ in B4, keine Kostenstelle in B2 oder keine Spalte des Basisjahrs in Zeile 4), etwa Annahmen oder Übersichten. Jedes übersprungene Blatt nennt es mit Grund in der Ausgabe. Je Kostenstellenblatt liest es B2 (Kostenstelle = ObjektID), C2 (Objektname) und aus der Spalte des Basisjahrs die BWA-Zeilen 1020 (Miete), 1090 (weitere Einnahmen), 1250 (Erhaltung) sowie 1100–1220 und 1260 (weitere Ausgaben). Die Datei muss in Excel gespeichert sein, damit berechnete Werte vorliegen. Steuerliche Stammdaten (AK, Kaufjahr, AfA, Restbuchwert) kommen nicht aus diesen Blättern; solange sie fehlen, meldet die Statusspalte „Pflichtfeld fehlt“.
 
 Das Prognoseblatt hat je Objektzeile einen Block mit 20 Jahreszeilen: Miete, weitere Einnahmen, Erhaltung und weitere Ausgaben wachsen mit ihren Steigerungsraten. Die AfA beträgt AK Gebäude × Satz, höchstens aber den Restbuchwert. Danach sind AfA und Buchwert null.
 

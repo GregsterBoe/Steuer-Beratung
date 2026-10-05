@@ -498,7 +498,7 @@ Auffälligkeiten im Muster, vor dem Einlesen mit der Kanzlei klären:
 
 Wie bei der Pillar-2-Pipeline kapselt ein eigenes Modul das Einlesen. Ändert sich das Quellformat, wird nur diese Schicht angepasst, nicht der Rest.
 
-Umgesetzt in `prognosemodell/einlesen.py`: Werte stammen aus der Jahresspalte des Basisjahrs (im Muster S, inklusive Hochrechnung der offenen Monate). Kostenstellen ohne Stammdaten werden als neue Objekte angelegt, ihre steuerlichen Pflichtfelder bleiben leer. Abbruch mit Meldung bei fehlender Basisjahrspalte, doppelter Kostenstelle oder Formeln ohne gespeicherten Wert.
+Umgesetzt in `prognosemodell/einlesen.py`: Blätter, die nicht im Kostenstellenformat sind (kein „Nr.“ in B4, keine Kostenstelle in B2, keine Basisjahrspalte), werden übersprungen und mit Grund gemeldet, etwa „Annahmen“. Werte stammen aus der Jahresspalte des Basisjahrs (im Muster S, inklusive Hochrechnung der offenen Monate). Kostenstellen ohne Stammdaten werden als neue Objekte angelegt, ihre steuerlichen Pflichtfelder bleiben leer. Abbruch mit Meldung nur bei Datenfehlern in einem Kostenstellenblatt (doppelte Kostenstelle, Formel ohne gespeicherten Wert, Text statt Zahl) oder wenn kein Blatt lesbar ist.
 
 **Offene Punkte, nächste Woche in der Arbeit zu prüfen**
 
