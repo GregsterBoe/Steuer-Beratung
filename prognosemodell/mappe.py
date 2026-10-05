@@ -10,7 +10,8 @@ from openpyxl.worksheet.datavalidation import DataValidation
 
 from . import formeln
 from .modelle import (FMT_EURO, FMT_JAHR, FMT_PROZENT, FMT_ZAHL, MAX_OBJEKTE, MAX_VERKAEUFE, OBJEKT_FELDER,
-                      PARAMETER, PROGNOSE_SPALTEN, STATUS_NAME, STATUS_UEBERSCHRIFT,
+                      PARAMETER, PROGNOSE_SPALTEN, RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN,
+                      STATUS_NAME, STATUS_UEBERSCHRIFT,
                       VERKAUF_FELDER, VERKAUF_SPALTEN, VERKAUF_STATUS_NAME, Modell,
                       prognosejahre)
 
@@ -207,6 +208,57 @@ def _blatt_verkaeufe(wb, modell: Modell) -> None:
                          "ab dem Folgejahr ist das Objekt inaktiv.")
     ws[f"{hinweis}2"] = ("Aufteilung des Nettoerlöses: Anteil G+B laut Kaufvertrag, "
                          "sonst 1 − Verkehrswertanteil Gebäude aus dem Objektblatt.")
+    ws[f"{hinweis}3"] = ("§ 6b Neubau begonnen = ja: Mit dem Bau wurde vor Ende der Regelfrist "
+                         "begonnen, die Rücklage läuft dann par_6bFristNeubau statt par_6bFrist Jahre.")
+    ws.freeze_panes = "B2"
+
+
+def _blatt_ruecklagen(wb) -> None:
+    """§ 6b-Rücklagen: links je Verkauf, rechts der Spiegel je Jahr."""
+    ws = wb.create_sheet("Rücklagen")
+    erste = 2
+
+    letzte = MAX_VERKAEUFE + 1
+    _kopf(ws, 1, [s.ueberschrift for s in RUECKLAGE_SPALTEN])
+    for i, s in enumerate(RUECKLAGE_SPALTEN, start=1):
+        bst = get_column_letter(i)
+        ws.column_dimensions[bst].width = s.breite
+        _name(wb, s.name, f"'Rücklagen'!${bst}${erste}:${bst}${letzte}")
+    for verkauf_nr, zeile in enumerate(range(erste, letzte + 1), start=1):
+        rechnung = formeln.ruecklage_zeile(zeile, verkauf_nr)
+        for i, s in enumerate(RUECKLAGE_SPALTEN, start=1):
+            c = ws.cell(row=zeile, column=i, value=rechnung[s.key])
+            c.number_format = s.format
+            c.fill = FILL_BERECHNET
+
+    versatz = len(RUECKLAGE_SPALTEN) + 1  # eine Spalte Abstand
+    ws.column_dimensions[get_column_letter(versatz)].width = 3
+    letzte = erste + prognosejahre() - 1
+    for i, s in enumerate(RUECKLAGE_JAHR_SPALTEN, start=versatz + 1):
+        bst = get_column_letter(i)
+        c = ws.cell(row=1, column=i, value=s.ueberschrift)
+        c.font, c.fill = FONT_KOPF, FILL_KOPF
+        c.alignment = Alignment(wrap_text=True, vertical="center")
+        ws.column_dimensions[bst].width = s.breite
+        _name(wb, s.name, f"'Rücklagen'!${bst}${erste}:${bst}${letzte}")
+    for zeile in range(erste, letzte + 1):
+        rechnung = formeln.ruecklage_jahr_zeile(zeile, erstes_jahr=zeile == erste)
+        for i, s in enumerate(RUECKLAGE_JAHR_SPALTEN, start=versatz + 1):
+            c = ws.cell(row=zeile, column=i, value=rechnung[s.key])
+            c.number_format = s.format
+            c.fill = FILL_BERECHNET
+    ws.row_dimensions[1].height = 45
+
+    hinweis = letzte + 2
+    ws.cell(row=hinweis, column=versatz + 1, value=(
+        "Rücklage nur bei § 6b ja und Status OK im Blatt Verkäufe, gebildet zum Ende des "
+        "Verkaufsjahrs aus den positiven Teilgewinnen Gebäude und G+B."))
+    ws.cell(row=hinweis + 1, column=versatz + 1, value=(
+        "Ohne Reinvestition Auflösung im Fristjahr plus Gewinnzuschlag je vollem Jahr; "
+        "Übertragung auf Neuobjekte folgt mit Etappe 6."))
+    ws.cell(row=hinweis + 2, column=versatz + 1, value=(
+        "steuerwirksam = Veräußerungsgewinne − Einstellung + Auflösung + Zuschlag. "
+        + HINWEIS_FINANZIERUNG))
     ws.freeze_panes = "B2"
 
 
@@ -296,5 +348,6 @@ def erstelle_mappe(modell: Modell) -> Workbook:
     _blatt_objekte(wb, modell)
     _blatt_verkaeufe(wb, modell)
     _blatt_prognose(wb)
+    _blatt_ruecklagen(wb)
     _blatt_uebersicht(wb)
     return wb

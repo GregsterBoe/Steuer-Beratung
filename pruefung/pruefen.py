@@ -56,6 +56,11 @@ def prg(objekt_nr: int, jahr: int) -> int:
     return (objekt_nr - 1) * prognosejahre() + jahr - 2027
 
 
+def rls(jahr: int) -> int:
+    """Zeile im Rücklagenspiegel je Jahr; erste Zeile ist das erste Prognosejahr."""
+    return jahr - 2027
+
+
 def ueb(jahr: int) -> int:
     """Zeile im Übersichtsbereich; erste Zeile ist das Basisjahr."""
     return jahr - 2026
@@ -229,6 +234,89 @@ def faelle():
             ("vk_Gewinn", 1, None),
             ("vk_Vorbesitz", 2, 5),
             ("vk_Status", 2, "§ 6b unzulässig: Vorbesitzzeit zu kurz"),
+            ("rl_ID", 2, None),  # keine Rücklage, Gewinn wird sofort steuerwirksam
+            # Buchwert Ende 2029 432.000, Erlös je 500.000: 68.000 + 300.000
+            ("rls_Gewinne", rls(2029), 368_000),
+            ("rls_Bildung", rls(2029), 0),
+            ("rls_Steuerwirksam", rls(2029), 368_000),
+            ("rls_Gewinne", rls(2028), 0),  # Zeilen ohne Status OK zählen nicht
+        ]),
+        # Etappe 5: Gewinn 720.000 aus dem Abnahmefall der Etappe 4, Fristjahr 2027 + 4
+        ("Etappe 5: Abnahme Rücklage voll, Auflösung mit Zuschlag im Fristjahr",
+         Modell(objekte=[abnahme4],
+                verkaeufe=[Verkauf("OBJ-001", 2027, preis=1_400_000, nutzung_6b="ja")]), [
+            ("par_6bFristNeubau", 0, 6),
+            ("rl_ID", 0, "RL-OBJ-001"),
+            ("rl_ObjektID", 0, "OBJ-001"),
+            ("rl_Jahr", 0, 2027),
+            ("rl_Geb", 0, 220_000),
+            ("rl_GuB", 0, 500_000),
+            ("rl_Betrag", 0, 720_000),
+            ("rl_Fristjahr", 0, 2031),
+            ("rl_Aufloesung", 0, 720_000),
+            ("rl_Zuschlag", 0, 172_800),  # 720.000 × 6 % × 4
+            ("rl_Hinweis", 0, None),
+            ("rl_ID", 1, None),
+            ("rls_Jahr", rls(2027), 2027),
+            ("rls_Jahr", rls(2046), 2046),
+            ("rls_Gewinne", rls(2027), 720_000),
+            ("rls_Bildung", rls(2027), 720_000),
+            ("rls_Steuerwirksam", rls(2027), 0),  # Steuer im Verkaufsjahr null
+            ("rls_Bestand", rls(2027), 720_000),
+            ("rls_Bestand", rls(2030), 720_000),
+            ("rls_Steuerwirksam", rls(2030), 0),
+            ("rls_Aufloesung", rls(2031), 720_000),
+            ("rls_Zuschlag", rls(2031), 172_800),
+            ("rls_Steuerwirksam", rls(2031), 892_800),
+            ("rls_Bestand", rls(2031), 0),
+            ("rls_Bestand", rls(2046), 0),
+        ]),
+        ("Etappe 5: Neubau begonnen, Frist sechs Jahre",
+         Modell(objekte=[abnahme4],
+                verkaeufe=[Verkauf("OBJ-001", 2027, preis=1_400_000, nutzung_6b="ja",
+                                   neubau_6b="ja")]), [
+            ("vk_Status", 0, "OK"),
+            ("rl_Fristjahr", 0, 2033),
+            ("rl_Zuschlag", 0, 259_200),  # 720.000 × 6 % × 6
+            ("rls_Aufloesung", rls(2031), 0),
+            ("rls_Bestand", rls(2032), 720_000),
+            ("rls_Steuerwirksam", rls(2033), 979_200),
+            ("rls_Bestand", rls(2033), 0),
+        ]),
+        ("Etappe 5: § 6b nein, Gewinn sofort steuerwirksam",
+         Modell(objekte=[obj], verkaeufe=[Verkauf("OBJ-001", 2030, preis=1_400_000,
+                                                  kosten=40_000, anteil_gub=0.3,
+                                                  nutzung_6b="nein")]), [
+            ("rl_ID", 0, None),
+            ("rl_Betrag", 0, None),
+            ("rls_Gewinne", rls(2030), 744_000),
+            ("rls_Bildung", rls(2030), 0),
+            ("rls_Steuerwirksam", rls(2030), 744_000),
+            ("rls_Bestand", rls(2030), 0),
+        ]),
+        # Kaufvertrag 80 % G+B: Gebäude 280.000 − 416.000, G+B 1.120.000 − 200.000
+        ("Etappe 5: Verlust Gebäude mindert die Rücklage G+B nicht",
+         Modell(objekte=[obj], verkaeufe=[Verkauf("OBJ-001", 2030, preis=1_400_000,
+                                                  anteil_gub=0.8, nutzung_6b="ja")]), [
+            ("vk_GewinnGeb", 0, -136_000),
+            ("vk_GewinnGuB", 0, 920_000),
+            ("rl_Geb", 0, 0),
+            ("rl_GuB", 0, 920_000),
+            ("rl_Betrag", 0, 920_000),
+            ("rls_Gewinne", rls(2030), 784_000),
+            ("rls_Bildung", rls(2030), 920_000),
+            ("rls_Steuerwirksam", rls(2030), -136_000),  # Verlust wirkt sofort
+            ("rls_Bestand", rls(2030), 920_000),
+        ]),
+        # Buchwert Ende 2044: 480.000 − 18 × 16.000 = 192.000; Gewinn 508.000 + 500.000
+        ("Etappe 5: Frist endet nach Prognoseende",
+         Modell(objekte=[obj], verkaeufe=[Verkauf("OBJ-001", 2044, preis=1_400_000,
+                                                  nutzung_6b="ja")]), [
+            ("rl_Betrag", 0, 1_008_000),
+            ("rl_Fristjahr", 0, 2048),
+            ("rl_Hinweis", 0, "Frist endet nach Prognoseende"),
+            ("rls_Bestand", rls(2046), 1_008_000),
+            ("rls_Aufloesung", rls(2046), 0),
         ]),
     ]
 

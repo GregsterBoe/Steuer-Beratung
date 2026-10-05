@@ -55,6 +55,8 @@ PARAMETER = [
               "für Szenario B; Platzhalter"),
     Parameter("par_6bVorbesitz", "§ 6b Mindest-Vorbesitzzeit (Jahre)", 6, FMT_ZAHL, ""),
     Parameter("par_6bFrist", "§ 6b Reinvestitionsfrist (Jahre)", 4, FMT_ZAHL, ""),
+    Parameter("par_6bFristNeubau", "§ 6b Frist bei Neubau (Jahre)", 6, FMT_ZAHL,
+              "wenn mit dem Neubau vor Ende der Regelfrist begonnen wurde (§ 6b Abs. 3)"),
     Parameter("par_6bZuschlag", "§ 6b Gewinnzuschlag je Jahr", 0.06, FMT_PROZENT,
               "bei Auflösung ohne Reinvestition"),
     Parameter("par_Szenario", "aktives Szenario", "A", FMT_TEXT,
@@ -142,6 +144,9 @@ VERKAUF_FELDER = [
     Feld("anteil_gub", "Anteil G+B lt. Kaufvertrag", "vk_AnteilGuBVertrag", FMT_PROZENT, False,
          minimum=0, maximum=1),
     Feld("nutzung_6b", "§ 6b nutzen", "vk_6b", FMT_TEXT, False, 10, auswahl=("ja", "nein")),
+    # verlängert die Reinvestitionsfrist auf par_6bFristNeubau
+    Feld("neubau_6b", "§ 6b Neubau begonnen", "vk_6bNeubau", FMT_TEXT, False, 11,
+         auswahl=("ja", "nein")),
 ]
 VERKAUF_SPALTEN = [
     Spalte("vorbesitz", "Vorbesitzzeit Jahre", "vk_Vorbesitz", FMT_ZAHL, 11),
@@ -156,6 +161,36 @@ VERKAUF_SPALTEN = [
     Spalte("gewinn", "Veräußerungsgewinn", "vk_Gewinn", FMT_EURO, 16),
 ]
 VERKAUF_STATUS_NAME = "vk_Status"
+# Statustexte, auf die der Rücklagenspiegel zugreift
+STATUS_OK = "OK"
+# Gewinn ist gültig berechnet, wird aber sofort versteuert
+STATUS_6B_UNZULAESSIG = "§ 6b unzulässig: Vorbesitzzeit zu kurz"
+
+# Blatt Rücklagen (Etappe 5, Projektplan Abschnitt 12)
+# Teil 1: je Verkaufszeile eine Rücklagenzeile, gefüllt nur bei § 6b ja und Status OK
+RUECKLAGE_SPALTEN = [
+    Spalte("id", "RücklageID", "rl_ID", FMT_TEXT, 14),
+    Spalte("objekt_id", "ObjektID Herkunft", "rl_ObjektID", FMT_TEXT, 12),
+    Spalte("jahr", "Bildungsjahr (Verkaufsjahr)", "rl_Jahr", FMT_JAHR, 11),
+    Spalte("geb", "Rücklage Gebäude", "rl_Geb", FMT_EURO),
+    Spalte("gub", "Rücklage G+B", "rl_GuB", FMT_EURO),
+    Spalte("betrag", "Rücklage gesamt", "rl_Betrag", FMT_EURO),
+    Spalte("fristjahr", "Fristjahr", "rl_Fristjahr", FMT_JAHR, 9),
+    Spalte("aufloesung", "Auflösung im Fristjahr", "rl_Aufloesung", FMT_EURO),
+    Spalte("zuschlag", "Gewinnzuschlag", "rl_Zuschlag", FMT_EURO),
+    Spalte("hinweis", "Hinweis", "rl_Hinweis", FMT_TEXT, 30),
+]
+# Teil 2: Spiegel je Prognosejahr
+RUECKLAGE_JAHR_SPALTEN = [
+    Spalte("jahr", "Jahr", "rls_Jahr", FMT_JAHR, 8),
+    Spalte("gewinne", "Veräußerungsgewinne", "rls_Gewinne", FMT_EURO, 15),
+    Spalte("bildung", "Einstellung in Rücklage", "rls_Bildung", FMT_EURO, 15),
+    Spalte("aufloesung", "Auflösung", "rls_Aufloesung", FMT_EURO),
+    Spalte("zuschlag", "Gewinnzuschlag", "rls_Zuschlag", FMT_EURO),
+    Spalte("steuerwirksam", "steuerwirksam aus Verkauf und Rücklage", "rls_Steuerwirksam",
+           FMT_EURO, 17),
+    Spalte("bestand", "Rücklagenbestand Ende", "rls_Bestand", FMT_EURO, 15),
+]
 
 
 def prognosejahre() -> int:
@@ -190,6 +225,7 @@ class Verkauf:
     kosten: Optional[float] = None
     anteil_gub: Optional[float] = None   # Kaufvertrag; leer = Verkehrswertanteil aus Objekte
     nutzung_6b: Optional[str] = None
+    neubau_6b: Optional[str] = None      # ja = Frist par_6bFristNeubau statt par_6bFrist
 
 
 @dataclass

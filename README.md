@@ -28,10 +28,11 @@
 8. Szenariovergleich
 9. VBA-Steuerung und Plausibilitätsprüfungen
 
-Stand: Etappen 1 bis 4 sind umgesetzt.
+Stand: Etappen 1 bis 5 sind umgesetzt.
 - Parameter- und Objektblatt mit Statusprüfung
 - Prognoseblatt mit AfA-Fortschreibung und Indexierung je Objekt und Jahr
 - Verkaufsblatt mit Aufteilung des Erlöses und Veräußerungsgewinn getrennt nach Gebäude und G+B
+- Rücklagenblatt mit § 6b-Rücklage je Verkauf und Spiegel je Jahr
 - Übersichtsblatt mit Diagramm
 - Einleseschicht für die Kostenstellenblätter (DATEV-BWA)
 
@@ -65,6 +66,8 @@ Im Blatt **Verkäufe** stehen je Verkauf ObjektID, Jahr, Preis, Kosten, optional
 - den Gewinn je Teil
 
 Die Aufteilung folgt dem Kaufvertrag, sonst dem Verkehrswertanteil aus dem Objektblatt. Der Status meldet unter anderem eine fehlende Aufteilung und eine zu kurze Vorbesitzzeit für § 6b.
+
+Das Blatt **Rücklagen** bildet bei § 6b ja und Status OK eine Rücklage aus den positiven Teilgewinnen, getrennt nach Gebäude und G+B. Die Frist beträgt vier Jahre, mit „§ 6b Neubau begonnen = ja“ sechs Jahre. Ohne Reinvestition wird die Rücklage im Fristjahr aufgelöst, mit 6 % Zuschlag je Jahr. Der Spiegel je Jahr zeigt Gewinne, Einstellung, Auflösung, Zuschlag, Bestand und den steuerwirksamen Betrag, der in Etappe 7 die Steuer ergibt. Die Übertragung auf Neuobjekte folgt mit Etappe 6.
 
 Gelb = Eingabe, grau = Formel. Die Statusspalte im Objektblatt meldet fehlende Pflichtfelder, doppelte IDs, ein Kaufjahr nach dem Basisjahr und einen Restbuchwert über den AK.
 

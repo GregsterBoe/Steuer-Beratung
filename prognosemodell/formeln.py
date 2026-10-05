@@ -6,7 +6,8 @@ Excel zeigt sie in der deutschen Oberfläche automatisch als WENN, ZÄHLENWENN u
 
 from openpyxl.utils import get_column_letter
 
-from .modelle import OBJEKT_FELDER, PROGNOSE_SPALTEN, VERKAUF_FELDER, VERKAUF_SPALTEN
+from .modelle import (OBJEKT_FELDER, PROGNOSE_SPALTEN, RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN,
+                      STATUS_6B_UNZULAESSIG, STATUS_OK, VERKAUF_FELDER, VERKAUF_SPALTEN)
 
 
 def spalte(key: str) -> str:
@@ -174,6 +175,86 @@ def status_verkauf(zeile: int) -> str:
         f'IF({_v("preis", zeile)}="","Verkaufspreis fehlt",'
         f'IF({_v("quote_gub", zeile)}="","Aufteilung fehlt: Anteil G+B oder Verkehrswertanteil",'
         f'IF(AND({_v("nutzung_6b", zeile)}="ja",{_v("vorbesitz", zeile)}<par_6bVorbesitz),'
-        f'"§ 6b unzulässig: Vorbesitzzeit zu kurz",'
-        f'"OK"))))))))'
+        f'"{STATUS_6B_UNZULAESSIG}",'
+        f'"{STATUS_OK}"))))))))'
     )
+
+
+# --- Rücklagenspiegel § 6b (Etappe 5, Projektplan Abschnitt 12) ---
+#
+# Zeile n des Rücklagenblatts gehört zu Zeile n des Verkaufsblatts. Eine Rücklage
+# entsteht nur bei § 6b ja und Status OK, und nur aus positiven Teilgewinnen:
+# Gebäude und G+B sind getrennte Wirtschaftsgüter, ein Verlust des einen mindert
+# die Rücklage aus dem anderen nicht, er wirkt sofort.
+
+
+def _spalte_aus(spalten, key: str, versatz: int = 0) -> str:
+    for i, s in enumerate(spalten, start=1 + versatz):
+        if s.key == key:
+            return get_column_letter(i)
+    raise KeyError(key)
+
+
+def rspalte(key: str) -> str:
+    """Spaltenbuchstabe im Teil je Rücklage."""
+    return _spalte_aus(RUECKLAGE_SPALTEN, key)
+
+
+def rsspalte(key: str) -> str:
+    """Spaltenbuchstabe im Spiegel je Jahr, rechts neben dem Teil je Rücklage (eine Spalte Abstand)."""
+    return _spalte_aus(RUECKLAGE_JAHR_SPALTEN, key, versatz=len(RUECKLAGE_SPALTEN) + 1)
+
+
+def _r(key: str, zeile: int) -> str:
+    return f"${rspalte(key)}{zeile}"
+
+
+def _rs(key: str, zeile: int) -> str:
+    return f"${rsspalte(key)}{zeile}"
+
+
+def ruecklage_zeile(zeile: int, verkauf_nr: int) -> dict:
+    """Formeln einer Rücklagenzeile; verkauf_nr = Zeile im Verkaufsblatt (1 = erster Verkauf)."""
+    def vk(name):
+        return f"INDEX({name},{verkauf_nr})"
+
+    def wenn(ausdruck):
+        return (f'=IF(AND({vk("vk_Status")}="{STATUS_OK}",{vk("vk_6b")}="ja"),'
+                f'{ausdruck},"")')
+
+    frist = f'IF({vk("vk_6bNeubau")}="ja",par_6bFristNeubau,par_6bFrist)'
+    return {
+        "id": wenn(f'"RL-"&{vk("vk_ID")}'),
+        "objekt_id": wenn(vk("vk_ID")),
+        "jahr": wenn(vk("vk_Jahr")),
+        "geb": wenn(f'MAX({vk("vk_GewinnGeb")},0)'),
+        "gub": wenn(f'MAX({vk("vk_GewinnGuB")},0)'),
+        "betrag": wenn(f"{_r('geb', zeile)}+{_r('gub', zeile)}"),
+        "fristjahr": wenn(f"{_r('jahr', zeile)}+{frist}"),
+        # ohne Reinvestition (Etappe 6) wird die ganze Rücklage im Fristjahr aufgelöst
+        "aufloesung": wenn(_r("betrag", zeile)),
+        # 6 % je vollem Jahr zwischen Bildung und Auflösung (§ 6b Abs. 7)
+        "zuschlag": wenn(f"{_r('aufloesung', zeile)}*par_6bZuschlag"
+                         f"*({_r('fristjahr', zeile)}-{_r('jahr', zeile)})"),
+        "hinweis": wenn(f'IF({_r("fristjahr", zeile)}>par_Endjahr,'
+                        f'"Frist endet nach Prognoseende","")'),
+    }
+
+
+def ruecklage_jahr_zeile(zeile: int, erstes_jahr: bool) -> dict:
+    """Formeln einer Zeile des Spiegels je Jahr."""
+    jahr = _rs("jahr", zeile)
+    # nur sauber berechnete Verkäufe; bei zu kurzer Vorbesitzzeit gilt der Gewinn, nur ohne Rücklage
+    gewinne = "+".join(f'SUMIFS(vk_Gewinn,vk_Jahr,{jahr},vk_Status,"{status}")'
+                       for status in (STATUS_OK, STATUS_6B_UNZULAESSIG))
+    bestand_vor = "0" if erstes_jahr else _rs("bestand", zeile - 1)
+    return {
+        "jahr": "=par_Startjahr" if erstes_jahr else f"={_rs('jahr', zeile - 1)}+1",
+        "gewinne": f"={gewinne}",
+        "bildung": f"=SUMIFS(rl_Betrag,rl_Jahr,{jahr})",
+        "aufloesung": f"=SUMIFS(rl_Aufloesung,rl_Fristjahr,{jahr})",
+        "zuschlag": f"=SUMIFS(rl_Zuschlag,rl_Fristjahr,{jahr})",
+        "steuerwirksam": (f"={_rs('gewinne', zeile)}-{_rs('bildung', zeile)}"
+                          f"+{_rs('aufloesung', zeile)}+{_rs('zuschlag', zeile)}"),
+        "bestand": (f"={bestand_vor}+{_rs('bildung', zeile)}-{_rs('aufloesung', zeile)}"),
+    }
