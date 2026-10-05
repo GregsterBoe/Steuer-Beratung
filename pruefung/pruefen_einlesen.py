@@ -13,6 +13,7 @@ from openpyxl import Workbook
 
 from prognosemodell.einlesen import EinleseFehler, lese_kostenstellen, zusammenfuehren
 from prognosemodell.testdaten import testobjekt
+from prognosemodell.vorlagen import erstelle_vorlage
 
 TOLERANZ = 0.01
 
@@ -108,6 +109,32 @@ def main() -> int:
             pruefe("Formel ohne Wert meldet Fehler", "kein Fehler", "EinleseFehler")
         except EinleseFehler:
             pruefe("Formel ohne Wert meldet Fehler", "EinleseFehler", "EinleseFehler")
+
+        # Zielformat der Planungsreferenz: Kopf "Jahr 2026", Monatsspalten als Datum,
+        # Planspalten "Plan 2027", 2028 …; Summenblatt "Alle Objekte" wird übersprungen
+        vorlage = tmp / "vorlage.xlsx"
+        erstelle_vorlage(basisjahr=2026).save(vorlage)
+        (v1, v2), uebersprungen = lese_kostenstellen(vorlage, 2026)
+        pruefe("Vorlage: Summenblatt übersprungen", uebersprungen,
+               [("Alle Objekte", "Summenblatt aller Kostenstellen")])
+        pruefe("Vorlage: Kostenstellen", (v1.objekt_id, v2.objekt_id), ("KSt 1", "KSt 2"))
+        pruefe("Vorlage: Name aus C2", v1.name, "Musterstraße 1")
+        pruefe("Vorlage: Miete aus Spalte 'Jahr 2026', nicht aus Vorjahr oder Monat",
+               v1.miete, 60_000.0)
+        pruefe("Vorlage: Erhaltung", v1.erhaltung, 8_000.0)
+        pruefe("Vorlage: weitere Ausgaben 1140 + 1150 + 1260", v1.weitere_ausgaben, 3_600.0)
+        pruefe("Vorlage: weitere Einnahmen KSt 2", v2.weitere_einnahmen, 1_500.0)
+        pruefe("Vorlage: AfA lt. BWA KSt 2", v2.abschreibung, 30_000.0)
+        try:
+            (p1, _), _ = lese_kostenstellen(vorlage, 2027)
+            pruefe("Vorlage: Planspalte 'Plan 2027' ist leer, Werte 0", p1.miete, 0.0)
+        except EinleseFehler as e:
+            pruefe("Vorlage: Planspalte 'Plan 2027' lesbar", str(e), "kein Fehler")
+        try:
+            lese_kostenstellen(vorlage, 2031)
+            pruefe("Vorlage: Planjahr 2031 als Zahl erkannt", "kein Fehler", "kein Fehler")
+        except EinleseFehler as e:
+            pruefe("Vorlage: Planjahr 2031 als Zahl erkannt", str(e), "kein Fehler")
 
         stamm = testobjekt()  # OBJ-001
         stamm_kst1 = dataclasses.replace(stamm, objekt_id="KSt 1", name=None)

@@ -8,6 +8,7 @@ gesucht wird über die BWA-Nummer, nie über die Zeilenposition.
 """
 
 import dataclasses
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -22,6 +23,11 @@ ZELLE_NAME = "C2"      # Objektbezeichnung, z. B. "KC 24+26"
 KOPFZEILE = 4          # B "Nr.", danach Jahres- und Monatsspalten
 KENNUNG = "Nr."        # Inhalt von B4; nur Blätter mit dieser Kennung sind Kostenstellen
 SPALTE_NR = 2          # B
+# Jahreskopf: Zahl (2026) oder Text "Jahr 2026" / "Plan 2027"; Monatsspalten tragen ein Datum
+JAHRESKOPF = re.compile(r"^(?:(?:jahr|plan)\s+)?(\d{4})$", re.IGNORECASE)
+# Summenblatt über alle Kostenstellen: B2 nur "KSt" ohne Nummer oder C2 "Alle Objekte"
+SUMMENBLATT_ID = "kst"
+SUMMENBLATT_NAME = "alle objekte"
 
 # BWA-Zeilen je Modellfeld; fehlende Zeilen zählen als 0
 BWA_MIETE = (1020,)
@@ -48,10 +54,21 @@ class LaufendeWerte:
     abschreibung: float
 
 
+def _kopfjahr(wert) -> Optional[int]:
+    """Jahr aus einem Spaltenkopf; None für Monatsspalten (Datum) und sonstige Köpfe."""
+    if isinstance(wert, bool):
+        return None
+    if isinstance(wert, (int, float)):
+        return int(wert)
+    if isinstance(wert, str):
+        treffer = JAHRESKOPF.match(wert.strip())
+        return int(treffer.group(1)) if treffer else None
+    return None
+
+
 def _jahresspalte(ws, basisjahr: int) -> Optional[int]:
     for zelle in ws[KOPFZEILE]:
-        if isinstance(zelle.value, (int, float)) and not isinstance(zelle.value, bool) \
-                and int(zelle.value) == basisjahr:
+        if _kopfjahr(zelle.value) == basisjahr:
             return zelle.column
     return None
 
@@ -92,6 +109,10 @@ def _formatfehler(ws, basisjahr: int) -> Optional[str]:
     objekt_id = ws[ZELLE_ID].value
     if objekt_id is None or str(objekt_id).strip() == "":
         return f"keine Kostenstelle in {ZELLE_ID}"
+    name = ws[ZELLE_NAME].value
+    if str(objekt_id).strip().lower() == SUMMENBLATT_ID or \
+            (isinstance(name, str) and name.strip().lower() == SUMMENBLATT_NAME):
+        return "Summenblatt aller Kostenstellen"
     if _jahresspalte(ws, basisjahr) is None:
         return f"keine Spalte {basisjahr} in Zeile {KOPFZEILE}"
     return None

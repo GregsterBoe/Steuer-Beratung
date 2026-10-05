@@ -37,7 +37,7 @@ Stand: Etappen 1 bis 7 sind umgesetzt.
 - Liquiditätsblatt mit Steuer, Verlustvortrag und Geldfluss je Jahr, Plan gegen Baseline
 - Auswertungsblatt mit Gesamt-GuV, stillen Reserven, latenter Steuer und Gesamtvermögen
 - Übersichtsblatt mit Immobilienwert und Gesamtvermögen, je mit Diagramm
-- Einleseschicht für die Kostenstellenblätter (DATEV-BWA)
+- Einleseschicht und Vorlage für die Kostenstellenblätter (DATEV-BWA)
 
 ## Nutzung
 
@@ -48,9 +48,12 @@ python -m prognosemodell --ohne-testdaten
 python -m prognosemodell --kostenstellen Kostenstellen.xlsx --ausgabe Ordner/Prognose.xlsx   # laufende Werte je Blatt einlesen; nur Ordner = Standardname darin
 python -m pruefung.pruefen           # rechnet per LibreOffice headless und prüft gegen Sollwerte
 python -m pruefung.pruefen_einlesen  # prüft die Einleseschicht, ohne LibreOffice
+python -m prognosemodell.vorlagen    # schreibt vorlagen/Kostenstellen_BWA_Vorlage.xlsx
 ```
 
 Das Prüfskript braucht LibreOffice mit Calc (`soffice`, unter Debian/Ubuntu Paket `libreoffice-calc`).
+
+Zielformat der Eingabe ist die DATEV-BWA-Kostenstellenblattsammlung; `vorlagen/Kostenstellen_BWA_Vorlage.xlsx` zeigt das Layout mit erfundenen Werten. Als Jahresspalte gilt ein Kopf wie 2026, „Jahr 2026“ oder „Plan 2027“; ein Summenblatt „Alle Objekte“ wird übersprungen. Geplant ist, die Ergebnisse wieder in diese Struktur zu schreiben, mit einem Sonderbereich für Verkauf und Kauf (Projektplan, Abschnitt 18).
 
 `--kostenstellen` überspringt jedes Blatt, das nicht im Kostenstellenformat ist (kein „Nr.“ in B4, keine Kostenstelle in B2 oder keine Spalte des Basisjahrs in Zeile 4), etwa Annahmen oder Übersichten. Jedes übersprungene Blatt nennt es mit Grund in der Ausgabe. Je Kostenstellenblatt liest es B2 (Kostenstelle = ObjektID), C2 (Objektname) und aus der Spalte des Basisjahrs die BWA-Zeilen 1020 (Miete), 1090 (weitere Einnahmen), 1250 (Erhaltung) sowie 1100–1220 und 1260 (weitere Ausgaben). Die Datei muss in Excel gespeichert sein, damit berechnete Werte vorliegen. Steuerliche Stammdaten (AK, Kaufjahr, AfA, Restbuchwert) kommen nicht aus diesen Blättern; solange sie fehlen, meldet die Statusspalte „Pflichtfeld fehlt“.
 

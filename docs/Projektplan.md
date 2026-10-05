@@ -124,6 +124,8 @@ In Etappen, jede mit prüfbarem Zwischenstand. Erst wenn eine Etappe an einem Ob
 8. **Szenariovergleich:** A gegen B über 20 Jahre. Prüfbar: beide Pfade nachvollziehbar.
 9. **VBA-Steuerung und Prüfungen:** erst wenn die Formeln stehen. Prüfbar: Objekt anlegen und Szenario wechseln ohne Formelbruch.
 
+Dazu kommt die Ausgabe im DATEV-BWA-Format mit dem Sonderbereich Verkauf und Kauf (Abschnitt 18). Sie baut auf Etappe 8 auf und zieht Teile der Finanzierung vor (Restschuld, Darlehen für die Reinvestition).
+
 Erst nach Etappe 9 folgt die zweite Stufe mit der Finanzierung.
 
 ## 7. Testfälle und Abnahme
@@ -595,9 +597,18 @@ Die Zeilen folgen der DATEV-BWA Form 01 (Kurzfristige Erfolgsrechnung). Die Numm
 | --- | --- |
 | B2 | Kostenstelle, z. B. „KSt 1“ |
 | C2 | Objektbezeichnung, z. B. „KC 24+26“ |
-| Zeile 4 | Kopf: B „Nr.“, C „Bezeichnung kurz“, F Vorjahr (2025), G–R Monate 2026, S Summe 2026, T–AM Jahre 2027–2046 |
+| Zeile 4 | Kopf: B „Nr.“, C „Bezeichnung kurz“, danach Jahres- und Monatsspalten (siehe unten) |
 | ab Zeile 6 | eine Zeile je BWA-Position, Schlüssel ist die Nummer in Spalte B |
 | G–R | Ist-Werte bis zum letzten gebuchten Monat, danach Hochrechnung per Mittelwert |
+
+Zwei Kopfvarianten kommen vor, die Einleseschicht liest beide:
+
+| Variante | Spalten in Zeile 4 |
+| --- | --- |
+| erstes Muster | F 2025, G–R Monate 2026, S 2026, T–AM 2027–2046 (Jahre als Zahl) |
+| Planungsreferenz (Zielbild, Abschnitt 18) | F „Jahr 2024“, G „Jahr 2025“, H–S Monate 2026 als Datum, T „Jahr 2026“, U „Plan 2027“, V–AN 2028–2046 |
+
+Eine Spalte gilt als Jahresspalte, wenn der Kopf eine Jahreszahl ist oder „Jahr 2026“ bzw. „Plan 2027“ lautet. Monatsspalten (Datum) werden nie als Jahr gelesen. Ein Summenblatt über alle Kostenstellen (B2 nur „KSt“ oder C2 „Alle Objekte“) wird übersprungen, damit es nicht als eigenes Objekt zählt.
 
 Für das Modell relevante BWA-Zeilen (über die Nummer in Spalte B suchen, nicht über die Zeilennummer):
 
@@ -662,3 +673,93 @@ Vollständige Liste der Felder, die das Modell pro Objekt braucht, mit Quelle. S
 **Hinweis**
 
 Die Trennung AK Gebäude zu Grund und Boden ist das kritischste Feld. Fehlt sie, lassen sich weder AfA noch § 6b sauber rechnen. Falls das Anlageverzeichnis sie nicht ausweist, muss der Kaufpreis nachträglich aufgeteilt werden, etwa nach Bodenrichtwert oder BMF-Arbeitshilfe.
+
+## 18. Zielstruktur: Ausgabe im DATEV-BWA-Format, Sonderbereich Verkauf und Kauf
+
+Festgehalten nach Rückmeldung der Kanzlei (Oktober 2026), Grundlage ist die Datei „Planungsreferenz.xlsx“. Die Datei enthält Mandantenzahlen und liegt deshalb nicht im Repository. Die Struktur ist hier beschrieben und als Vorlage mit erfundenen Werten nachgebaut.
+
+**Grundsatz**
+
+- Die Datenquelle ist die DATEV-BWA-Kostenstellenblattsammlung (Form 01), ein Blatt je Kostenstelle. Das ist das Zielbild für das Kostenstellenformat.
+- Die Ergebnisse sollen wieder in derselben Struktur stehen: je Kostenstelle ein Blatt mit denselben BWA-Zeilen, die Planjahre rechts neben den Ist-Werten, dazu ein Summenblatt „Alle Objekte“.
+- Verkauf und Kauf werden als Sonderbereich geführt, jeweils mit einer Ergebnissicht und einer Detailsicht.
+
+**Vorlage**
+
+`python -m prognosemodell.vorlagen` schreibt `vorlagen/Kostenstellen_BWA_Vorlage.xlsx`: Summenblatt „Alle Objekte“ (B2 „KSt“) und die Blätter „KSt 1“ und „KSt 2“ mit erfundenen Werten. Miete und Erhaltung von KSt 1 entsprechen dem Testobjekt.
+
+| Bereich | Inhalt |
+| --- | --- |
+| B2, C2 | Kostenstelle, Bezeichnung |
+| Zeile 4 | B „Nr.“, C „Bezeichnung kurz“, F „Jahr 2024“, G „Jahr 2025“, H–S Monate 2026, T „Jahr 2026“, U „Plan 2027“, V–AN 2028–2046 |
+| ab Zeile 6 | BWA-Zeilen 1010 bis 1380 in der Reihenfolge der Referenz, auch die Leerzeilen mit Nummer |
+| U–AN | Planjahre, in der Vorlage leer; gelb = hier schreibt das Modell |
+
+Das Prüfskript `pruefen_einlesen` liest die Vorlage ein: Basisjahr aus „Jahr 2026“, Summenblatt übersprungen, Planspalten als Jahr erkannt.
+
+**Ausgabe in die Planspalten (geplant)**
+
+Das Modell schreibt je Kostenstelle und Planjahr in die BWA-Zeilen. Die Summenzeilen bleiben Formeln wie in der BWA.
+
+| BWA-Nr. | Planwert |
+| --- | --- |
+| 1020 | Miete aus der Prognose |
+| 1090 | weitere Einnahmen |
+| 1100–1220, 1260 | je Kostenart der Wert des Basisjahrs, fortgeschrieben mit `par_Kostensteig`; Summe = weitere Ausgaben |
+| 1240 | AfA aus der Fortschreibung (Steuerbilanz) |
+| 1250 | Erhaltung |
+| 1310, 1322 | Zinsaufwand ab Stufe 2; Zinsertrag aus der Alternativanlage (Etappe 8), nur im Summenblatt |
+| 1355 | Steuer aus dem Blatt Liquidität, nur im Summenblatt (die Steuer entsteht bei der GmbH, nicht je Kostenstelle) |
+| 1051–1092, 1280–1380 | Summenformeln |
+
+Ein verkauftes Objekt hat ab dem Folgejahr leere Planspalten, ein Neuobjekt bekommt ein eigenes Kostenstellenblatt ab dem Kaufjahr.
+
+**Sonderbereich Verkauf und Kauf**
+
+Je Vorgang gibt es zwei Sichten. In der Referenz stehen sie rechts neben der BWA (ab Spalte AP); im Modell werden sie ein eigenes Blatt.
+
+*Ergebnissicht („Für Berichterstattung“), je Vorgang eine Spalte:*
+
+| Zeile | Inhalt |
+| --- | --- |
+| Bewertung/Erlös | Verkaufspreis |
+| Reinvestition | Kaufpreis des Neuobjekts |
+| Kapitalanlage | freie Mittel in der Alternativanlage |
+| Übertrag § 6b EStG | übertragene Rücklage (negativ) |
+| Restschuld aktuell / nach Umstrukturierung | Darlehen vor dem Verkauf, Finanzierung danach |
+| Vergleich Ausgangsfall gegen Alternative | Mietertrag netto, Kapitalertrag, Aufwand (Nebenkosten neutralisiert), vorläufiges Ergebnis, liquider Überschuss vor Steuern, Steuern ca., liquider Überschuss nach Steuern |
+
+*Detailsicht („Einzelauflistung“), je verkaufter bzw. gekaufter Kostenstelle:*
+
+- Veräußerungspreis, aufgeteilt nach G+B und Gebäude (Anteil in Prozent), abzüglich Veräußerungskosten und Buchwert je Teil, ergibt den Veräußerungsgewinn je Teil.
+- Neue Mittel: Mietertrag des Neuobjekts (Rendite auf den Kaufpreis), Eigenkapital (= Buchwert-Rückfluss), abzüglich Restschuld, ergibt die Anlage mit ihrer Rendite.
+- Reinvestition: Kaufpreis, Übertrag § 6b, AfA-Bemessungsgrundlage, AfA Steuerbilanz, AfA Handelsbilanz, Finanzierung mit Zins und Tilgung.
+- Planung Ausgangsfall gegen Fall, je Handels- und Steuerbilanz: Mieten, Mietnebenkosten, Zinsertrag, Aufwendungen, Abschreibungen, Zinsen, vorläufiges Ergebnis, Tilgungen, AfA zurück, Cash Flow. Die Kostenzeilen des Ausgangsfalls kommen aus dem BWA-Blatt der verkauften Kostenstelle.
+
+**Rechenwege der Referenz (nachgerechnet)**
+
+| Größe | Rechnung in der Referenz |
+| --- | --- |
+| Aufteilung Erlös | G+B 40 %, Gebäude 60 % des Veräußerungspreises |
+| Veräußerungsgewinn | je Teil Erlösanteil − Buchwert; gesamt Preis − Buchwert |
+| Eigenkapital | = Buchwert-Rückfluss (Preis − Gewinn) |
+| Anlage | Eigenkapital − Restschuld; Rendite 3 % |
+| Mietertrag Neuobjekt | Kaufpreis × 3 % |
+| Aufwendungen Neuobjekt | 5 % des Mietertrags |
+| AfA-Bemessungsgrundlage | Reinvestition − Übertrag § 6b (Übertrag auf die gesamten AK, ohne Trennung Gebäude/G+B) |
+| Finanzierung | = AfA-Bemessungsgrundlage, also der Teil der Reinvestition, den der Gewinn nicht deckt; Zins 3,5 %, Tilgung 2 % |
+| AfA Steuerbilanz | AfA-Bemessungsgrundlage × 5 % degressiv |
+| AfA Handelsbilanz | 75 % der AK (geschätzter Gebäudeanteil) × 2 % linear, ohne § 6b-Kürzung |
+| Aufwand neutralisiert | Aufwendungen + Mietnebenkosten (Umlagen gegen Aufwand) + AfA + Zinsen |
+| Cash Flow | vorläufiges Ergebnis − Tilgung + AfA |
+| Steuern ca. Ausgangsfall | 45 % des vorläufigen Ergebnisses |
+
+**Abweichungen zum bisherigen Modell, offen zu klären**
+
+- [ ] **Handels- und Steuerbilanz:** Das Modell rechnet nur die Steuerbilanz. Die Referenz zeigt beide; in der Handelsbilanz gibt es keinen § 6b-Abzug. Soll die HB-Sicht mitgeführt werden (zweite AfA-Spalte je Objekt)?
+- [ ] **Degressive AfA 5 %** für das Neuobjekt: im Modell bisher nur linear.
+- [ ] **Übertrag auf die gesamten AK:** Die Referenz kürzt die AfA-Basis um den ganzen Übertrag. Das Modell trennt Gebäude- und G+B-Gewinn nach § 6b Abs. 1 (G+B-Gewinn zuerst auf G+B). Ergebnis gleich, solange G+B-Gewinn auf das Gebäude passt; die AfA-Basis unterscheidet sich, wenn das Neuobjekt einen G+B-Anteil hat.
+- [ ] **Finanzierung und Restschuld:** In der Referenz schon Teil der Rechnung (Ablösung der Restschuld, Darlehen für den nicht gedeckten Teil). Im Plan war das Stufe 2; für den Sonderbereich wird es vorgezogen.
+- [ ] **Mietnebenkosten:** Die Referenz neutralisiert Umlagen gegen den Aufwand. Im Modell zählt BWA 1020 komplett als Miete. Klären, auf welchem Konto oder welcher BWA-Zeile die Umlagen stehen.
+- [ ] **Steuersatz:** Die Referenz rechnet mit etwa 45 %, das Parameterblatt mit 30 % (GmbH ohne erweiterte Kürzung wäre rund 30 %). Die 45 % der Alternative lassen sich nicht aus den angezeigten Werten herleiten.
+- [ ] **Zeitpunkt:** Die Referenz vergleicht ein Jahr (Basis 2025) statisch; das Modell rechnet 20 Jahre. Die Ergebnissicht zeigt deshalb das erste volle Jahr nach dem Vorgang und zusätzlich das Endvermögen nach 20 Jahren.
