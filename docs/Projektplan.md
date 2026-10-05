@@ -453,6 +453,37 @@ Das Modell speist sich aus zwei getrennten Quellen, weil die laufende Buchhaltun
 - Herkunft: idealerweise das Anlageverzeichnis; sonst einmalig von Hand gepflegt, da selten änderlich.
 - Grund: ohne diese Werte sind weder AfA-Fortschreibung noch § 6b-Aufteilung möglich.
 
+**Layout eines Kostenstellenblatts (Muster liegt vor)**
+
+Die Zeilen folgen der DATEV-BWA Form 01 (Kurzfristige Erfolgsrechnung). Die Nummern in Spalte B sind BWA-Zeilennummern, keine Sachkonten. Die BWA ist kontenrahmenunabhängig; ob dahinter SKR03 oder SKR04 gebucht wird, geht aus dem Blatt nicht hervor.
+
+| Zelle/Bereich | Inhalt |
+| --- | --- |
+| B2 | Kostenstelle, z. B. „KSt 1“ |
+| C2 | Objektbezeichnung, z. B. „KC 24+26“ |
+| Zeile 4 | Kopf: B „Nr.“, C „Bezeichnung kurz“, F Vorjahr (2025), G–R Monate 2026, S Summe 2026, T–AM Jahre 2027–2046 |
+| ab Zeile 6 | eine Zeile je BWA-Position, Schlüssel ist die Nummer in Spalte B |
+| G–R | Ist-Werte bis zum letzten gebuchten Monat, danach Hochrechnung per Mittelwert |
+
+Für das Modell relevante BWA-Zeilen (über die Nummer in Spalte B suchen, nicht über die Zeilennummer):
+
+| BWA-Nr. | Bezeichnung | Verwendung im Modell |
+| --- | --- | --- |
+| 1020 | Umsatzerlöse | Miete im Basisjahr |
+| 1090 | So. betr. Erlöse | weitere laufende Einnahmen |
+| 1100–1220, 1260 | Personal, Raum, betr. Steuern, Versicherungen, Kfz, Werbung, Warenabgabe, Sonstige | weitere laufende Ausgaben |
+| 1240 | Abschreibungen | Abgleich mit der AfA-Fortschreibung, nicht als Eingabe |
+| 1250 | Reparatur/Instandh. | Erhaltungsaufwand im Basisjahr |
+| 1310, 1322 | Zinsaufwand, Zinserträge | erst Stufe 2 (Finanzierung) |
+| 1300, 1345, 1380 | Betriebsergebnis, Ergebnis vor Steuern, Vorläufiges Ergebnis | Plausibilisierung |
+
+Auffälligkeiten im Muster, vor dem Einlesen mit der Kanzlei klären:
+
+- Zeile 1090 (O14): `AVERAGE(F14:M14)` schließt die Vorjahressumme in Spalte F ein und rechnet gleitend; die übrigen Zeilen mitteln über G:N.
+- Zeile 1100 (O19–R19): gleitender Mittelwert mit wechselnden Bereichen statt fester Basis.
+- Zeile 1312, 1322, 1323: September (O) ohne Formel, Oktober bis Dezember mitteln über G:O.
+- Zeile 1310: Juli (M33) ohne Zinsaufwand, alle anderen Monate rund 2.600.
+
 **Austauschbare Einleseschicht**
 
 Wie bei der Pillar-2-Pipeline kapselt ein eigenes Modul das Einlesen. Ändert sich das Quellformat, wird nur diese Schicht angepasst, nicht der Rest.
@@ -461,7 +492,8 @@ Wie bei der Pillar-2-Pipeline kapselt ein eigenes Modul das Einlesen. Ändert si
 
 - [ ] Gibt es ein Anlageverzeichnis mit Anschaffungskosten und Buchwerten je Objekt?
 - [ ] Ist darin die Aufteilung Gebäude zu Grund und Boden schon enthalten?
-- [ ] Haben die Kostenstellenblätter ein einheitliches Layout mit fester ObjektID?
+- [x] Haben die Kostenstellenblätter ein einheitliches Layout mit fester ObjektID? Muster liegt vor (B2 Kostenstelle, C2 Objekt), Einheitlichkeit über alle Blätter noch bestätigen.
+- [ ] Welcher Kontenrahmen (SKR03 oder SKR04) wird gebucht? Für die BWA-Werte egal, relevant erst beim Abgleich mit Sachkonten.
 
 ## 17. Datenbedarf je Objekt
 
