@@ -11,7 +11,8 @@ from openpyxl.worksheet.datavalidation import DataValidation
 from . import formeln
 from .modelle import (FMT_EURO, FMT_JAHR, FMT_PROZENT, FMT_ZAHL, MAX_OBJEKTE, MAX_VERKAEUFE, OBJEKT_FELDER,
                       PARAMETER, PROGNOSE_SPALTEN, STATUS_NAME, STATUS_UEBERSCHRIFT,
-                      VERKAUF_FELDER, VERKAUF_STATUS_NAME, Modell, prognosejahre)
+                      VERKAUF_FELDER, VERKAUF_SPALTEN, VERKAUF_STATUS_NAME, Modell,
+                      prognosejahre)
 
 HINWEIS_FINANZIERUNG = "Alle Werte vor Finanzierung (ohne Zins und Tilgung)."
 
@@ -153,44 +154,60 @@ def _blatt_prognose(wb) -> None:
 
 
 def _blatt_verkaeufe(wb, modell: Modell) -> None:
-    """Geplante Verkäufe; ein Objekt ist ab dem Jahr nach dem Verkauf inaktiv."""
+    """Geplante Verkäufe: Eingaben, Aufteilung des Erlöses und Gewinn je Gebäude und G+B."""
     ws = wb.create_sheet("Verkäufe")
     erste, letzte = 2, MAX_VERKAEUFE + 1
-    status_spalte = len(VERKAUF_FELDER) + 1
+    spalten = VERKAUF_FELDER + VERKAUF_SPALTEN
+    status_spalte = len(spalten) + 1
     st = get_column_letter(status_spalte)
-    _kopf(ws, 1, [f.ueberschrift for f in VERKAUF_FELDER] + [STATUS_UEBERSCHRIFT])
-    ws.row_dimensions[1].height = 32
+    _kopf(ws, 1, [s.ueberschrift for s in spalten] + [STATUS_UEBERSCHRIFT])
+    ws.row_dimensions[1].height = 45
 
+    for i, s in enumerate(spalten, start=1):
+        bst = get_column_letter(i)
+        ws.column_dimensions[bst].width = s.breite
+        _name(wb, s.name, f"'Verkäufe'!${bst}${erste}:${bst}${letzte}")
     for i, f in enumerate(VERKAUF_FELDER, start=1):
         bst = get_column_letter(i)
-        ws.column_dimensions[bst].width = f.breite
-        _name(wb, f.name, f"'Verkäufe'!${bst}${erste}:${bst}${letzte}")
         _validierung(ws, f, f"{bst}{erste}:{bst}{letzte}")
+        if f.auswahl:
+            dv = DataValidation(type="list", formula1='"' + ",".join(f.auswahl) + '"',
+                                allow_blank=True)
+            ws.add_data_validation(dv)
+            dv.add(f"{bst}{erste}:{bst}{letzte}")
     # ObjektID als Auswahl aus dem Objektblatt
     dv = DataValidation(type="list", formula1="obj_ID", allow_blank=True)
     ws.add_data_validation(dv)
     dv.add(f"A{erste}:A{letzte}")
 
-    ws.column_dimensions[st].width = 30
+    ws.column_dimensions[st].width = 34
     _name(wb, VERKAUF_STATUS_NAME, f"'Verkäufe'!${st}${erste}:${st}${letzte}")
-    sp_id, sp_jahr = get_column_letter(1), get_column_letter(2)
     for zeile in range(erste, letzte + 1):
         for i, f in enumerate(VERKAUF_FELDER, start=1):
             c = ws.cell(row=zeile, column=i)
             c.number_format = f.format
             c.fill = FILL_EINGABE
-        c = ws.cell(row=zeile, column=status_spalte,
-                    value=formeln.status_verkauf(zeile, sp_id, sp_jahr))
+        rechnung = formeln.verkauf_zeile(zeile)
+        for i, s in enumerate(VERKAUF_SPALTEN, start=len(VERKAUF_FELDER) + 1):
+            c = ws.cell(row=zeile, column=i, value=rechnung[s.key])
+            c.number_format = s.format
+            c.fill = FILL_BERECHNET
+        c = ws.cell(row=zeile, column=status_spalte, value=formeln.status_verkauf(zeile))
         c.fill = FILL_BERECHNET
     _status_rot(ws, f"{st}{erste}:{st}{letzte}", f"{st}{erste}")
 
     for zeile, vk in enumerate(modell.verkaeufe, start=erste):
         for i, f in enumerate(VERKAUF_FELDER, start=1):
-            ws.cell(row=zeile, column=i, value=getattr(vk, f.key))
+            wert = getattr(vk, f.key)
+            if wert is not None:
+                ws.cell(row=zeile, column=i, value=wert)
 
-    ws["E1"] = "Verkauf zum Jahresende: Miete und AfA laufen im Verkaufsjahr noch, ab dem Folgejahr ist das Objekt inaktiv."
-    ws["E2"] = "Verkaufspreis, Kosten und Veräußerungsgewinn folgen in Etappe 4."
-    ws.freeze_panes = "A2"
+    hinweis = get_column_letter(status_spalte + 2)
+    ws[f"{hinweis}1"] = ("Verkauf zum Jahresende: Miete und AfA laufen im Verkaufsjahr noch, "
+                         "ab dem Folgejahr ist das Objekt inaktiv.")
+    ws[f"{hinweis}2"] = ("Aufteilung des Nettoerlöses: Anteil G+B laut Kaufvertrag, "
+                         "sonst 1 − Verkehrswertanteil Gebäude aus dem Objektblatt.")
+    ws.freeze_panes = "B2"
 
 
 def _blatt_uebersicht(wb) -> None:

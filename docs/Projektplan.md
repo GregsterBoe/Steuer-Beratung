@@ -69,13 +69,14 @@ Vier Rechenbausteine, alle als Zellformeln. Die Notation unten ist fachlich, in 
 - Restbuchwert gesamt = Buchwert Gebäude + AK G+B
 - Veräußerungsgewinn = Verkaufspreis − Verkaufskosten − Restbuchwert gesamt
 - Gewinn Gebäude = Erlösanteil Gebäude − Buchwert Gebäude; Gewinn G+B = Erlösanteil G+B − AK G+B
-- Erlösanteile werden im gleichen Verhältnis wie die Buchwerte oder per Verkehrswert aufgeteilt (Parameter)
+- Erlösanteile werden nach dem Anteil G+B laut Kaufvertrag aufgeteilt, ersatzweise nach dem Verkehrswertanteil aus dem Objektblatt (keine Aufteilung nach Buchwerten, siehe Abschnitt 11)
 
 **Rücklagenspiegel § 6b**
 
 - Bei 6b-Nutzung = ja und Vorbesitzzeit ≥ 6 Jahre: Rücklage = Veräußerungsgewinn, getrennt nach G+B und Gebäude
 - Fristjahr = Verkaufsjahr + 4
-- Übertrag im Kaufjahr eines Neuobjekts: Gebäudegewinn nur auf Gebäudeanteil, G+B-Gewinn auf beides
+- Übertrag im Kaufjahr eines Neuobjekts: Gebäudegewinn nur auf Gebäudeanteil, G+B-Gewinn auf beides (§ 6b Abs. 1 EStG)
+- Reihenfolge: Gebäudegewinn auf neues Gebäude, G+B-Gewinn zuerst auf neuen G+B (kostet keine AfA), nur der Rest auf das Gebäude (Abschnitt 13)
 - Neue AfA-Basis Gebäude = Gebäude-AK Neuobjekt − übertragener Gebäudegewinn
 - Nicht genutzt bis Fristjahr: Auflösung + 6 % × Jahre als Ertrag
 
@@ -132,9 +133,10 @@ Jeder Testfall ist eine Rechnung von Hand, gegen die das Blatt geprüft wird.
 | --- | --- | --- |
 | AfA-Ende | Gebäude 800.000, 2,5 %, Kauf 2007, Restbuchwert 2026 400.000 | Buchwert Ende 2046 null, AfA danach 0 |
 | AfA läuft im Raster aus | Gebäude 800.000, 2 %, Restbuchwert 2026 50.000 | AfA 2030 nur 2.000, ab 2031 AfA und Buchwert 0, Miete läuft weiter |
-| Verkauf mit Gewinn | Preis 1,4 Mio, Buchwert 680.000, Kosten 0 | Gewinn 720.000 |
+| Verkauf mit Gewinn | Preis 1,4 Mio, Buchwert 680.000, Kosten 0, hälftig | Gewinn 720.000, davon Gebäude 220.000, G+B 500.000 |
 | Rücklage voll | 6b ja, Gewinn 720.000 | Steuer im Verkaufsjahr 0, Rücklage 720.000 |
-| Übertrag | Neuobjekt Gebäude-AK 900.000 | AfA-Basis 900.000 minus Gebäudegewinn |
+| Verkauf mit Kaufvertragsaufteilung | Preis 1,4 Mio, Kosten 40.000, 30 % G+B, Verkauf Ende 2030 | Gewinn Gebäude 536.000, G+B 208.000 |
+| Übertrag | Rücklage Gebäude 220.000, G+B 500.000; Neuobjekt G+B 360.000, Gebäude 840.000 | AfA-Basis 480.000, AK G+B 0 (G+B-Gewinn zuerst auf G+B) |
 | Frist verpasst | keine Reinvestition bis Fristjahr | Auflösung + 6 % je Jahr |
 | Szenariovergleich | A gegen B, gleiche Objekte | zwei Endvermögen, Differenz nachvollziehbar |
 
@@ -249,53 +251,64 @@ So wird jede Änderung an den Formel-Bausteinen automatisch gegen alle sechs Fä
 
 ## 11. Verkauf (Etappe 4)
 
-Im Verkaufsjahr wird der Erlös in den steuerneutralen Buchwert-Rückfluss und den steuerpflichtigen Gewinn zerlegt, getrennt nach Gebäude und Grund und Boden. Ab dem Folgejahr ist das Objekt inaktiv; das aktiv-Flag aus Etappe 2 schaltet es ab.
+Im Verkaufsjahr wird der Erlös in den steuerneutralen Buchwert-Rückfluss und den steuerpflichtigen Gewinn zerlegt, getrennt nach Gebäude und Grund und Boden. Verkauft wird zum Jahresende: Miete und AfA laufen im Verkaufsjahr noch, ab dem Folgejahr ist das Objekt inaktiv.
 
-**Spaltenlayout Blatt Verkäufe**
+**Spaltenlayout Blatt Verkäufe (umgesetzt)**
 
-| Spalte | Feld | Quelle |
-| --- | --- | --- |
-| A | ObjektID | aus Objekte |
-| B | Verkaufsjahr | Eingabe |
-| C | Verkaufspreis | Eingabe, oder Faktor × Jahresmiete |
-| D | Verkaufskosten | Eingabe |
-| E | Aufteilungsmethode | Dropdown: Buchwert oder Verkehrswert |
-| F | 6b-Nutzung | Dropdown: ja oder nein |
-| G | Buchwert Gebäude im Verkaufsjahr | Formel, aus Prognose |
-| H | Erlösanteil Gebäude | Formel |
-| I | Gewinn Gebäude | Formel |
-| J | Gewinn G+B | Formel |
-| K | Veräußerungsgewinn gesamt | Formel |
+| Spalte | Feld | Name | Quelle |
+| --- | --- | --- | --- |
+| A | ObjektID | vk\_ID | Eingabe, Auswahl aus Objekte |
+| B | Verkaufsjahr | vk\_Jahr | Eingabe |
+| C | Verkaufspreis | vk\_Preis | Eingabe |
+| D | Verkaufskosten | vk\_Kosten | Eingabe, leer = 0 |
+| E | Anteil G+B lt. Kaufvertrag | vk\_AnteilGuBVertrag | Eingabe, optional |
+| F | § 6b nutzen | vk\_6b | Dropdown ja/nein, wirkt ab Etappe 5 |
+| G | Vorbesitzzeit Jahre | vk\_Vorbesitz | Verkaufsjahr − Kaufjahr |
+| H | Buchwert Gebäude Ende Verkaufsjahr | vk\_BuchwertGeb | SUMIFS über prg\_Buchwert |
+| I | AK G+B | vk\_AKGuB | aus Objekte |
+| J | Nettoerlös | vk\_Nettoerloes | C − D |
+| K | Anteil G+B verwendet | vk\_AnteilGuB | E, sonst 1 − Verkehrswertanteil Gebäude |
+| L | Erlösanteil Gebäude | vk\_ErloesGeb | J − M |
+| M | Erlösanteil G+B | vk\_ErloesGuB | J × K |
+| N | Gewinn Gebäude | vk\_GewinnGeb | L − H |
+| O | Gewinn G+B | vk\_GewinnGuB | M − I, G+B wird nicht abgeschrieben |
+| P | Veräußerungsgewinn | vk\_Gewinn | N + O |
+| Q | Status | vk\_Status | Plausibilität |
 
-**Formeln (Beispiel Zeile 2)**
-
-Den Buchwert des Gebäudes im Verkaufsjahr holt sich die Zeile aus der Prognosematrix, über ObjektID und Verkaufsjahr.
-
-```text
-G2  =SUMMEWENNS(Prognose!G:G; Prognose!A:A; A2; Prognose!B:B; B2)
-```
-
-Der Erlös wird aufgeteilt. Bei Methode Buchwert nach dem Verhältnis der Buchwerte, bei Verkehrswert nach einem separat gepflegten Anteil.
+**Formeln (Zeile 2, englische Syntax wie in der Mappe)**
 
 ```text
-H2  =WENN(E2="Buchwert"; (C2-D2) * G2/(G2+SVERWEIS(A2;obj_Basis;SPALTE_AKGuB;FALSCH)); (C2-D2)*SVERWEIS(A2;obj_Basis;SPALTE_VKQuoteGeb;FALSCH))
+H2  =SUMIFS(prg_Buchwert, prg_ID, A2, prg_Jahr, B2)
+K2  =IF(E2<>"", E2, IF(INDEX(obj_VKQuoteGeb, MATCH(A2,obj_ID,0))="", "", 1-INDEX(obj_VKQuoteGeb, MATCH(A2,obj_ID,0))))
+M2  =J2*K2
+N2  =L2-H2
+O2  =M2-I2
 ```
 
-Der Gewinn je Teil ist der jeweilige Erlösanteil minus Buchwert. Beim Grund und Boden ist der Buchwert die ursprüngliche Anschaffung, da darauf keine AfA läuft.
+Die berechneten Spalten bleiben leer, solange die ObjektID fehlt oder unbekannt ist. Der Buchwert in H ist der Prognosewert am Ende des Verkaufsjahrs, die AfA des Verkaufsjahrs ist also schon abgezogen.
 
-```text
-I2  =H2 - G2
-J2  =((C2-D2) - H2) - SVERWEIS(A2;obj_Basis;SPALTE_AKGuB;FALSCH)
-K2  =I2 + J2
-```
+**Korrektur gegenüber dem ersten Entwurf:** Die Aufteilung nach dem Verhältnis der Buchwerte (früher Parameter par\_Aufteilung) ist entfallen. Steuerlich maßgeblich ist die Aufteilung im Kaufvertrag, solange sie die realen Wertverhältnisse nicht verfehlt, sonst das Verhältnis der Verkehrswerte (BMF-Arbeitshilfe). Die Buchwertmethode hätte den Gewinn proportional zu den Buchwerten verteilt und den G+B-Anteil systematisch zu niedrig angesetzt. Der G+B-Anteil ist aber der flexibel übertragbare Teil (Abschnitt 13), deshalb zählt die Aufteilung für die Optimierung.
 
-**Verknüpfung zur Prognose:** Das aktiv-Flag in Spalte C der Prognose greift bereits auf Verkaeufe Spalte B zu. Damit endet das laufende Ergebnis des Objekts automatisch im Jahr nach dem Verkauf. Der Veräußerungsgewinn K fließt in Etappe 5 in den Rücklagenspiegel oder, bei 6b-Nutzung nein, direkt in die Steuer.
+**Status je Zeile**, in dieser Reihenfolge:
+- ObjektID unbekannt
+- Objekt mehrfach verkauft
+- Verkaufsjahr fehlt
+- Verkaufsjahr außerhalb Raster
+- Verkaufspreis fehlt
+- Aufteilung fehlt: weder Anteil G+B noch Verkehrswertanteil
+- § 6b unzulässig: § 6b ja, aber Vorbesitzzeit < par\_6bVorbesitz
 
-**Abnahme Etappe 4:** Preis 1,4 Mio, Verkaufskosten 0, Buchwert gesamt 680.000 muss einen Veräußerungsgewinn von 720.000 ergeben. Bei hälftiger Aufteilung liegt der Gebäudeanteil des Gewinns korrekt getrennt vom G+B-Anteil vor.
+Weil der Verkauf zum 31.12. gilt, reicht Verkaufsjahr − Kaufjahr ≥ 6 für die sechs Jahre Vorbesitz.
 
-**Vorgezogen für die Übersicht:** Das Blatt Verkäufe besteht vorerst nur aus ObjektID (Auswahl aus dem Objektblatt), Verkaufsjahr und Status. Der Status meldet unbekannte IDs, mehrfache Verkäufe desselben Objekts, ein fehlendes Verkaufsjahr und ein Verkaufsjahr außerhalb des Rasters. Die Spalten ab Verkaufspreis folgen mit dem Rest von Etappe 4.
+**Verknüpfung zur Prognose:** Das aktiv-Flag liest das Verkaufsjahr per INDEX/MATCH aus vk\_Jahr; prg\_Bestand ist schon im Verkaufsjahr 0. Der Veräußerungsgewinn P fließt in Etappe 5 in den Rücklagenspiegel oder, bei § 6b nein, in Etappe 7 direkt in die Steuer. Noch nicht umgesetzt ist ein Verkaufspreis als Faktor × Jahresmiete.
 
-**Übersicht:** Je Jahr zwei Summen über prg\_Verkehrswert. Die Baseline summiert alle Objekte, so als würde nichts verkauft. Der Plan summiert nur die Zeilen mit prg\_Bestand = 1. Das Basisjahr ist die Summe aus obj\_Verkehrswert. Ein Liniendiagramm zeigt beide Reihen. Sobald Neuobjekte (Etappe 6) in der Prognose laufen, gehören sie nur in den Plan. Mit Liquidität (Etappe 7) kommt der Erlös nach Steuer als Vermögensteil dazu; erst dann ist der Vergleich ein Vermögensvergleich und nicht nur ein Bestandsvergleich.
+**Abnahme Etappe 4 (geprüft in `pruefung/pruefen.py`):**
+- Preis 1,4 Mio, Kosten 0, Buchwert gesamt 680.000 (Gebäude 480.000 Ende 2027, G+B 200.000), Verkehrswertanteil Gebäude 50 %:
+  - Veräußerungsgewinn 720.000
+  - davon Gebäude 220.000 und G+B 500.000
+- Kaufvertrag 30 % G+B, Kosten 40.000, Verkauf Ende 2030:
+  - Gewinn Gebäude 536.000
+  - Gewinn G+B 208.000
 
 ## 12. Rücklagenspiegel § 6b (Etappe 5)
 
@@ -342,7 +355,9 @@ L2  =WENN(aktuelles_Jahr>=G2; J2 * 0,06 * 4; 0)
 
 **Wichtige Regel zur Übertragbarkeit:** Der Gebäudegewinn in Spalte E darf nur auf den Gebäudeanteil eines Neuobjekts übertragen werden, der G+B-Gewinn in Spalte F auf Gebäude oder Grund und Boden. Diese Trennung prüft modPruefung in Etappe 9.
 
-**Abnahme Etappe 5:** Veräußerungsgewinn 720.000 bei 6b ja und Vorbesitzzeit mindestens sechs Jahre muss im Verkaufsjahr zu Steuer null führen; die Rücklage steht mit 720.000, getrennt in Gebäude- und G+B-Anteil.
+**Abnahme Etappe 5:** Veräußerungsgewinn 720.000 bei 6b ja und Vorbesitzzeit mindestens sechs Jahre muss im Verkaufsjahr zu Steuer null führen; die Rücklage steht mit 720.000, getrennt in Gebäude 220.000 und G+B 500.000. Nur positive Teilgewinne gehen in die Rücklage.
+
+**Vor Umsetzung klären:** Frist sechs statt vier Jahre, wenn mit dem Bau eines neuen Gebäudes vor Ende des vierten Jahres begonnen wurde (§ 6b Abs. 3). Ob die AK des neuen G+B bis auf null gekürzt werden dürfen.
 
 ## 13. Reinvestition (Etappe 6)
 
@@ -371,18 +386,30 @@ Die Gebäude-Anschaffung ist der Kaufpreis ohne G+B-Anteil, plus die auf das Geb
 H2  =(C2 * (1 - D2) ) + (E2 * (1 - D2))
 ```
 
-Der übertragbare Gewinn kommt aus dem Rücklagenspiegel. Übertragen werden darf höchstens der Gebäudeanteil des Neuobjekts.
+**Übertragung in fester Reihenfolge (korrigiert).** Der erste Entwurf übertrug nur den Gebäudegewinn und nur auf das Gebäude (`I2 = MIN(Rücklage Spalte E; H2)`). Der G+B-Gewinn ging dabei verloren. Richtig nach § 6b Abs. 1 EStG ist: Ein Gebäudegewinn darf nur auf ein Gebäude übertragen werden, ein G+B-Gewinn auf Gebäude oder auf G+B. Steuerlich günstig ist diese Reihenfolge:
 
-```text
-I2  =MIN( SVERWEIS(G2;Ruecklagen!A:E;5;FALSCH); H2 )
-J2  =H2 - I2
-```
+1. **ü1 = MIN(Rücklage Gebäude; AK Gebäude neu).** Der Gebäudegewinn geht auf das neue Gebäude, denn er hat keine andere Verwendung.
+2. **ü2 = MIN(Rücklage G+B; AK G+B neu).** Der G+B-Gewinn geht zuerst auf den neuen G+B. Das kostet keine AfA, die Steuer bleibt bis zum Verkauf des Grundstücks gestundet.
+3. **ü3 = MIN(Rücklage G+B − ü2; AK Gebäude neu − ü1).** Erst der Rest des G+B-Gewinns geht auf das Gebäude und mindert dessen AfA-Basis.
 
-Die neue AfA-Basis J fließt zurück in die Objektlogik: Das Neuobjekt bekommt eine Zeile in der Prognosematrix wie ein Bestandsobjekt, nur dass seine Gebäude-AK der geminderte Wert aus Spalte J ist und die AfA im Kaufjahr beginnt.
+Danach gilt:
+- AfA-Basis Gebäude = AK Gebäude neu − ü1 − ü3
+- steuerliche AK G+B = AK G+B neu − ü2
+- Rücklage Gebäude sinkt um ü1, Rücklage G+B um ü2 + ü3. Was übrig bleibt, wartet auf ein weiteres Neuobjekt oder wird im Fristjahr mit Zuschlag aufgelöst.
 
-**Rückkopplung in den Rücklagenspiegel:** Der übertragene Betrag I landet in Spalte H des Rücklagenspiegels und senkt dort die Restrücklage. Ist die Rücklage voll übertragen, entfällt die spätere Auflösung samt Zuschlag.
+Beispiel: G+B-Gewinn 4, neuer G+B kostet 3. Dann werden 3 beim G+B abgezogen und 1 beim Gebäude.
 
-**Abnahme Etappe 6:** Neuobjekt mit Gebäude-AK 900.000 und übertragenem Gebäudegewinn 720.000 muss eine AfA-Basis von 180.000 ergeben. Die AfA des Neuobjekts läuft ab Kaufjahr von diesen 180.000, nicht von 900.000.
+Spalten statt I und J oben: I ü1, J ü2, K ü3, L AfA-Basis Gebäude, M steuerliche AK G+B.
+
+Die neue AfA-Basis fließt zurück in die Objektlogik: Das Neuobjekt bekommt Zeilen in der Prognosematrix wie ein Bestandsobjekt, mit der geminderten AfA-Basis und AfA ab dem Kaufjahr. Ein Neuobjekt gehört nur in die Plan-Linie der Übersicht, nicht in die Baseline.
+
+**Rückkopplung in den Rücklagenspiegel:** ü1 landet in Spalte H (übertragen Gebäude), ü2 + ü3 in Spalte I (übertragen G+B). Ist die Rücklage voll übertragen, entfallen Auflösung und Zuschlag.
+
+**Abnahme Etappe 6:**
+- Ausgangslage: Rücklage aus dem Abnahmefall der Etappe 4 (Gebäude 220.000, G+B 500.000). Neuobjekt mit Kaufpreis 1,2 Mio, Anteil G+B 30 %, also G+B 360.000 und Gebäude 840.000.
+- Übertragung: ü1 = 220.000, ü2 = 360.000, ü3 = 140.000.
+- Ergebnis: AfA-Basis Gebäude 480.000, steuerliche AK G+B 0, Restrücklage 0.
+- Die AfA des Neuobjekts läuft von 480.000, nicht von 840.000.
 
 ## 14. Liquidität und Auswertung (Etappe 7)
 
