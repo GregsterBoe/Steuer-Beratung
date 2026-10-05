@@ -63,9 +63,15 @@ def _leer_oder(zeile: int, ausdruck: str) -> str:
     return f'=IF({_p("id", zeile)}="","",{ausdruck})'
 
 
-def _indexiert(name: str, satz: str, zeile: int, objekt_nr: int) -> str:
-    return (f"{_stamm(name, objekt_nr)}*(1+{satz})^({_p('jahr', zeile)}-par_Basisjahr)"
-            f"*{_p('aktiv', zeile)}")
+def _indexiert(name: str, satz: str, zeile: int, objekt_nr: int, aktiv: bool = True) -> str:
+    ausdruck = f"{_stamm(name, objekt_nr)}*(1+{satz})^({_p('jahr', zeile)}-par_Basisjahr)"
+    return f"{ausdruck}*{_p('aktiv', zeile)}" if aktiv else ausdruck
+
+
+def _verkaufsjahr(zeile: int) -> str:
+    """Verkaufsjahr laut Blatt Verkäufe; ohne Verkauf 9999, also nie."""
+    treffer = f"INDEX(vk_Jahr,MATCH({_p('id', zeile)},vk_ID,0))"
+    return f'IFERROR(IF({treffer}="",9999,{treffer}),9999)'
 
 
 def prognose_zeile(zeile: int, objekt_nr: int, erstes_jahr: bool) -> dict:
@@ -79,14 +85,14 @@ def prognose_zeile(zeile: int, objekt_nr: int, erstes_jahr: bool) -> dict:
               else _p("buchwert", zeile - 1))
     afa_voll = f"{_stamm('obj_AKGebaeude', objekt_nr)}*{_stamm('obj_AfASatz', objekt_nr)}"
 
-    def indexiert(name, satz):
-        return _leer_oder(zeile, _indexiert(name, satz, zeile, objekt_nr))
+    def indexiert(name, satz, aktiv=True):
+        return _leer_oder(zeile, _indexiert(name, satz, zeile, objekt_nr, aktiv))
 
     return {
         "id": f'=IF({id_obj}="","",{id_obj})',
         "jahr": "=par_Startjahr" if erstes_jahr else f"={_p('jahr', zeile - 1)}+1",
-        # Etappe 4: 0 ab dem Jahr nach dem Verkauf
-        "aktiv": _leer_oder(zeile, "1"),
+        # 0 ab dem Jahr nach dem Verkauf
+        "aktiv": _leer_oder(zeile, f"IF({_p('jahr', zeile)}<={_verkaufsjahr(zeile)},1,0)"),
         "miete": indexiert("obj_MieteBasis", "par_Mietsteig"),
         "einnahmen": indexiert("obj_EinnBasis", "par_Mietsteig"),
         "erhaltung": indexiert("obj_ErhBasis", "par_Erhaltsteig"),
@@ -98,4 +104,20 @@ def prognose_zeile(zeile: int, objekt_nr: int, erstes_jahr: bool) -> dict:
             zeile,
             f"({_p('miete', zeile)}+{_p('einnahmen', zeile)}-{_p('erhaltung', zeile)}"
             f"-{_p('ausgaben', zeile)}-{_p('afa', zeile)})*{_p('aktiv', zeile)}"),
+        "verkehrswert": indexiert("obj_Verkehrswert", "par_Wertsteig", aktiv=False),
+        # Verkauf zum Jahresende: im Verkaufsjahr schon nicht mehr im Bestand
+        "bestand": _leer_oder(zeile, f"IF({_p('jahr', zeile)}<{_verkaufsjahr(zeile)},1,0)"),
     }
+
+
+def status_verkauf(zeile: int, sp_id: str, sp_jahr: str) -> str:
+    """Plausibilitätsstatus je Verkaufszeile; leer, solange keine ObjektID steht."""
+    id_, jahr = f"${sp_id}{zeile}", f"${sp_jahr}{zeile}"
+    return (
+        f'=IF({id_}="","",'
+        f'IF(COUNTIF(obj_ID,{id_})=0,"ObjektID unbekannt",'
+        f'IF(COUNTIF(vk_ID,{id_})>1,"Objekt mehrfach verkauft",'
+        f'IF({jahr}="","Verkaufsjahr fehlt",'
+        f'IF(OR({jahr}<par_Startjahr,{jahr}>par_Endjahr),"Verkaufsjahr außerhalb Raster",'
+        f'"OK")))))'
+    )

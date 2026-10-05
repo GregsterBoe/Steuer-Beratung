@@ -66,7 +66,7 @@ PARAMETER = [
 
 @dataclass(frozen=True)
 class Feld:
-    """Eine Spalte des Objektblatts."""
+    """Eine Spalte eines Eingabeblatts (Objekte, Verkäufe)."""
     key: str
     ueberschrift: str
     name: str            # benannter Bereich über die Spalte
@@ -126,7 +126,20 @@ PROGNOSE_SPALTEN = [
     Spalte("afa", "AfA Gebäude", "prg_AfA", FMT_EURO),
     Spalte("buchwert", "Buchwert Gebäude Ende", "prg_Buchwert", FMT_EURO, 16),
     Spalte("ergebnis", "Ergebnis vor Finanzierung", "prg_Ergebnis", FMT_EURO, 16),
+    # Wertentwicklung bei Halten, unabhängig vom Verkauf (Baseline der Übersicht)
+    Spalte("verkehrswert", "Verkehrswert Ende", "prg_Verkehrswert", FMT_EURO, 16),
+    # 1 = Objekt am Jahresende noch im Bestand; im Verkaufsjahr schon 0 (Verkauf zum Jahresende)
+    Spalte("bestand", "im Bestand Ende", "prg_Bestand", FMT_ZAHL, 10),
 ]
+
+# Blatt Verkäufe: vorerst nur ObjektID und Verkaufsjahr; Preis, Kosten und Gewinn folgen in Etappe 4
+MAX_VERKAEUFE = 50
+VERKAUF_FELDER = [
+    Feld("objekt_id", "ObjektID", "vk_ID", FMT_TEXT, True, 14),
+    Feld("jahr", "Verkaufsjahr", "vk_Jahr", FMT_JAHR, True, 12,
+         minimum=1900, maximum=2100, ganzzahl=True),
+]
+VERKAUF_STATUS_NAME = "vk_Status"
 
 
 def prognosejahre() -> int:
@@ -153,5 +166,13 @@ class Objekt:
 
 
 @dataclass
+class Verkauf:
+    """Geplanter Verkauf zum Ende des Verkaufsjahrs."""
+    objekt_id: str
+    jahr: Optional[int]
+
+
+@dataclass
 class Modell:
     objekte: list = field(default_factory=list)
+    verkaeufe: list = field(default_factory=list)

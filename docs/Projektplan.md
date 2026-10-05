@@ -46,6 +46,7 @@ Acht Blätter, getrennt nach Eingabe, Rechnung und Ausgabe. Eingabeblätter sind
 | Rücklagen | Rechnung | RücklageID, Verkaufsjahr, Betrag G+B, Betrag Gebäude, Fristjahr, Übertrag, Auflösung, Zuschlag | § 6b-Spiegel je Rücklage |
 | Liquidität | Rechnung | Jahr, Buchwert-Rückfluss, Steuer, Eigenkapital Reinvest, Alternativanlage | Geldfluss je Jahr |
 | Auswertung | Ausgabe | Jahr, Gesamt-GuV, Steuer, stille Reserven, Szenariovergleich | Kennzahlen und Vergleich |
+| Übersicht | Ausgabe | Jahr, Verkehrswert Baseline, Verkehrswert Plan, Differenz, Diagramm | Gesamtwert des Bestands im Jahresverlauf, Plan gegen Nichtstun |
 
 Konvention: ObjektID ist der Schlüssel, der Objekte, Verkäufe, Rücklagen und Prognose verbindet. Neuobjekte bekommen eine eigene ID, laufen in der Prognose aber in derselben Matrix.
 
@@ -165,9 +166,11 @@ Eine Zeile je Objekt und Jahr, das sogenannte Long-Format. Es ist mit SUMMEWENNS
 | I | Buchwert Gebäude Ende | Formel |
 | J | Ergebnis vor Finanzierung | Formel |
 
+Zusätzlich für die Übersicht: K Verkehrswert Ende (prg\_Verkehrswert, Verkehrswert aktuell × (1 + par\_Wertsteig)^(Jahr − Basisjahr), unabhängig vom Verkauf) und L im Bestand Ende (prg\_Bestand, 1 solange Jahr < Verkaufsjahr).
+
 Die Spalten tragen benannte Bereiche (prg\_ID, prg\_Jahr, prg\_Aktiv, prg\_Miete, prg\_Einnahmen, prg\_Erhaltung, prg\_Ausgaben, prg\_AfA, prg\_Buchwert, prg\_Ergebnis) für die SUMMEWENNS der späteren Etappen.
 
-**Umsetzung (Etappe 2):** Jede Zeile des Objektblatts hat im Prognoseblatt einen festen Block mit einer Zeile je Prognosejahr (200 Objektzeilen × 20 Jahre). Die Stammdaten kommen per INDEX(obj\_…; n) direkt aus Objektzeile n statt per SVERWEIS über die ObjektID; so greift auch bei doppelter ID jeder Block auf seine eigene Zeile, und die Statusspalte meldet die Dopplung. Der Buchwert des Vorjahres ist die Zeile darüber, im ersten Jahr der Restbuchwert aus dem Objektblatt; die SUMMEWENNS-Variante unten ist damit nicht nötig. Leere Objektzeilen ergeben leere Prognosezeilen. Das aktiv-Flag ist bis Etappe 4 immer 1. Die Indexierung aus Etappe 3 ist bereits enthalten. Das Raster hat fest par\_Prognosejahre Zeilen je Objekt, wie beim Generieren eingestellt.
+**Umsetzung (Etappe 2):** Jede Zeile des Objektblatts hat im Prognoseblatt einen festen Block mit einer Zeile je Prognosejahr (200 Objektzeilen × 20 Jahre). Die Stammdaten kommen per INDEX(obj\_…; n) direkt aus Objektzeile n statt per SVERWEIS über die ObjektID; so greift auch bei doppelter ID jeder Block auf seine eigene Zeile, und die Statusspalte meldet die Dopplung. Der Buchwert des Vorjahres ist die Zeile darüber, im ersten Jahr der Restbuchwert aus dem Objektblatt; die SUMMEWENNS-Variante unten ist damit nicht nötig. Leere Objektzeilen ergeben leere Prognosezeilen. Das aktiv-Flag liest das Verkaufsjahr per INDEX/MATCH aus dem Blatt Verkäufe; ohne Verkauf ist es 1. Die Indexierung aus Etappe 3 ist bereits enthalten. Das Raster hat fest par\_Prognosejahre Zeilen je Objekt, wie beim Generieren eingestellt.
 
 Die Stammdaten stehen auf dem Blatt Objekte, Suche über die ObjektID in Spalte A. Annahme für die Beispielformeln: Objekte-Spalten sind benannte Bereiche (obj\_ID, obj\_MieteBasis, obj\_AfASatz, obj\_AKGebaeude, obj\_Kaufjahr), und auf dem Parameterblatt stehen par\_Mietsteig, par\_Erhaltsteig sowie par\_Basisjahr (2026).
 
@@ -289,6 +292,10 @@ K2  =I2 + J2
 **Verknüpfung zur Prognose:** Das aktiv-Flag in Spalte C der Prognose greift bereits auf Verkaeufe Spalte B zu. Damit endet das laufende Ergebnis des Objekts automatisch im Jahr nach dem Verkauf. Der Veräußerungsgewinn K fließt in Etappe 5 in den Rücklagenspiegel oder, bei 6b-Nutzung nein, direkt in die Steuer.
 
 **Abnahme Etappe 4:** Preis 1,4 Mio, Verkaufskosten 0, Buchwert gesamt 680.000 muss einen Veräußerungsgewinn von 720.000 ergeben. Bei hälftiger Aufteilung liegt der Gebäudeanteil des Gewinns korrekt getrennt vom G+B-Anteil vor.
+
+**Vorgezogen für die Übersicht:** Das Blatt Verkäufe besteht vorerst nur aus ObjektID (Auswahl aus dem Objektblatt), Verkaufsjahr und Status. Der Status meldet unbekannte IDs, mehrfache Verkäufe desselben Objekts, ein fehlendes Verkaufsjahr und ein Verkaufsjahr außerhalb des Rasters. Die Spalten ab Verkaufspreis folgen mit dem Rest von Etappe 4.
+
+**Übersicht:** Je Jahr zwei Summen über prg\_Verkehrswert. Die Baseline summiert alle Objekte, so als würde nichts verkauft. Der Plan summiert nur die Zeilen mit prg\_Bestand = 1. Das Basisjahr ist die Summe aus obj\_Verkehrswert. Ein Liniendiagramm zeigt beide Reihen. Sobald Neuobjekte (Etappe 6) in der Prognose laufen, gehören sie nur in den Plan. Mit Liquidität (Etappe 7) kommt der Erlös nach Steuer als Vermögensteil dazu; erst dann ist der Vergleich ein Vermögensvergleich und nicht nur ein Bestandsvergleich.
 
 ## 12. Rücklagenspiegel § 6b (Etappe 5)
 

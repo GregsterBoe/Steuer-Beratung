@@ -14,7 +14,7 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 from prognosemodell.mappe import erstelle_mappe
-from prognosemodell.modelle import Modell, prognosejahre
+from prognosemodell.modelle import Modell, Verkauf, prognosejahre
 from prognosemodell.testdaten import testobjekt
 
 TOLERANZ = 0.01  # ein Cent
@@ -56,9 +56,15 @@ def prg(objekt_nr: int, jahr: int) -> int:
     return (objekt_nr - 1) * prognosejahre() + jahr - 2027
 
 
-# Je Fall: Name, Objekte, Liste von (benannter Bereich, Zeile im Bereich, Sollwert)
+def ueb(jahr: int) -> int:
+    """Zeile im Übersichtsbereich; erste Zeile ist das Basisjahr."""
+    return jahr - 2026
+
+
+# Je Fall: Name, Objekte (oder ein Modell mit Verkäufen), Liste von (benannter Bereich, Zeile im Bereich, Sollwert)
 # Sollwerte der Etappe 2 von Hand: AfA 800.000 × 2 % = 16.000, Miete 60.000 × 1,02^n,
 # Erhaltung 8.000 × 1,025^n, weitere Ausgaben × 1,02^n, n = Jahr − 2026.
+# Übersicht: Verkehrswert 1.400.000 × 1,02^n je Objekt.
 def faelle():
     obj = testobjekt()
     ohne_miete = dataclasses.replace(obj, miete=None)
@@ -69,6 +75,7 @@ def faelle():
     satz_25 = dataclasses.replace(obj, afa_satz=0.025, restbuchwert=400_000)
     obj2 = dataclasses.replace(obj, objekt_id="OBJ-002", weitere_einnahmen=1_000,
                                weitere_ausgaben=2_000)
+    obj3 = dataclasses.replace(obj, objekt_id="OBJ-003", verkehrswert=None)
     return [
         ("Etappe 1: Stammdaten vollständig", [obj], [
             ("par_Startjahr", 0, 2027),
@@ -125,6 +132,61 @@ def faelle():
             ("prg_Ausgaben", prg(2, 2027), 2_040),
             ("prg_Ergebnis", prg(2, 2027), 35_980),
         ]),
+        ("Übersicht: ohne Verkauf sind Plan und Baseline gleich", [obj], [
+            ("prg_Aktiv", prg(1, 2046), 1),
+            ("prg_Bestand", prg(1, 2046), 1),
+            ("prg_Verkehrswert", prg(1, 2027), 1_428_000),
+            ("prg_Verkehrswert", prg(1, 2046), 2_080_326.35),
+            ("ueb_Jahr", ueb(2026), 2026),
+            ("ueb_Jahr", ueb(2046), 2046),
+            ("ueb_Baseline", ueb(2026), 1_400_000),
+            ("ueb_Plan", ueb(2026), 1_400_000),
+            ("ueb_Baseline", ueb(2046), 2_080_326.35),
+            ("ueb_Plan", ueb(2046), 2_080_326.35),
+            ("ueb_Differenz", ueb(2046), 0),
+            ("ueb_Objekte", 0, 1),
+            ("ueb_OhneWert", 0, 0),
+            ("ueb_Verkaeufe", 0, 0),
+        ]),
+        ("Verkauf OBJ-001 Ende 2030: Plan verliert den Wert, Baseline hält",
+         Modell(objekte=[obj, obj2], verkaeufe=[Verkauf("OBJ-001", 2030)]), [
+            ("vk_Status", 0, "OK"),
+            ("prg_Aktiv", prg(1, 2030), 1),  # Miete und AfA laufen im Verkaufsjahr noch
+            ("prg_Miete", prg(1, 2030), 64_945.93),
+            ("prg_Aktiv", prg(1, 2031), 0),
+            ("prg_Miete", prg(1, 2031), 0),
+            ("prg_AfA", prg(1, 2031), 0),
+            ("prg_Ergebnis", prg(1, 2031), 0),
+            ("prg_Buchwert", prg(1, 2030), 416_000),
+            ("prg_Bestand", prg(1, 2029), 1),
+            ("prg_Bestand", prg(1, 2030), 0),  # Verkauf zum Jahresende
+            ("prg_Aktiv", prg(2, 2046), 1),  # OBJ-002 bleibt
+            ("prg_Bestand", prg(2, 2046), 1),
+            ("ueb_Baseline", ueb(2026), 2_800_000),
+            ("ueb_Plan", ueb(2026), 2_800_000),
+            ("ueb_Plan", ueb(2029), 2_971_382.40),
+            ("ueb_Baseline", ueb(2030), 3_030_810.04),
+            ("ueb_Plan", ueb(2030), 1_515_405.02),
+            ("ueb_Differenz", ueb(2030), -1_515_405.02),
+            ("ueb_Baseline", ueb(2046), 4_160_652.70),
+            ("ueb_Plan", ueb(2046), 2_080_326.35),
+            ("ueb_Verkaeufe", 0, 1),
+        ]),
+        ("Verkäufe: Statusprüfung, fehlender Verkehrswert",
+         Modell(objekte=[obj, obj2, obj3],
+                verkaeufe=[Verkauf("OBJ-001", 2030), Verkauf("OBJ-001", 2031),
+                           Verkauf("XYZ", 2030), Verkauf("OBJ-002", 2050),
+                           Verkauf("OBJ-003", None)]), [
+            ("vk_Status", 0, "Objekt mehrfach verkauft"),
+            ("vk_Status", 1, "Objekt mehrfach verkauft"),
+            ("vk_Status", 2, "ObjektID unbekannt"),
+            ("vk_Status", 3, "Verkaufsjahr außerhalb Raster"),
+            ("vk_Status", 4, "Verkaufsjahr fehlt"),
+            ("vk_Status", 5, None),
+            ("prg_Aktiv", prg(3, 2046), 1),  # ohne Verkaufsjahr kein Verkauf
+            ("ueb_OhneWert", 0, 1),
+            ("ueb_Baseline", ueb(2026), 2_800_000),  # OBJ-003 zählt mit 0
+        ]),
     ]
 
 
@@ -132,7 +194,8 @@ def main() -> int:
     fehler = 0
     with tempfile.TemporaryDirectory() as tmp:
         for i, (fall, objekte, pruefungen) in enumerate(faelle()):
-            wb = durchrechnen(Modell(objekte=objekte), Path(tmp) / f"fall{i}")
+            modell = objekte if isinstance(objekte, Modell) else Modell(objekte=objekte)
+            wb = durchrechnen(modell, Path(tmp) / f"fall{i}")
             for name, zeile, soll in pruefungen:
                 ist = wert(wb, name, zeile)
                 if ist == "":
