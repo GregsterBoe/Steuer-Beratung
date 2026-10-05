@@ -46,6 +46,8 @@ PARAMETER = [
     Parameter("par_Mietsteig", "Mietsteigerung p. a.", 0.02, FMT_PROZENT, "Platzhalter"),
     Parameter("par_Erhaltsteig", "Erhaltungssteigerung p. a.", 0.025, FMT_PROZENT,
               "Platzhalter"),
+    Parameter("par_Kostensteig", "Steigerung weitere Ausgaben p. a.", 0.02, FMT_PROZENT,
+              "Platzhalter; weitere Einnahmen wachsen mit der Mietsteigerung"),
     Parameter("par_Wertsteig", "Wertsteigerung p. a.", 0.02, FMT_PROZENT, "Platzhalter"),
     Parameter("par_GrESt", "Grunderwerbsteuersatz", 0.05, FMT_PROZENT,
               "abhängig vom Bundesland; Platzhalter"),
@@ -100,6 +102,36 @@ OBJEKT_FELDER = [
 # Berechnete Statusspalte direkt nach den Eingabefeldern
 STATUS_UEBERSCHRIFT = "Status"
 STATUS_NAME = "obj_Status"
+
+
+@dataclass(frozen=True)
+class Spalte:
+    """Eine Spalte des Prognoseblatts."""
+    key: str
+    ueberschrift: str
+    name: str            # benannter Bereich über die Spalte
+    format: str
+    breite: int = 14
+
+
+# Blatt Prognose: eine Zeile je Objekt und Jahr (Long-Format, Projektplan Abschnitt 8)
+PROGNOSE_SPALTEN = [
+    Spalte("id", "ObjektID", "prg_ID", FMT_TEXT, 12),
+    Spalte("jahr", "Jahr", "prg_Jahr", FMT_JAHR, 8),
+    Spalte("aktiv", "aktiv", "prg_Aktiv", FMT_ZAHL, 8),
+    Spalte("miete", "Miete", "prg_Miete", FMT_EURO),
+    Spalte("einnahmen", "weitere Einnahmen", "prg_Einnahmen", FMT_EURO),
+    Spalte("erhaltung", "Erhaltung", "prg_Erhaltung", FMT_EURO),
+    Spalte("ausgaben", "weitere Ausgaben", "prg_Ausgaben", FMT_EURO),
+    Spalte("afa", "AfA Gebäude", "prg_AfA", FMT_EURO),
+    Spalte("buchwert", "Buchwert Gebäude Ende", "prg_Buchwert", FMT_EURO, 16),
+    Spalte("ergebnis", "Ergebnis vor Finanzierung", "prg_Ergebnis", FMT_EURO, 16),
+]
+
+
+def prognosejahre() -> int:
+    """Länge des Jahresrasters; legt die Zeilen je Objekt im Prognoseblatt fest."""
+    return next(p.wert for p in PARAMETER if p.name == "par_Prognosejahre")
 
 
 @dataclass

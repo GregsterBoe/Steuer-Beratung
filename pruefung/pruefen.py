@@ -14,7 +14,7 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 from prognosemodell.mappe import erstelle_mappe
-from prognosemodell.modelle import Modell
+from prognosemodell.modelle import Modell, prognosejahre
 from prognosemodell.testdaten import testobjekt
 
 TOLERANZ = 0.01  # ein Cent
@@ -51,13 +51,24 @@ def gleich(ist, soll) -> bool:
     return ist == soll
 
 
+def prg(objekt_nr: int, jahr: int) -> int:
+    """Zeile im Prognosebereich für Objekt objekt_nr (1 = erstes) und Jahr."""
+    return (objekt_nr - 1) * prognosejahre() + jahr - 2027
+
+
 # Je Fall: Name, Objekte, Liste von (benannter Bereich, Zeile im Bereich, Sollwert)
+# Sollwerte der Etappe 2 von Hand: AfA 800.000 × 2 % = 16.000, Miete 60.000 × 1,02^n,
+# Erhaltung 8.000 × 1,025^n, weitere Ausgaben × 1,02^n, n = Jahr − 2026.
 def faelle():
     obj = testobjekt()
     ohne_miete = dataclasses.replace(obj, miete=None)
     zu_hoch = dataclasses.replace(obj, restbuchwert=900_000)
     spaet = dataclasses.replace(obj, kaufjahr=2030)
     zweites = dataclasses.replace(obj, name="Duplikat")
+    laeuft_aus = dataclasses.replace(obj, restbuchwert=50_000)
+    satz_25 = dataclasses.replace(obj, afa_satz=0.025, restbuchwert=400_000)
+    obj2 = dataclasses.replace(obj, objekt_id="OBJ-002", weitere_einnahmen=1_000,
+                               weitere_ausgaben=2_000)
     return [
         ("Etappe 1: Stammdaten vollständig", [obj], [
             ("par_Startjahr", 0, 2027),
@@ -73,6 +84,47 @@ def faelle():
          [("obj_Status", 0, "Kaufjahr nach Basisjahr")]),
         ("Etappe 1: ObjektID doppelt", [obj, zweites],
          [("obj_Status", 0, "ObjektID doppelt"), ("obj_Status", 1, "ObjektID doppelt")]),
+        ("Etappe 2: AfA 2 %, Kauf 2007, Restbuchwert 480.000", [obj], [
+            ("prg_ID", prg(1, 2027), "OBJ-001"),
+            ("prg_Jahr", prg(1, 2027), 2027),
+            ("prg_Jahr", prg(1, 2046), 2046),
+            ("prg_AfA", prg(1, 2027), 16_000),
+            ("prg_Buchwert", prg(1, 2027), 464_000),
+            ("prg_Miete", prg(1, 2027), 61_200),
+            ("prg_Erhaltung", prg(1, 2027), 8_200),
+            ("prg_Ergebnis", prg(1, 2027), 37_000),
+            ("prg_AfA", prg(1, 2046), 16_000),
+            ("prg_Buchwert", prg(1, 2046), 160_000),  # Nullpunkt erst Ende 2056
+            ("prg_Miete", prg(1, 2046), 89_156.84),
+            ("prg_Ergebnis", prg(1, 2046), 60_047.91),
+            ("prg_ID", prg(2, 2027), None),  # leere Objektzeile, leerer Block
+            ("prg_Ergebnis", prg(2, 2027), None),
+        ]),
+        ("Etappe 2: Buchwert läuft im Raster aus (Restbuchwert 50.000)", [laeuft_aus], [
+            ("prg_AfA", prg(1, 2029), 16_000),
+            ("prg_Buchwert", prg(1, 2029), 2_000),
+            ("prg_AfA", prg(1, 2030), 2_000),  # nur noch der Rest
+            ("prg_Buchwert", prg(1, 2030), 0),
+            ("prg_AfA", prg(1, 2031), 0),
+            ("prg_Buchwert", prg(1, 2031), 0),
+            ("prg_AfA", prg(1, 2046), 0),
+            ("prg_Miete", prg(1, 2031), 66_244.85),  # Miete läuft weiter
+            ("prg_Ergebnis", prg(1, 2031), 57_193.58),
+        ]),
+        ("Etappe 2: AfA 2,5 %, Kauf 2007, Nullpunkt Ende 2046", [satz_25], [
+            ("prg_AfA", prg(1, 2027), 20_000),
+            ("prg_Buchwert", prg(1, 2045), 20_000),
+            ("prg_AfA", prg(1, 2046), 20_000),
+            ("prg_Buchwert", prg(1, 2046), 0),
+        ]),
+        ("Etappe 2: zweites Objekt mit weiteren Einnahmen und Ausgaben", [obj, obj2], [
+            ("prg_Einnahmen", prg(1, 2027), 0),
+            ("prg_ID", prg(2, 2027), "OBJ-002"),
+            ("prg_Jahr", prg(2, 2027), 2027),
+            ("prg_Einnahmen", prg(2, 2027), 1_020),
+            ("prg_Ausgaben", prg(2, 2027), 2_040),
+            ("prg_Ergebnis", prg(2, 2027), 35_980),
+        ]),
     ]
 
 
