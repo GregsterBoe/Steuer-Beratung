@@ -36,7 +36,7 @@ Stand: Etappen 1 bis 3 umgesetzt: Parameter- und Objektblatt mit Statusprüfung,
 pip install -r requirements.txt
 python -m prognosemodell             # erzeugt ausgabe/Prognosemodell_VV.xlsx (mit Testobjekt)
 python -m prognosemodell --ohne-testdaten
-python -m prognosemodell --kostenstellen Kostenstellen.xlsx   # laufende Werte je Blatt einlesen
+python -m prognosemodell --kostenstellen Kostenstellen.xlsx --ausgabe Ordner/Prognose.xlsx   # laufende Werte je Blatt einlesen; nur Ordner = Standardname darin
 python -m pruefung.pruefen           # rechnet per LibreOffice headless und prüft gegen Sollwerte
 python -m pruefung.pruefen_einlesen  # prüft die Einleseschicht, ohne LibreOffice
 ```

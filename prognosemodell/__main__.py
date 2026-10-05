@@ -2,6 +2,7 @@
 [--kostenstellen PFAD]"""
 
 import argparse
+import sys
 from pathlib import Path
 
 from .einlesen import lese_kostenstellen, zusammenfuehren
@@ -34,8 +35,14 @@ def main() -> None:
                   f"Miete {lw.miete:,.2f}, Erhaltung {lw.erhaltung:,.2f}, "
                   f"AfA lt. BWA {lw.abschreibung:,.2f}")
     ziel = Path(args.ausgabe)
+    if ziel.is_dir():  # nur Ordner angegeben: Standarddateiname darin
+        ziel = ziel / Path(ap.get_default("ausgabe")).name
     ziel.parent.mkdir(parents=True, exist_ok=True)
-    erstelle_mappe(modell).save(ziel)
+    try:
+        erstelle_mappe(modell).save(ziel)
+    except PermissionError:
+        sys.exit(f"Kann {ziel} nicht schreiben. Ist die Datei noch in Excel geöffnet? "
+                 "Bitte schließen oder mit --ausgabe einen anderen Dateinamen angeben.")
     print(f"geschrieben: {ziel}")
 
 
