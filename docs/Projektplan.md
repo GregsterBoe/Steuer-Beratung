@@ -471,7 +471,7 @@ Für das Modell relevante BWA-Zeilen (über die Nummer in Spalte B suchen, nicht
 | --- | --- | --- |
 | 1020 | Umsatzerlöse | Miete im Basisjahr |
 | 1090 | So. betr. Erlöse | weitere laufende Einnahmen |
-| 1100–1220, 1260 | Personal, Raum, betr. Steuern, Versicherungen, Kfz, Werbung, Warenabgabe, Sonstige | weitere laufende Ausgaben |
+| 1100–1220, 1260 | Personal, Raum, betr. Steuern, Versicherungen, Besondere Kosten (1160), Kfz, Werbung, Warenabgabe, Sonstige | weitere laufende Ausgaben |
 | 1240 | Abschreibungen | Abgleich mit der AfA-Fortschreibung, nicht als Eingabe |
 | 1250 | Reparatur/Instandh. | Erhaltungsaufwand im Basisjahr |
 | 1310, 1322 | Zinsaufwand, Zinserträge | erst Stufe 2 (Finanzierung) |
@@ -487,6 +487,8 @@ Auffälligkeiten im Muster, vor dem Einlesen mit der Kanzlei klären:
 **Austauschbare Einleseschicht**
 
 Wie bei der Pillar-2-Pipeline kapselt ein eigenes Modul das Einlesen. Ändert sich das Quellformat, wird nur diese Schicht angepasst, nicht der Rest.
+
+Umgesetzt in `prognosemodell/einlesen.py`: Werte stammen aus der Jahresspalte des Basisjahrs (im Muster S, inklusive Hochrechnung der offenen Monate). Kostenstellen ohne Stammdaten werden als neue Objekte angelegt, ihre steuerlichen Pflichtfelder bleiben leer. Abbruch mit Meldung bei fehlender Basisjahrspalte, doppelter Kostenstelle oder Formeln ohne gespeicherten Wert.
 
 **Offene Punkte, nächste Woche in der Arbeit zu prüfen**
 
