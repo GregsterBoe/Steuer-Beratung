@@ -28,7 +28,7 @@
 8. Szenariovergleich
 9. VBA-Steuerung und Plausibilitätsprüfungen
 
-Stand: Etappe 1 umgesetzt (Parameter- und Objektblatt mit Statusprüfung). Einleseschicht für die Kostenstellenblätter (DATEV-BWA) steht.
+Stand: Etappen 1 bis 3 umgesetzt: Parameter- und Objektblatt mit Statusprüfung, Prognoseblatt mit AfA-Fortschreibung und Indexierung je Objekt und Jahr. Die Einleseschicht für die Kostenstellenblätter (DATEV-BWA) steht.
 
 ## Nutzung
 
@@ -44,6 +44,8 @@ python -m pruefung.pruefen_einlesen  # prüft die Einleseschicht, ohne LibreOffi
 Das Prüfskript braucht LibreOffice mit Calc (`soffice`, unter Debian/Ubuntu Paket `libreoffice-calc`).
 
 `--kostenstellen` liest je Blatt B2 (Kostenstelle = ObjektID), C2 (Objektname) und aus der Spalte des Basisjahrs die BWA-Zeilen 1020 (Miete), 1090 (weitere Einnahmen), 1250 (Erhaltung) sowie 1100–1220 und 1260 (weitere Ausgaben). Die Datei muss in Excel gespeichert sein, damit berechnete Werte vorliegen. Steuerliche Stammdaten (AK, Kaufjahr, AfA, Restbuchwert) kommen nicht aus diesen Blättern; solange sie fehlen, meldet die Statusspalte „Pflichtfeld fehlt“.
+
+Das Prognoseblatt hat je Objektzeile einen Block mit 20 Jahreszeilen: Miete, weitere Einnahmen, Erhaltung und weitere Ausgaben wachsen mit ihren Steigerungsraten. Die AfA beträgt AK Gebäude × Satz, höchstens aber den Restbuchwert. Danach sind AfA und Buchwert null.
 
 Gelb = Eingabe, grau = Formel. Die Statusspalte im Objektblatt meldet fehlende Pflichtfelder, doppelte IDs, ein Kaufjahr nach dem Basisjahr und einen Restbuchwert über den AK.
 

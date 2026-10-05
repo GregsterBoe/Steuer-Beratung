@@ -38,7 +38,7 @@ Acht Blätter, getrennt nach Eingabe, Rechnung und Ausgabe. Eingabeblätter sind
 
 | Blatt | Typ | Schlüsselfelder | Zweck |
 | --- | --- | --- | --- |
-| Parameter | Eingabe | Steuerwelt-Schalter, Grenzsteuersatz, Mietsteigerung, Erhaltungssteigerung, Wertsteigerung, GrESt-Satz, aktives Szenario | alle globalen Annahmen und Schalter |
+| Parameter | Eingabe | Steuerwelt-Schalter, Grenzsteuersatz, Mietsteigerung, Erhaltungssteigerung, Kostensteigerung, Wertsteigerung, GrESt-Satz, aktives Szenario | alle globalen Annahmen und Schalter |
 | Objekte | Eingabe | ObjektID, AK Gebäude, AK G+B, AfA-Satz, Kaufjahr, Restbuchwert 2026, Miete 2026, Erhaltung 2026 | Stammdaten je Bestandsobjekt |
 | Verkäufe | Eingabe | ObjektID, Verkaufsjahr, Verkaufspreis oder Faktor, Verkaufskosten, 6b-Nutzung (ja/nein) | ein Datensatz je geplantem Verkauf |
 | Neuobjekte | Eingabe | NeuID, Kaufjahr, Kaufpreis, Anteil G+B, AfA-Methode, Mietrendite, Erhaltungsquote, Quelle-Rücklage | Reinvestitionsobjekte |
@@ -59,7 +59,8 @@ Vier Rechenbausteine, alle als Zellformeln. Die Notation unten ist fachlich, in 
 - Erhaltung\_t = Erhaltung\_2026 × (1 + Erhaltungssteigerung)^(t − 2026)
 - AfA\_t = MIN(AK\_Gebäude × AfA-Satz; Restbuchwert\_(t−1)), also keine AfA mehr, wenn der Buchwert null ist
 - Buchwert\_t = Restbuchwert\_(t−1) − AfA\_t
-- Ergebnis\_t = (Miete\_t − Erhaltung\_t − AfA\_t) × aktiv-Flag
+- Ergebnis\_t = (Miete\_t + weitere Einnahmen\_t − Erhaltung\_t − weitere Ausgaben\_t − AfA\_t) × aktiv-Flag
+- weitere Einnahmen wachsen mit der Mietsteigerung, weitere Ausgaben mit par\_Kostensteig
 - aktiv-Flag = 1, solange t ≤ Verkaufsjahr, sonst 0
 
 **Verkaufsaufteilung im Verkaufsjahr**
@@ -128,7 +129,8 @@ Jeder Testfall ist eine Rechnung von Hand, gegen die das Blatt geprüft wird.
 
 | Fall | Eingabe | Erwartetes Ergebnis |
 | --- | --- | --- |
-| AfA-Ende | Gebäude 800.000, 2 %, Kauf 2007 | Buchwert 2047 null, AfA ab dann 0 |
+| AfA-Ende | Gebäude 800.000, 2,5 %, Kauf 2007, Restbuchwert 2026 400.000 | Buchwert Ende 2046 null, AfA danach 0 |
+| AfA läuft im Raster aus | Gebäude 800.000, 2 %, Restbuchwert 2026 50.000 | AfA 2030 nur 2.000, ab 2031 AfA und Buchwert 0, Miete läuft weiter |
 | Verkauf mit Gewinn | Preis 1,4 Mio, Buchwert 680.000, Kosten 0 | Gewinn 720.000 |
 | Rücklage voll | 6b ja, Gewinn 720.000 | Steuer im Verkaufsjahr 0, Rücklage 720.000 |
 | Übertrag | Neuobjekt Gebäude-AK 900.000 | AfA-Basis 900.000 minus Gebäudegewinn |
@@ -156,10 +158,16 @@ Eine Zeile je Objekt und Jahr, das sogenannte Long-Format. Es ist mit SUMMEWENNS
 | B | Jahr | 2027 bis 2046 |
 | C | aktiv-Flag | Formel |
 | D | Miete | Formel |
-| E | Erhaltung | Formel |
-| F | AfA | Formel |
-| G | Buchwert Gebäude Ende | Formel |
-| H | Ergebnis vor Finanzierung | Formel |
+| E | weitere Einnahmen | Formel |
+| F | Erhaltung | Formel |
+| G | weitere Ausgaben | Formel |
+| H | AfA | Formel |
+| I | Buchwert Gebäude Ende | Formel |
+| J | Ergebnis vor Finanzierung | Formel |
+
+Die Spalten tragen benannte Bereiche (prg\_ID, prg\_Jahr, prg\_Aktiv, prg\_Miete, prg\_Einnahmen, prg\_Erhaltung, prg\_Ausgaben, prg\_AfA, prg\_Buchwert, prg\_Ergebnis) für die SUMMEWENNS der späteren Etappen.
+
+**Umsetzung (Etappe 2):** Jede Zeile des Objektblatts hat im Prognoseblatt einen festen Block mit einer Zeile je Prognosejahr (200 Objektzeilen × 20 Jahre). Die Stammdaten kommen per INDEX(obj\_…; n) direkt aus Objektzeile n statt per SVERWEIS über die ObjektID; so greift auch bei doppelter ID jeder Block auf seine eigene Zeile, und die Statusspalte meldet die Dopplung. Der Buchwert des Vorjahres ist die Zeile darüber, im ersten Jahr der Restbuchwert aus dem Objektblatt; die SUMMEWENNS-Variante unten ist damit nicht nötig. Leere Objektzeilen ergeben leere Prognosezeilen. Das aktiv-Flag ist bis Etappe 4 immer 1. Die Indexierung aus Etappe 3 ist bereits enthalten. Das Raster hat fest par\_Prognosejahre Zeilen je Objekt, wie beim Generieren eingestellt.
 
 Die Stammdaten stehen auf dem Blatt Objekte, Suche über die ObjektID in Spalte A. Annahme für die Beispielformeln: Objekte-Spalten sind benannte Bereiche (obj\_ID, obj\_MieteBasis, obj\_AfASatz, obj\_AKGebaeude, obj\_Kaufjahr), und auf dem Parameterblatt stehen par\_Mietsteig, par\_Erhaltsteig sowie par\_Basisjahr (2026).
 
@@ -188,7 +196,9 @@ H2  =(D2 - E2 - F2)*C2
 
 Für Buchwert\_Vorjahr empfehle ich einen SUMMEWENNS-Verweis auf dieselbe Matrix: Buchwert der Zeile mit gleicher ObjektID und Jahr gleich B2 minus 1. Im ersten Jahr greift stattdessen der Restbuchwert aus dem Objektblatt. Das lässt sich mit einem WENN(B2=Startjahr; …; SUMMEWENNS(…)) lösen.
 
-**Abnahme Etappe 2:** Für ein Objekt mit Gebäude 800.000, AfA 2 %, Kauf 2007 muss der Buchwert 2047 null erreichen; ab dann sind AfA und der Buchwert null, Miete und Erhaltung laufen weiter.
+**Abnahme Etappe 2:** Bei Gebäude 800.000 und AfA 2,5 % ab Kauf 2007 (Restbuchwert 2026: 400.000) muss der Buchwert Ende 2046 null erreichen. Läuft der Buchwert im Raster aus, gilt: AfA im letzten Jahr nur noch der Rest, danach sind AfA und Buchwert null, Miete und Erhaltung laufen weiter.
+
+Korrektur: Die ursprüngliche Vorgabe (2 %, Kauf 2007, Buchwert 2047 null) geht nicht auf. 800.000 × 2 % = 16.000 je Jahr reicht 50 Jahre, der Buchwert erreicht null also erst Ende 2056. Ende 2046 stehen noch 160.000. Beide Fälle prüft `pruefung/pruefen.py`.
 
 ## 9. Generierung per Python, Endprodukt autarke Excel-Datei
 
