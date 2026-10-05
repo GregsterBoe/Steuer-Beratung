@@ -41,12 +41,12 @@ Acht Blätter, getrennt nach Eingabe, Rechnung und Ausgabe. Eingabeblätter sind
 | Parameter | Eingabe | Steuerwelt-Schalter, Grenzsteuersatz, Mietsteigerung, Erhaltungssteigerung, Kostensteigerung, Wertsteigerung, GrESt-Satz, aktives Szenario | alle globalen Annahmen und Schalter |
 | Objekte | Eingabe | ObjektID, AK Gebäude, AK G+B, AfA-Satz, Kaufjahr, Restbuchwert 2026, Miete 2026, Erhaltung 2026 | Stammdaten je Bestandsobjekt |
 | Verkäufe | Eingabe | ObjektID, Verkaufsjahr, Verkaufspreis oder Faktor, Verkaufskosten, 6b-Nutzung (ja/nein), Neubau begonnen (ja/nein) | ein Datensatz je geplantem Verkauf |
-| Neuobjekte | Eingabe | NeuID, Kaufjahr, Kaufpreis, Anteil G+B, AfA-Methode, Mietrendite, Erhaltungsquote, Quelle-Rücklage | Reinvestitionsobjekte |
+| Neuobjekte | Eingabe | NeuID, Kaufjahr, Kaufpreis, Anteil G+B, Nebenkosten, AfA-Satz, Mietrendite, Erhaltungsquote, Quelle-Rücklage | Reinvestitionsobjekte |
 | Prognose | Rechnung | ObjektID × Jahr (2027-2046), Miete, Erhaltung, AfA, Buchwert, Ergebnis, aktiv-Flag | Jahresmatrix je Objekt, Herzstück |
-| Rücklagen | Rechnung | RücklageID, Verkaufsjahr, Betrag G+B, Betrag Gebäude, Fristjahr, Übertrag, Auflösung, Zuschlag; Spiegel je Jahr | § 6b-Spiegel je Rücklage und je Jahr |
+| Rücklagen | Rechnung | RücklageID, Verkaufsjahr, Betrag G+B, Betrag Gebäude, Fristjahr, übertragen Gebäude und G+B, Auflösung, Zuschlag; Spiegel je Jahr | § 6b-Spiegel je Rücklage und je Jahr |
 | Liquidität | Rechnung | Jahr, Buchwert-Rückfluss, Steuer, Eigenkapital Reinvest, Alternativanlage | Geldfluss je Jahr |
 | Auswertung | Ausgabe | Jahr, Gesamt-GuV, Steuer, stille Reserven, Szenariovergleich | Kennzahlen und Vergleich |
-| Übersicht | Ausgabe | Jahr, Verkehrswert Baseline, Verkehrswert Plan, Differenz, Diagramm | Gesamtwert des Bestands im Jahresverlauf, Plan gegen Nichtstun |
+| Übersicht | Ausgabe | Jahr, Verkehrswert Baseline, Verkehrswert Plan, Differenz, Diagramm | Gesamtwert des Bestands im Jahresverlauf, Plan mit Verkäufen und Neuobjekten gegen Nichtstun |
 
 Konvention: ObjektID ist der Schlüssel, der Objekte, Verkäufe, Rücklagen und Prognose verbindet. Neuobjekte bekommen eine eigene ID, laufen in der Prognose aber in derselben Matrix.
 
@@ -329,19 +329,21 @@ Das Blatt Rücklagen hat zwei Teile: links eine Zeile je Verkauf, rechts den Spi
 | E | Rücklage G+B | rl\_GuB | MAX(Gewinn G+B; 0) |
 | F | Rücklage gesamt | rl\_Betrag | D + E |
 | G | Fristjahr | rl\_Fristjahr | C + par\_6bFrist, bei Neubau begonnen + par\_6bFristNeubau |
-| H | Auflösung im Fristjahr | rl\_Aufloesung | F, ab Etappe 6 minus Übertragung |
-| I | Gewinnzuschlag | rl\_Zuschlag | H × par\_6bZuschlag × (G − C) |
-| J | Hinweis | rl\_Hinweis | "Frist endet nach Prognoseende", wenn G > par\_Endjahr |
+| H | übertragen Gebäude | rl\_UebGeb | Summe ü1 aus Neuobjekte (Abschnitt 13) |
+| I | übertragen G+B | rl\_UebGuB | Summe ü2 + ü3 aus Neuobjekte |
+| J | Auflösung im Fristjahr | rl\_Aufloesung | F − H − I |
+| K | Gewinnzuschlag | rl\_Zuschlag | J × par\_6bZuschlag × (G − C) |
+| L | Hinweis | rl\_Hinweis | "Frist endet nach Prognoseende", wenn G > par\_Endjahr und J > 0 |
 
 ```text
 D2  =IF(AND(INDEX(vk_Status,1)="OK", INDEX(vk_6b,1)="ja"), MAX(INDEX(vk_GewinnGeb,1),0), "")
 G2  =IF(…, C2 + IF(INDEX(vk_6bNeubau,1)="ja", par_6bFristNeubau, par_6bFrist), "")
-I2  =IF(…, H2 * par_6bZuschlag * (G2 - C2), "")
+K2  =IF(…, J2 * par_6bZuschlag * (G2 - C2), "")
 ```
 
 **Nur positive Teilgewinne.** Gebäude und G+B sind getrennte Wirtschaftsgüter. Ein Verlust beim Gebäude mindert die Rücklage aus dem G+B-Gewinn nicht, er wirkt im Verkaufsjahr sofort.
 
-**Frist.** Regelfrist vier Jahre, sechs Jahre, wenn mit dem Bau eines neuen Gebäudes vor Ende des vierten Jahres begonnen wurde (§ 6b Abs. 3, geklärt). Das steuert die Eingabe „§ 6b Neubau begonnen“ im Blatt Verkäufe; ab Etappe 6 kann sie aus dem Neuobjekt abgeleitet werden. Ohne Reinvestition wird die Rücklage am Ende des Fristjahrs aufgelöst, mit 6 % Zuschlag je vollem Jahr ihres Bestehens: 24 % bei vier, 36 % bei sechs Jahren.
+**Frist.** Regelfrist vier Jahre, sechs Jahre, wenn mit dem Bau eines neuen Gebäudes vor Ende des vierten Jahres begonnen wurde (§ 6b Abs. 3, geklärt). Das steuert die Eingabe „§ 6b Neubau begonnen“ im Blatt Verkäufe. Ohne Reinvestition wird die Rücklage am Ende des Fristjahrs aufgelöst, mit 6 % Zuschlag je vollem Jahr ihres Bestehens: 24 % bei vier, 36 % bei sechs Jahren.
 
 **Teil 2: Spiegel je Jahr (umgesetzt)**, Prognosejahre 2027 bis 2046:
 
@@ -350,10 +352,11 @@ I2  =IF(…, H2 * par_6bZuschlag * (G2 - C2), "")
 | Jahr | rls\_Jahr | par\_Startjahr fortlaufend |
 | Veräußerungsgewinne | rls\_Gewinne | SUMIFS(vk\_Gewinn) im Jahr, Status OK oder § 6b unzulässig |
 | Einstellung in Rücklage | rls\_Bildung | SUMIFS(rl\_Betrag, rl\_Jahr) |
+| Übertragung auf Neuobjekte | rls\_Uebertragung | SUMIFS(ne\_UeGesamt, ne\_Kaufjahr) |
 | Auflösung | rls\_Aufloesung | SUMIFS(rl\_Aufloesung, rl\_Fristjahr) |
 | Gewinnzuschlag | rls\_Zuschlag | SUMIFS(rl\_Zuschlag, rl\_Fristjahr) |
 | steuerwirksam aus Verkauf und Rücklage | rls\_Steuerwirksam | Gewinne − Einstellung + Auflösung + Zuschlag |
-| Rücklagenbestand Ende | rls\_Bestand | Vorjahr + Einstellung − Auflösung |
+| Rücklagenbestand Ende | rls\_Bestand | Vorjahr + Einstellung − Übertragung − Auflösung |
 
 rls\_Steuerwirksam ist die Brücke zur Steuer in Etappe 7: Steuer aus Verkäufen = rls\_Steuerwirksam × par\_Steuersatz. Bei „§ 6b unzulässig“ ist der Gewinn korrekt berechnet, geht aber ohne Rücklage sofort in die Steuer. Verkaufszeilen mit anderen Fehlern zählen nicht.
 
@@ -376,28 +379,34 @@ rls\_Steuerwirksam ist die Brücke zur Steuer in Etappe 7: Steuer aus Verkäufen
 
 Ein Neuobjekt nimmt die Rücklage auf. Der übertragene Gewinn mindert die AfA-Basis des neuen Gebäudes, dadurch läuft die AfA künftig von einem niedrigeren Wert. Das ist der Kern der Stundung: keine Steuer heute, dafür weniger Abschreibung morgen.
 
-**Spaltenlayout Blatt Neuobjekte**
+**Spaltenlayout Blatt Neuobjekte (umgesetzt)**
 
-| Spalte | Feld | Quelle |
-| --- | --- | --- |
-| A | NeuID | eigene ID |
-| B | Kaufjahr | Eingabe |
-| C | Kaufpreis | Eingabe |
-| D | Anteil G+B | Eingabe, Prozent |
-| E | Kaufnebenkosten | Eingabe oder Formel |
-| F | AfA-Methode | Dropdown: linear 3 %, degressiv 5 %, Bestand 2 % |
-| G | Quelle RücklageID | Dropdown aus Rücklagen |
-| H | AK Gebäude brutto | Formel |
-| I | übertragener Gebäudegewinn | Formel |
-| J | AfA-Basis Gebäude | Formel |
+| Spalte | Feld | Name | Quelle |
+| --- | --- | --- | --- |
+| A | NeuID | ne\_ID | Eingabe, eindeutig, nicht gleich einer ObjektID |
+| B | Name | ne\_Name | Eingabe, optional |
+| C | Kaufjahr | ne\_Kaufjahr | Eingabe, Kauf zum Jahresende |
+| D | Kaufpreis | ne\_Kaufpreis | Eingabe |
+| E | Anteil G+B | ne\_AnteilGuB | Eingabe, Prozent |
+| F | Kaufnebenkosten | ne\_Nebenkosten | Eingabe, leer = 0 |
+| G | AfA-Satz | ne\_AfASatz | Eingabe, linear |
+| H | Mietrendite auf Kaufpreis | ne\_Mietrendite | Eingabe, optional |
+| I | Erhaltung auf Kaufpreis | ne\_ErhQuote | Eingabe, optional |
+| J | Quelle RücklageID | ne\_Quelle | Dropdown aus rl\_ID, optional |
+| K | im Modell | ne\_Gueltig | 1 bei vollständigen Pflichtfeldern, eindeutiger ID, Kaufjahr im Raster |
+| L | AK G+B neu | ne\_AKGuBNeu | (D + F) × E |
+| M | AK Gebäude neu | ne\_AKGebNeu | (D + F) × (1 − E) |
+| N | Rücklage Gebäude verfügbar | ne\_RLGeb | rl\_Geb minus ü1 der Zeilen darüber mit gleicher Quelle |
+| O | Rücklage G+B verfügbar | ne\_RLGuB | rl\_GuB minus ü2 und ü3 der Zeilen darüber |
+| P | ü1 | ne\_Ue1 | MIN(N; M) |
+| Q | ü2 | ne\_Ue2 | MIN(O; L) |
+| R | ü3 | ne\_Ue3 | MIN(O − Q; M − P) |
+| S | übertragen gesamt | ne\_UeGesamt | P + Q + R |
+| T | AfA-Basis Gebäude | ne\_AfABasis | M − P − R |
+| U | steuerliche AK G+B | ne\_AKGuB | L − Q |
+| V | Status | ne\_Status | Plausibilität |
 
-**Formeln (Beispiel Zeile 2)**
-
-Die Gebäude-Anschaffung ist der Kaufpreis ohne G+B-Anteil, plus die auf das Gebäude entfallenden Nebenkosten. Nebenkosten wie Grunderwerbsteuer und Notar werden aktiviert, nicht sofort abgezogen.
-
-```text
-H2  =(C2 * (1 - D2) ) + (E2 * (1 - D2))
-```
+Nebenkosten wie Grunderwerbsteuer und Notar werden aktiviert und im Verhältnis des Kaufpreises auf G+B und Gebäude verteilt. Die verfügbare Rücklage (N, O) ist nur gefüllt, wenn das Kaufjahr zwischen Bildungsjahr und Fristjahr der Quelle liegt, sonst 0. Statt der AfA-Methode aus dem ersten Entwurf gibt es einen linearen AfA-Satz; die degressive AfA ist noch offen.
 
 **Übertragung in fester Reihenfolge (korrigiert).** Der erste Entwurf übertrug nur den Gebäudegewinn und nur auf das Gebäude (`I2 = MIN(Rücklage Spalte E; H2)`). Der G+B-Gewinn ging dabei verloren. Richtig nach § 6b Abs. 1 EStG ist: Ein Gebäudegewinn darf nur auf ein Gebäude übertragen werden, ein G+B-Gewinn auf Gebäude oder auf G+B. Steuerlich günstig ist diese Reihenfolge:
 
@@ -412,17 +421,46 @@ Danach gilt:
 
 Beispiel: G+B-Gewinn 4, neuer G+B kostet 3. Dann werden 3 beim G+B abgezogen und 1 beim Gebäude.
 
-Spalten statt I und J oben: I ü1, J ü2, K ü3, L AfA-Basis Gebäude, M steuerliche AK G+B.
+**Mehrere Neuobjekte je Rücklage.** Je Neuobjekt gibt es eine Quelle. Nutzen mehrere Neuobjekte dieselbe Rücklage, bedienen sie sich in Zeilenreihenfolge: Jede Zeile sieht nur, was die Zeilen darüber übrig gelassen haben. Die Zeilen sollten daher chronologisch stehen.
 
-Die neue AfA-Basis fließt zurück in die Objektlogik: Das Neuobjekt bekommt Zeilen in der Prognosematrix wie ein Bestandsobjekt, mit der geminderten AfA-Basis und AfA ab dem Kaufjahr. Ein Neuobjekt gehört nur in die Plan-Linie der Übersicht, nicht in die Baseline.
+**Status je Zeile**, in dieser Reihenfolge:
+- Pflichtfeld fehlt (NeuID, Kaufjahr, Kaufpreis, Anteil G+B, AfA-Satz)
+- NeuID doppelt
+- NeuID wie Bestandsobjekt
+- Kaufjahr außerhalb Raster
+- Rücklage unbekannt, keine Übertragung
+- Kauf vor Bildung der Rücklage, keine Übertragung
+- Kauf nach Fristjahr, keine Übertragung
 
-**Rückkopplung in den Rücklagenspiegel:** Das Rücklagenblatt bekommt die Spalten „übertragen Gebäude“ (ü1) und „übertragen G+B“ (ü2 + ü3) samt Jahr der Übertragung. Die Auflösung im Fristjahr sinkt um das Übertragene, der Spiegel je Jahr bekommt eine Spalte Übertragung, die den Bestand mindert. Ist die Rücklage voll übertragen, entfallen Auflösung und Zuschlag.
+Die ersten vier nehmen das Objekt aus dem Modell (ne\_Gueltig = 0). Bei den letzten drei bleibt es im Modell, nur ohne Übertragung.
+
+**Prognose.** Die neue AfA-Basis fließt zurück in die Objektlogik: Jedes Neuobjekt hat in der Prognosematrix einen eigenen Block mit 20 Jahreszeilen nach den 200 Objektblöcken, prg\_Neu = 1. Kauf zum Jahresende heißt:
+- im Kaufjahr: Buchwert = AfA-Basis, im Bestand, noch keine Miete, Erhaltung und AfA
+- ab dem Folgejahr: AfA = MIN(AfA-Basis × Satz; Vorjahresbuchwert); Miete = Kaufpreis × Mietrendite × (1 + Mietsteigerung)^(Jahr − Kaufjahr), Erhaltung entsprechend
+- Verkehrswert = Kaufpreis, ab dem Kaufjahr mit der Wertsteigerung fortgeschrieben
+
+Ein Neuobjekt gehört nur in die Plan-Linie der Übersicht, nicht in die Baseline. Die Baseline summiert deshalb nur Zeilen mit prg\_Neu = 0.
+
+**Rückkopplung in den Rücklagenspiegel (umgesetzt):** Das Rücklagenblatt hat die Spalten „übertragen Gebäude“ rl\_UebGeb (Summe ü1) und „übertragen G+B“ rl\_UebGuB (Summe ü2 + ü3) je Quelle. Die Auflösung im Fristjahr ist die Rücklage minus das Übertragene, der Zuschlag rechnet nur auf diesen Rest. Der Spiegel je Jahr hat die Spalte rls\_Uebertragung (ne\_UeGesamt im Kaufjahr), die den Bestand mindert. Übertragung ist nicht steuerwirksam. Ist die Rücklage voll übertragen, entfallen Auflösung und Zuschlag.
 
 **Abnahme Etappe 6:**
 - Ausgangslage: Rücklage aus dem Abnahmefall der Etappe 4 (Gebäude 220.000, G+B 500.000). Neuobjekt mit Kaufpreis 1,2 Mio, Anteil G+B 30 %, also G+B 360.000 und Gebäude 840.000.
 - Übertragung: ü1 = 220.000, ü2 = 360.000, ü3 = 140.000.
 - Ergebnis: AfA-Basis Gebäude 480.000, steuerliche AK G+B 0, Restrücklage 0.
 - Die AfA des Neuobjekts läuft von 480.000, nicht von 840.000.
+
+Weitere geprüfte Fälle in `pruefung/pruefen.py`:
+- Kauf Ende 2028, AfA 3 %: Buchwert 2028 480.000, AfA 2029 14.400, Miete 2029 61.200; Plan 2028 1,2 Mio, Baseline ohne Neuobjekt
+- zwei Neuobjekte teilen sich die Rücklage: das erste nimmt 500.000, das zweite (Nebenkosten 40.000, G+B 260.000) den Rest 220.000 als ü2; AfA-Basis 780.000, AK G+B 40.000
+- Teilübertragung 300.000: Rest 420.000 wird 2031 mit Zuschlag 100.800 aufgelöst
+- Statusfälle, darunter Kauf nach Fristjahr und vor Bildung der Rücklage
+
+**Offen:**
+- Verkauf eines Neuobjekts innerhalb des Rasters
+- mehrere Quellen für ein Neuobjekt
+- degressive AfA (§ 7 Abs. 5a EStG)
+- Übertragung auf Anschaffungen im Vorjahr der Veräußerung (§ 6b Abs. 1)
+- „§ 6b Neubau begonnen“ aus dem Neuobjekt ableiten statt im Blatt Verkäufe eingeben
 
 ## 14. Liquidität und Auswertung (Etappe 7)
 

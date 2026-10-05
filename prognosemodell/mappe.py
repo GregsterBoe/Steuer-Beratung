@@ -9,7 +9,8 @@ from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from . import formeln
-from .modelle import (FMT_EURO, FMT_JAHR, FMT_PROZENT, FMT_ZAHL, MAX_OBJEKTE, MAX_VERKAEUFE, OBJEKT_FELDER,
+from .modelle import (FMT_EURO, FMT_JAHR, FMT_PROZENT, FMT_ZAHL, MAX_NEUOBJEKTE, MAX_OBJEKTE,
+                      MAX_VERKAEUFE, NEU_FELDER, NEU_SPALTEN, NEU_STATUS_NAME, OBJEKT_FELDER,
                       PARAMETER, PROGNOSE_SPALTEN, RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN,
                       STATUS_NAME, STATUS_UEBERSCHRIFT,
                       VERKAUF_FELDER, VERKAUF_SPALTEN, VERKAUF_STATUS_NAME, Modell,
@@ -129,10 +130,10 @@ def _blatt_objekte(wb, modell: Modell) -> None:
 
 
 def _blatt_prognose(wb) -> None:
-    """Je Zeile des Objektblatts ein Block mit einer Zeile je Prognosejahr."""
+    """Je Zeile des Objektblatts ein Block mit einer Zeile je Prognosejahr, danach je Neuobjekt."""
     ws = wb.create_sheet("Prognose")
     jahre = prognosejahre()
-    erste, letzte = 2, MAX_OBJEKTE * jahre + 1
+    erste, letzte = 2, (MAX_OBJEKTE + MAX_NEUOBJEKTE) * jahre + 1
     _kopf(ws, 1, [s.ueberschrift for s in PROGNOSE_SPALTEN])
     ws.row_dimensions[1].height = 32
 
@@ -141,10 +142,12 @@ def _blatt_prognose(wb) -> None:
         ws.column_dimensions[bst].width = s.breite
         _name(wb, s.name, f"Prognose!${bst}${erste}:${bst}${letzte}")
 
-    for objekt_nr in range(1, MAX_OBJEKTE + 1):
+    bloecke = ([(nr, formeln.prognose_zeile) for nr in range(1, MAX_OBJEKTE + 1)]
+               + [(nr, formeln.prognose_zeile_neu) for nr in range(1, MAX_NEUOBJEKTE + 1)])
+    for block, (nr, zeilenformeln) in enumerate(bloecke):
         for j in range(jahre):
-            zeile = erste + (objekt_nr - 1) * jahre + j
-            formeln_zeile = formeln.prognose_zeile(zeile, objekt_nr, erstes_jahr=j == 0)
+            zeile = erste + block * jahre + j
+            formeln_zeile = zeilenformeln(zeile, nr, erstes_jahr=j == 0)
             for i, s in enumerate(PROGNOSE_SPALTEN, start=1):
                 c = ws.cell(row=zeile, column=i, value=formeln_zeile[s.key])
                 c.number_format = s.format
@@ -213,6 +216,61 @@ def _blatt_verkaeufe(wb, modell: Modell) -> None:
     ws.freeze_panes = "B2"
 
 
+def _blatt_neuobjekte(wb, modell: Modell) -> None:
+    """Reinvestitionsobjekte: Eingaben, Übertragung der Rücklage, AfA-Basis."""
+    ws = wb.create_sheet("Neuobjekte")
+    erste, letzte = 2, MAX_NEUOBJEKTE + 1
+    spalten = NEU_FELDER + NEU_SPALTEN
+    status_spalte = len(spalten) + 1
+    st = get_column_letter(status_spalte)
+    _kopf(ws, 1, [s.ueberschrift for s in spalten] + [STATUS_UEBERSCHRIFT])
+    ws.row_dimensions[1].height = 45
+
+    for i, s in enumerate(spalten, start=1):
+        bst = get_column_letter(i)
+        ws.column_dimensions[bst].width = s.breite
+        _name(wb, s.name, f"'Neuobjekte'!${bst}${erste}:${bst}${letzte}")
+    for i, f in enumerate(NEU_FELDER, start=1):
+        _validierung(ws, f, f"{get_column_letter(i)}{erste}:{get_column_letter(i)}{letzte}")
+    # Quelle als Auswahl aus den gebildeten Rücklagen
+    q = formeln.nspalte("quelle")
+    dv = DataValidation(type="list", formula1="rl_ID", allow_blank=True)
+    ws.add_data_validation(dv)
+    dv.add(f"{q}{erste}:{q}{letzte}")
+
+    ws.column_dimensions[st].width = 44
+    _name(wb, NEU_STATUS_NAME, f"'Neuobjekte'!${st}${erste}:${st}${letzte}")
+    for zeile in range(erste, letzte + 1):
+        for i, f in enumerate(NEU_FELDER, start=1):
+            c = ws.cell(row=zeile, column=i)
+            c.number_format = f.format
+            c.fill = FILL_EINGABE
+        rechnung = formeln.neu_zeile(zeile)
+        for i, s in enumerate(NEU_SPALTEN, start=len(NEU_FELDER) + 1):
+            c = ws.cell(row=zeile, column=i, value=rechnung[s.key])
+            c.number_format = s.format
+            c.fill = FILL_BERECHNET
+        c = ws.cell(row=zeile, column=status_spalte, value=formeln.status_neu(zeile))
+        c.fill = FILL_BERECHNET
+    _status_rot(ws, f"{st}{erste}:{st}{letzte}", f"{st}{erste}")
+
+    for zeile, neu in enumerate(modell.neuobjekte, start=erste):
+        for i, f in enumerate(NEU_FELDER, start=1):
+            wert = getattr(neu, f.key)
+            if wert is not None:
+                ws.cell(row=zeile, column=i, value=wert)
+
+    hinweis = get_column_letter(status_spalte + 2)
+    ws[f"{hinweis}1"] = ("Kauf zum Jahresende: Übertragung und Bestand im Kaufjahr, "
+                         "Miete, Erhaltung und AfA ab dem Folgejahr.")
+    ws[f"{hinweis}2"] = ("Übertragung: ü1 Gebäudegewinn auf Gebäude, ü2 G+B-Gewinn auf G+B, "
+                         "ü3 Rest des G+B-Gewinns auf Gebäude. AfA-Basis = AK Gebäude − ü1 − ü3.")
+    ws[f"{hinweis}3"] = ("Nutzen mehrere Neuobjekte dieselbe Rücklage, gilt die Zeilenreihenfolge: "
+                         "jede Zeile erhält, was die Zeilen darüber übrig lassen.")
+    ws[f"{hinweis}4"] = "Kaufnebenkosten werden im Verhältnis G+B zu Gebäude aktiviert; leer = 0."
+    ws.freeze_panes = "B2"
+
+
 def _blatt_ruecklagen(wb) -> None:
     """§ 6b-Rücklagen: links je Verkauf, rechts der Spiegel je Jahr."""
     ws = wb.create_sheet("Rücklagen")
@@ -254,8 +312,8 @@ def _blatt_ruecklagen(wb) -> None:
         "Rücklage nur bei § 6b ja und Status OK im Blatt Verkäufe, gebildet zum Ende des "
         "Verkaufsjahrs aus den positiven Teilgewinnen Gebäude und G+B."))
     ws.cell(row=hinweis + 1, column=versatz + 1, value=(
-        "Ohne Reinvestition Auflösung im Fristjahr plus Gewinnzuschlag je vollem Jahr; "
-        "Übertragung auf Neuobjekte folgt mit Etappe 6."))
+        "Was bis zum Fristjahr nicht auf Neuobjekte übertragen ist, wird dort aufgelöst, "
+        "plus Gewinnzuschlag je vollem Jahr."))
     ws.cell(row=hinweis + 2, column=versatz + 1, value=(
         "steuerwirksam = Veräußerungsgewinne − Einstellung + Auflösung + Zuschlag. "
         + HINWEIS_FINANZIERUNG))
@@ -276,6 +334,7 @@ def _blatt_uebersicht(wb) -> None:
         ("davon ohne Verkehrswert (zählen mit 0)", "ueb_OhneWert",
          '=SUMPRODUCT((obj_ID<>"")*(obj_Verkehrswert=""))', FMT_ZAHL),
         ("geplante Verkäufe", "ueb_Verkaeufe", '=SUMPRODUCT(--(vk_ID<>""))', FMT_ZAHL),
+        ("Neuobjekte im Modell", "ueb_Neuobjekte", "=SUM(ne_Gueltig)", FMT_ZAHL),
         ("Wertsteigerung p. a.", None, "=par_Wertsteig", FMT_PROZENT),
     ]
     for zeile, (text, name, formel, fmt) in enumerate(kennzahlen, start=4):
@@ -289,8 +348,8 @@ def _blatt_uebersicht(wb) -> None:
     ws.conditional_formatting.add(
         "D5", FormulaRule(formula=["D5>0"], fill=FILL_FEHLER))
 
-    kopf = 9
-    _kopf(ws, kopf, ["Jahr", "Baseline: alles halten", "Plan: mit Verkäufen",
+    kopf = 10
+    _kopf(ws, kopf, ["Jahr", "Baseline: alles halten", "Plan: mit Verkäufen und Neuobjekten",
                      "Differenz Plan − Baseline"])
     ws.row_dimensions[kopf].height = 32
     erste = kopf + 1
@@ -300,7 +359,7 @@ def _blatt_uebersicht(wb) -> None:
             werte = ["=par_Basisjahr", "=SUM(obj_Verkehrswert)", f"=B{zeile}"]
         else:
             werte = [f"=A{zeile - 1}+1",
-                     f"=SUMIFS(prg_Verkehrswert,prg_Jahr,A{zeile})",
+                     f"=SUMIFS(prg_Verkehrswert,prg_Jahr,A{zeile},prg_Neu,0)",
                      f"=SUMIFS(prg_Verkehrswert,prg_Jahr,A{zeile},prg_Bestand,1)"]
         werte.append(f"=C{zeile}-B{zeile}")
         for spalte, (formel, fmt) in enumerate(
@@ -347,6 +406,7 @@ def erstelle_mappe(modell: Modell) -> Workbook:
     _blatt_parameter(wb)
     _blatt_objekte(wb, modell)
     _blatt_verkaeufe(wb, modell)
+    _blatt_neuobjekte(wb, modell)
     _blatt_prognose(wb)
     _blatt_ruecklagen(wb)
     _blatt_uebersicht(wb)

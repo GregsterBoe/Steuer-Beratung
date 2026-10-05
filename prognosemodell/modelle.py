@@ -131,6 +131,8 @@ PROGNOSE_SPALTEN = [
     Spalte("verkehrswert", "Verkehrswert Ende", "prg_Verkehrswert", FMT_EURO, 16),
     # 1 = Objekt am Jahresende noch im Bestand; im Verkaufsjahr schon 0 (Verkauf zum Jahresende)
     Spalte("bestand", "im Bestand Ende", "prg_Bestand", FMT_ZAHL, 10),
+    # 1 = Neuobjekt (Etappe 6); zählt nur im Plan, nicht in der Baseline
+    Spalte("neu", "Neuobjekt", "prg_Neu", FMT_ZAHL, 10),
 ]
 
 # Blatt Verkäufe (Etappe 4, Projektplan Abschnitt 11): Eingaben, dann berechnete Spalten
@@ -176,6 +178,8 @@ RUECKLAGE_SPALTEN = [
     Spalte("gub", "Rücklage G+B", "rl_GuB", FMT_EURO),
     Spalte("betrag", "Rücklage gesamt", "rl_Betrag", FMT_EURO),
     Spalte("fristjahr", "Fristjahr", "rl_Fristjahr", FMT_JAHR, 9),
+    Spalte("ueb_geb", "übertragen Gebäude", "rl_UebGeb", FMT_EURO),
+    Spalte("ueb_gub", "übertragen G+B", "rl_UebGuB", FMT_EURO),
     Spalte("aufloesung", "Auflösung im Fristjahr", "rl_Aufloesung", FMT_EURO),
     Spalte("zuschlag", "Gewinnzuschlag", "rl_Zuschlag", FMT_EURO),
     Spalte("hinweis", "Hinweis", "rl_Hinweis", FMT_TEXT, 30),
@@ -185,12 +189,48 @@ RUECKLAGE_JAHR_SPALTEN = [
     Spalte("jahr", "Jahr", "rls_Jahr", FMT_JAHR, 8),
     Spalte("gewinne", "Veräußerungsgewinne", "rls_Gewinne", FMT_EURO, 15),
     Spalte("bildung", "Einstellung in Rücklage", "rls_Bildung", FMT_EURO, 15),
+    Spalte("uebertragung", "Übertragung auf Neuobjekte", "rls_Uebertragung", FMT_EURO, 15),
     Spalte("aufloesung", "Auflösung", "rls_Aufloesung", FMT_EURO),
     Spalte("zuschlag", "Gewinnzuschlag", "rls_Zuschlag", FMT_EURO),
     Spalte("steuerwirksam", "steuerwirksam aus Verkauf und Rücklage", "rls_Steuerwirksam",
            FMT_EURO, 17),
     Spalte("bestand", "Rücklagenbestand Ende", "rls_Bestand", FMT_EURO, 15),
 ]
+
+
+# Blatt Neuobjekte (Etappe 6, Projektplan Abschnitt 13): Kauf zum Jahresende,
+# Miete und AfA ab dem Folgejahr
+MAX_NEUOBJEKTE = 50
+NEU_FELDER = [
+    Feld("neu_id", "NeuID", "ne_ID", FMT_TEXT, True, 12),
+    Feld("name", "Name", "ne_Name", FMT_TEXT, False, 22),
+    Feld("kaufjahr", "Kaufjahr", "ne_Kaufjahr", FMT_JAHR, True, 10,
+         minimum=1900, maximum=2100, ganzzahl=True),
+    Feld("kaufpreis", "Kaufpreis", "ne_Kaufpreis", FMT_EURO, True, minimum=0),
+    Feld("anteil_gub", "Anteil G+B", "ne_AnteilGuB", FMT_PROZENT, True, 10, minimum=0, maximum=1),
+    Feld("nebenkosten", "Kaufnebenkosten", "ne_Nebenkosten", FMT_EURO, False, minimum=0),
+    Feld("afa_satz", "AfA-Satz", "ne_AfASatz", FMT_PROZENT, True, 10, minimum=0, maximum=0.2),
+    Feld("mietrendite", "Mietrendite auf Kaufpreis", "ne_Mietrendite", FMT_PROZENT, False, 11,
+         minimum=0, maximum=1),
+    Feld("erhaltungsquote", "Erhaltung auf Kaufpreis", "ne_ErhQuote", FMT_PROZENT, False, 11,
+         minimum=0, maximum=1),
+    Feld("quelle", "Quelle RücklageID", "ne_Quelle", FMT_TEXT, False, 16),
+]
+NEU_SPALTEN = [
+    # 1 = rechnet in der Prognose mit (Pflichtfelder da, ID eindeutig, Kaufjahr im Raster)
+    Spalte("gueltig", "im Modell", "ne_Gueltig", FMT_ZAHL, 8),
+    Spalte("ak_gub_neu", "AK G+B neu", "ne_AKGuBNeu", FMT_EURO),
+    Spalte("ak_geb_neu", "AK Gebäude neu", "ne_AKGebNeu", FMT_EURO),
+    Spalte("rl_geb", "Rücklage Gebäude verfügbar", "ne_RLGeb", FMT_EURO),
+    Spalte("rl_gub", "Rücklage G+B verfügbar", "ne_RLGuB", FMT_EURO),
+    Spalte("ue1", "ü1 Gebäudegewinn auf Gebäude", "ne_Ue1", FMT_EURO),
+    Spalte("ue2", "ü2 G+B-Gewinn auf G+B", "ne_Ue2", FMT_EURO),
+    Spalte("ue3", "ü3 G+B-Gewinn auf Gebäude", "ne_Ue3", FMT_EURO),
+    Spalte("ue_gesamt", "übertragen gesamt", "ne_UeGesamt", FMT_EURO),
+    Spalte("afa_basis", "AfA-Basis Gebäude", "ne_AfABasis", FMT_EURO, 16),
+    Spalte("ak_gub", "steuerliche AK G+B", "ne_AKGuB", FMT_EURO),
+]
+NEU_STATUS_NAME = "ne_Status"
 
 
 def prognosejahre() -> int:
@@ -229,6 +269,22 @@ class Verkauf:
 
 
 @dataclass
+class Neuobjekt:
+    """Reinvestitionsobjekt, gekauft zum Ende des Kaufjahrs. None = Feld leer lassen."""
+    neu_id: str
+    kaufjahr: Optional[int]
+    kaufpreis: Optional[float] = None
+    anteil_gub: Optional[float] = None
+    afa_satz: Optional[float] = None
+    name: Optional[str] = None
+    nebenkosten: Optional[float] = None
+    mietrendite: Optional[float] = None
+    erhaltungsquote: Optional[float] = None
+    quelle: Optional[str] = None         # RücklageID, z. B. "RL-OBJ-001"
+
+
+@dataclass
 class Modell:
     objekte: list = field(default_factory=list)
     verkaeufe: list = field(default_factory=list)
+    neuobjekte: list = field(default_factory=list)
