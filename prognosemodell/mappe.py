@@ -8,7 +8,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.datavalidation import DataValidation
 
-from . import formeln
+from . import bwa, formeln
 from .modelle import (CODENAME_MAPPE, CODENAMEN, FEHLER, FMT_EURO, FMT_JAHR, FMT_PROZENT,
                       FMT_TEXT, FMT_ZAHL, HINWEIS, MAX_NEUOBJEKTE, MAX_VARIANTEN, PRUEFUNGEN,
                       VARIANTEN_KOPF, WARNUNG,
@@ -698,7 +698,10 @@ def erstelle_mappe(modell: Modell) -> Workbook:
     _blatt_vergleich(wb)
     _blatt_pruefung(wb)
     _blatt_varianten(wb)
+    bwa.blaetter_bwa(wb, modell)
+    bwa.blatt_sonderbereich(wb, modell)
     wb.code_name = CODENAME_MAPPE
-    for ws in wb.worksheets:
-        ws.sheet_properties.codeName = CODENAMEN[ws.title]
+    for i, ws in enumerate(wb.worksheets, start=1):
+        # BWA-Blätter heißen nach der Kostenstelle; Codename für VBA dann wsBWA<n>
+        ws.sheet_properties.codeName = CODENAMEN.get(ws.title, f"wsBWA{i}")
     return wb

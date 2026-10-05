@@ -12,9 +12,9 @@
 
 ## Blätter
 
-| Eingabe | Rechnung | Ausgabe | Kontrolle |
-| --- | --- | --- | --- |
-| Parameter, Objekte, Verkäufe, Neuobjekte | Prognose, Rücklagen, Liquidität | Übersicht, Vergleich, Auswertung | Prüfung, Varianten |
+| Eingabe | Rechnung | Ausgabe | Kontrolle | BWA |
+| --- | --- | --- | --- | --- |
+| Parameter, Objekte, Verkäufe, Neuobjekte | Prognose, Rücklagen, Liquidität | Übersicht, Vergleich, Auswertung | Prüfung, Varianten | Alle Objekte, je Kostenstelle ein Blatt, Verkauf und Kauf |
 
 ## Etappen
 
@@ -40,6 +40,7 @@ Stand: Etappen 1 bis 9 sind umgesetzt.
 - Szenarien A, B, C und Baseline gleichzeitig, mit verzinster Alternativanlage und Vergleichsblatt
 - Einleseschicht und Vorlage für die Kostenstellenblätter (DATEV-BWA)
 - Prüfungsblatt mit allen Plausibilitätsprüfungen als Formeln, VBA-Steuerung als .xlsm
+- Ausgabe im DATEV-BWA-Format je Kostenstelle mit Summenblatt, Sonderbereich Verkauf und Kauf
 
 ## Nutzung
 
@@ -57,7 +58,7 @@ python -m prognosemodell.vorlagen    # schreibt vorlagen/Kostenstellen_BWA_Vorla
 
 Das Prüfskript und `--makros` brauchen LibreOffice mit Calc und der Python-UNO-Brücke (`soffice`, unter Debian/Ubuntu die Pakete `libreoffice-calc` und `python3-uno`).
 
-Zielformat der Eingabe ist die DATEV-BWA-Kostenstellenblattsammlung; `vorlagen/Kostenstellen_BWA_Vorlage.xlsx` zeigt das Layout mit erfundenen Werten. Als Jahresspalte gilt ein Kopf wie 2026, „Jahr 2026“ oder „Plan 2027“; ein Summenblatt „Alle Objekte“ wird übersprungen. Geplant ist, die Ergebnisse wieder in diese Struktur zu schreiben, mit einem Sonderbereich für Verkauf und Kauf (Projektplan, Abschnitt 18).
+Zielformat der Eingabe ist die DATEV-BWA-Kostenstellenblattsammlung; `vorlagen/Kostenstellen_BWA_Vorlage.xlsx` zeigt das Layout mit erfundenen Werten. Als Jahresspalte gilt ein Kopf wie 2026, „Jahr 2026“ oder „Plan 2027“; ein Summenblatt „Alle Objekte“ wird übersprungen. Die Ergebnisse stehen wieder in dieser Struktur, siehe unten.
 
 `--kostenstellen` überspringt jedes Blatt, das nicht im Kostenstellenformat ist (kein „Nr.“ in B4, keine Kostenstelle in B2 oder keine Spalte des Basisjahrs in Zeile 4), etwa Annahmen oder Übersichten. Jedes übersprungene Blatt nennt es mit Grund in der Ausgabe. Je Kostenstellenblatt liest es B2 (Kostenstelle = ObjektID), C2 (Objektname) und aus der Spalte des Basisjahrs die BWA-Zeilen 1020 (Miete), 1090 (weitere Einnahmen), 1250 (Erhaltung) sowie 1100–1220 und 1260 (weitere Ausgaben). Die Datei muss in Excel gespeichert sein, damit berechnete Werte vorliegen. Steuerliche Stammdaten (AK, Kaufjahr, AfA, Restbuchwert) kommen nicht aus diesen Blättern; solange sie fehlen, meldet die Statusspalte „Pflichtfeld fehlt“.
 
@@ -118,6 +119,13 @@ Mit `--makros` entsteht eine .xlsm mit VBA-Steuerung, die Schaltflächen liegen 
 - Variante festhalten
 
 „Variante festhalten“ schreibt die Kennzahlen des Vergleichs als feste Werte ins Blatt **Varianten**, so lassen sich etwa verschiedene Verkaufsjahre vergleichen. VBA rechnet nichts, alle Ergebnisse entstehen in den Formeln.
+
+Die Ergebnisse stehen auch im **DATEV-BWA-Format** (Projektplan, Abschnitt 18):
+- **Blatt je Kostenstelle:** je Objekt und Neuobjekt ein Blatt mit den BWA-Zeilen 1010–1380. Links stehen die Ist-Werte aus der eingelesenen BWA, rechts die Planjahre als Formeln aus der Prognose.
+- **Kostenarten:** Die weiteren Ausgaben werden nach dem Anteil der Kostenart im Basisjahr aufgeteilt.
+- **Verkauf und Rücklage:** Gewinn, Einstellung und Auflösung stehen im neutralen Ergebnis.
+- **Summenblatt „Alle Objekte“:** Es trägt dazu Zinsertrag und Steuer und stimmt mit Liquidität und Auswertung überein.
+- **Blatt Verkauf und Kauf:** je Verkauf eine Ergebnissicht für die Berichterstattung und eine Detailsicht. Die Ergebnissicht zeigt Erlös, Reinvestition, Kapitalanlage, Übertrag § 6b und den Vergleich Halten gegen Alternative im ersten vollen Jahr. Die Detailsicht zeigt die Einzelauflistung nach G+B und Gebäude und die Planung. Dazu kommt je Neuobjekt die Detailsicht des Kaufs.
 
 Gelb = Eingabe, grau = Formel. Die Statusspalte im Objektblatt meldet fehlende Pflichtfelder, doppelte IDs, ein Kaufjahr nach dem Basisjahr und einen Restbuchwert über den AK.
 

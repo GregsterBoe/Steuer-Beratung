@@ -159,6 +159,8 @@ PROGNOSE_SPALTEN = [
     Spalte("afa_ohne6b", "AfA ohne § 6b", "prg_AfAOhne6b", FMT_EURO),
     Spalte("buchwert_ohne6b", "Buchwert Gebäude ohne § 6b", "prg_BuchwertOhne6b", FMT_EURO, 16),
     Spalte("buchwert_gub_ohne6b", "Buchwert G+B ohne § 6b", "prg_BuchwertGuBOhne6b", FMT_EURO, 16),
+    # Sonderbereich Verkauf und Kauf: RücklageID, aus der das Neuobjekt gekauft ist
+    Spalte("quelle", "Quelle RücklageID", "prg_Quelle", FMT_TEXT, 14),
 ]
 
 # Blatt Verkäufe (Etappe 4, Projektplan Abschnitt 11): Eingaben, dann berechnete Spalten
@@ -480,3 +482,6 @@ class Modell:
     neuobjekte: list = field(default_factory=list)
     # abweichende Parameterwerte, z. B. {"par_Alternativrendite": 0}
     parameter: dict = field(default_factory=dict)
+    # Ist-Werte aus den Kostenstellenblättern je ObjektID (einlesen.LaufendeWerte);
+    # ohne Eintrag zeigt das BWA-Blatt im Basisjahr die Werte des Objektblatts
+    kostenstellen: dict = field(default_factory=dict)
