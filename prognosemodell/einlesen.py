@@ -20,6 +20,7 @@ from .modelle import Objekt
 ZELLE_ID = "B2"        # Kostenstelle, z. B. "KSt 1"
 ZELLE_NAME = "C2"      # Objektbezeichnung, z. B. "KC 24+26"
 KOPFZEILE = 4          # B "Nr.", danach Jahres- und Monatsspalten
+KENNUNG = "Nr."        # Inhalt von B4; nur Blätter mit dieser Kennung sind Kostenstellen
 SPALTE_NR = 2          # B
 
 # BWA-Zeilen je Modellfeld; fehlende Zeilen zählen als 0
@@ -83,13 +84,25 @@ def _summe(ws, ws_formeln, zeilen: dict, nummern: tuple, spalte: int) -> float:
     return summe
 
 
-def lese_kostenstellen(pfad, basisjahr: int) -> list:
-    """Liest alle Blätter der Kanzlei-Excel; je Blatt eine LaufendeWerte-Zeile."""
+def ist_kostenstellenblatt(ws) -> bool:
+    kennung = ws.cell(row=KOPFZEILE, column=SPALTE_NR).value
+    return isinstance(kennung, str) and kennung.strip().lower() == KENNUNG.lower()
+
+
+def lese_kostenstellen(pfad, basisjahr: int) -> tuple:
+    """Liest alle Kostenstellenblätter der Kanzlei-Excel.
+
+    Rückgabe: (je Kostenstellenblatt eine LaufendeWerte-Zeile, Titel der
+    übersprungenen Blätter ohne Kennung "Nr." in B4, etwa Annahmen oder Übersichten).
+    """
     pfad = Path(pfad)
     werte_wb = load_workbook(pfad, data_only=True)   # berechnete Werte
     formel_wb = load_workbook(pfad, data_only=False)  # nur für Fehlermeldungen
-    ergebnis, gesehen = [], {}
+    ergebnis, gesehen, uebersprungen = [], {}, []
     for ws in werte_wb.worksheets:
+        if not ist_kostenstellenblatt(ws):
+            uebersprungen.append(ws.title)
+            continue
         objekt_id = ws[ZELLE_ID].value
         if objekt_id is None or str(objekt_id).strip() == "":
             raise EinleseFehler(f"Blatt {ws.title!r}: keine Kostenstelle in {ZELLE_ID}")
@@ -117,7 +130,11 @@ def lese_kostenstellen(pfad, basisjahr: int) -> list:
             weitere_ausgaben=summe(BWA_AUSGABEN),
             abschreibung=summe(BWA_ABSCHREIBUNG),
         ))
-    return ergebnis
+    if not ergebnis:
+        raise EinleseFehler(
+            f"{pfad.name}: kein Kostenstellenblatt gefunden "
+            f"({KENNUNG!r} in Zeile {KOPFZEILE}, Spalte B erwartet)")
+    return ergebnis, uebersprungen
 
 
 def zusammenfuehren(stammdaten: list, laufende: list) -> list:
