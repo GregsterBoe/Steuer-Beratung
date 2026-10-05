@@ -6,10 +6,10 @@ Excel zeigt sie in der deutschen Oberfläche automatisch als WENN, ZÄHLENWENN u
 
 from openpyxl.utils import get_column_letter
 
-from .modelle import (AFA_DEGRESSIV, NEU_FELDER, NEU_SPALTEN, OBJEKT_FELDER, PROGNOSE_SPALTEN,
+from .modelle import (AFA_DEGRESSIV, FEHLER, NEU_FELDER, NEU_SPALTEN, OBJEKT_FELDER, PROGNOSE_SPALTEN,
                       RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN, STATUS_6B_UNZULAESSIG,
                       STATUS_OK, SZ_A, SZ_B, SZ_BASELINE, SZENARIEN, VERKAUF_FELDER,
-                      VERKAUF_SPALTEN, Szenario, aus_spalten, liq_spalten)
+                      VERKAUF_SPALTEN, WARNUNG, Szenario, aus_spalten, liq_spalten)
 
 
 def spalte(key: str) -> str:
@@ -604,3 +604,53 @@ def vergleich_zeile(praefix_art: str, name: str, art: str, sz: Szenario) -> str:
     """Kennzahl eines Szenarios im Blatt Vergleich: Endwert oder Summe über alle Jahre."""
     bereich = f"{sz.liq if praefix_art == 'liq' else sz.aus}_{name}"
     return f"=INDEX({bereich},par_Prognosejahre)" if art == "ende" else f"=SUM({bereich})"
+
+
+# --- Plausibilitätsprüfungen (Etappe 9, Projektplan Abschnitt 19) ---
+#
+# Je Prüfung die Anzahl betroffener Zeilen. SUMPRODUCT statt COUNTIF, weil Excel und
+# LibreOffice Formelzellen mit "" bei COUNTIF(…,"<>") unterschiedlich zählen.
+# Verkäufe und Rücklagen haben dieselben Zeilen, rl_* und vk_* lassen sich kombinieren.
+
+
+def _nicht_ok(status: str, ausnahme: str = None) -> str:
+    weitere = f'*({status}<>"{ausnahme}")' if ausnahme else ""
+    return f'=SUMPRODUCT(({status}<>"")*({status}<>"{STATUS_OK}"){weitere})'
+
+
+def pruefung_anzahl() -> dict:
+    genannt = "COUNTIF(ne_Quelle,rl_ID)"
+    # Restbetrag über einen halben Cent, damit Rundung nicht anschlägt
+    rest = '(rl_ID<>"")*(rl_Aufloesung>0.005)'
+    gueltig = f'((vk_Status="{STATUS_OK}")+(vk_Status="{STATUS_6B_UNZULAESSIG}"))'
+    im_fenster = "+".join(
+        f'COUNTIFS(vk_Jahr,">"&(vk_Jahr-par_DOJahre),vk_Jahr,"<="&vk_Jahr,vk_Status,"{st}")'
+        for st in (STATUS_OK, STATUS_6B_UNZULAESSIG))
+    return {
+        "objekte": _nicht_ok("obj_Status"),
+        "verkaeufe": _nicht_ok("vk_Status", STATUS_6B_UNZULAESSIG),
+        "neuobjekte": _nicht_ok("ne_Status"),
+        "steuerwelt": '=IF(par_Steuerwelt="GmbH",0,1)',
+        "vorbesitz": f'=SUMPRODUCT(--(vk_Status="{STATUS_6B_UNZULAESSIG}"))',
+        "teiluebertrag": f"=SUMPRODUCT({rest}*({genannt}>0))",
+        "ohne_reinvest": f"=SUMPRODUCT({rest}*({genannt}=0))",
+        # je gültigem Verkauf: Verkäufe im Zeitraum, der mit seinem Verkaufsjahr endet
+        "grundstueckshandel": f"=SUMPRODUCT({gueltig}*(({im_fenster})>par_DOGrenze))",
+        "frist_ende": '=SUMPRODUCT(--(rl_Hinweis<>""))',
+        "liquiditaet": "=SUMPRODUCT(--(liq_Kum<-0.005))",
+        "verkehrswert": f'=SUMPRODUCT((obj_Status="{STATUS_OK}")*(obj_Verkehrswert=""))',
+    }
+
+
+def pruefung_ergebnis(zeile: int) -> str:
+    """Ergebnis einer Prüfzeile: OK oder die Art (Fehler, Warnung, Hinweis)."""
+    return f'=IF($D{zeile}=0,"{STATUS_OK}",$C{zeile})'
+
+
+def pruefung_summen() -> dict:
+    return {
+        "pr_Fehler": f'=COUNTIF(pr_Ergebnis,"{FEHLER}")',
+        "pr_Warnungen": f'=COUNTIF(pr_Ergebnis,"{WARNUNG}")',
+        "pr_Gesamt": (f'=IF(pr_Fehler>0,pr_Fehler&" {FEHLER}",'
+                      f'IF(pr_Warnungen>0,pr_Warnungen&" Warnung(en)","{STATUS_OK}"))'),
+    }
