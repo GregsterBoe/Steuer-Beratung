@@ -51,16 +51,17 @@ PARAMETER = [
     Parameter("par_Wertsteig", "Wertsteigerung p. a.", 0.02, FMT_PROZENT, "Platzhalter"),
     Parameter("par_GrESt", "Grunderwerbsteuersatz", 0.05, FMT_PROZENT,
               "abhängig vom Bundesland; Platzhalter"),
-    Parameter("par_Alternativrendite", "Rendite Alternativanlage p. a.", 0.04, FMT_PROZENT,
-              "für Szenario B; Platzhalter"),
+    Parameter("par_AfADegressiv", "AfA degressiv (Neuobjekte)", 0.05, FMT_PROZENT,
+              "§ 7 Abs. 5a EStG, Wohngebäude mit Baubeginn 10/2023 bis 9/2029; vom Restbuchwert"),
+    Parameter("par_Alternativrendite", "Rendite Alternativanlage p. a.", 0.03, FMT_PROZENT,
+              "Zins auf die Liquidität des Vorjahresendes in allen Szenarien, voll steuerpflichtig; "
+              "negative Liquidität kostet denselben Satz. Platzhalter"),
     Parameter("par_6bVorbesitz", "§ 6b Mindest-Vorbesitzzeit (Jahre)", 6, FMT_ZAHL, ""),
     Parameter("par_6bFrist", "§ 6b Reinvestitionsfrist (Jahre)", 4, FMT_ZAHL, ""),
     Parameter("par_6bFristNeubau", "§ 6b Frist bei Neubau (Jahre)", 6, FMT_ZAHL,
               "wenn mit dem Neubau vor Ende der Regelfrist begonnen wurde (§ 6b Abs. 3)"),
     Parameter("par_6bZuschlag", "§ 6b Gewinnzuschlag je Jahr", 0.06, FMT_PROZENT,
               "bei Auflösung ohne Reinvestition"),
-    Parameter("par_Szenario", "aktives Szenario", "A", FMT_TEXT,
-              "A = § 6b-Kette, B = sofort versteuern", ("A", "B")),
 ]
 
 
@@ -133,6 +134,16 @@ PROGNOSE_SPALTEN = [
     Spalte("bestand", "im Bestand Ende", "prg_Bestand", FMT_ZAHL, 10),
     # 1 = Neuobjekt (Etappe 6); zählt nur im Plan, nicht in der Baseline
     Spalte("neu", "Neuobjekt", "prg_Neu", FMT_ZAHL, 10),
+    # Etappe 7: Buchwerte für stille Reserven und Baseline
+    Spalte("buchwert_gub", "Buchwert G+B Ende", "prg_BuchwertGuB", FMT_EURO),
+    # Gebäudebuchwert, als würde das Objekt nie verkauft (nur Bestandsobjekte, sonst 0)
+    Spalte("buchwert_halten", "Buchwert Gebäude bei Halten", "prg_BuchwertHalten", FMT_EURO, 16),
+    # Etappe 8: Szenarien B und C ohne § 6b-Übertragung. 1 = Neuobjekt mit Quelle-Rücklage
+    # (entfällt in Szenario B); für Bestandsobjekte gleich den Werten oben
+    Spalte("mit_quelle", "Neuobjekt mit Rücklage", "prg_MitQuelle", FMT_ZAHL, 10),
+    Spalte("afa_ohne6b", "AfA ohne § 6b", "prg_AfAOhne6b", FMT_EURO),
+    Spalte("buchwert_ohne6b", "Buchwert Gebäude ohne § 6b", "prg_BuchwertOhne6b", FMT_EURO, 16),
+    Spalte("buchwert_gub_ohne6b", "Buchwert G+B ohne § 6b", "prg_BuchwertGuBOhne6b", FMT_EURO, 16),
 ]
 
 # Blatt Verkäufe (Etappe 4, Projektplan Abschnitt 11): Eingaben, dann berechnete Spalten
@@ -198,6 +209,9 @@ RUECKLAGE_JAHR_SPALTEN = [
 ]
 
 
+AFA_LINEAR = "linear"
+AFA_DEGRESSIV = "degressiv"
+
 # Blatt Neuobjekte (Etappe 6, Projektplan Abschnitt 13): Kauf zum Jahresende,
 # Miete und AfA ab dem Folgejahr
 MAX_NEUOBJEKTE = 50
@@ -210,6 +224,10 @@ NEU_FELDER = [
     Feld("anteil_gub", "Anteil G+B", "ne_AnteilGuB", FMT_PROZENT, True, 10, minimum=0, maximum=1),
     Feld("nebenkosten", "Kaufnebenkosten", "ne_Nebenkosten", FMT_EURO, False, minimum=0),
     Feld("afa_satz", "AfA-Satz", "ne_AfASatz", FMT_PROZENT, True, 10, minimum=0, maximum=0.2),
+    # leer = linear; degressiv: par_AfADegressiv vom Restbuchwert, Wechsel zur linearen AfA,
+    # sobald Restbuchwert / Restnutzungsdauer höher ist; Nutzungsdauer = 1 / AfA-Satz
+    Feld("afa_methode", "AfA-Methode", "ne_AfAMethode", FMT_TEXT, False, 11,
+         auswahl=(AFA_LINEAR, AFA_DEGRESSIV)),
     Feld("mietrendite", "Mietrendite auf Kaufpreis", "ne_Mietrendite", FMT_PROZENT, False, 11,
          minimum=0, maximum=1),
     Feld("erhaltungsquote", "Erhaltung auf Kaufpreis", "ne_ErhQuote", FMT_PROZENT, False, 11,
@@ -229,8 +247,114 @@ NEU_SPALTEN = [
     Spalte("ue_gesamt", "übertragen gesamt", "ne_UeGesamt", FMT_EURO),
     Spalte("afa_basis", "AfA-Basis Gebäude", "ne_AfABasis", FMT_EURO, 16),
     Spalte("ak_gub", "steuerliche AK G+B", "ne_AKGuB", FMT_EURO),
+    # 1 = Quelle-Rücklage angegeben; das Objekt entfällt in Szenario B
+    Spalte("mit_quelle", "mit Rücklage", "ne_MitQuelle", FMT_ZAHL, 8),
 ]
 NEU_STATUS_NAME = "ne_Status"
+
+
+# Szenarien (Etappe 8, Projektplan Abschnitt 15): alle rechnen gleichzeitig, je eine Tabelle
+# nebeneinander in Liquidität und Auswertung. key, Titel, Namenspräfix Liquidität, Auswertung
+@dataclass(frozen=True)
+class Szenario:
+    key: str
+    titel: str
+    kurz: str
+    liq: str
+    aus: str
+
+
+SZ_A = Szenario("A", "A Plan: § 6b-Kette wie erfasst", "A Plan (§ 6b)", "liq", "aus")
+SZ_B = Szenario("B", "B: sofort versteuern, Kapital anlegen (Neuobjekte mit Rücklage entfallen)",
+                "B sofort versteuern, anlegen", "lvb", "avb")
+SZ_C = Szenario("C", "C: sofort versteuern, Neuobjekte trotzdem kaufen (volle AfA-Basis)",
+                "C sofort versteuern, kaufen", "lvc", "avc")
+SZ_BASELINE = Szenario("Baseline", "Baseline: alles halten", "Baseline halten", "lqb", "asb")
+SZENARIEN = [SZ_A, SZ_B, SZ_C, SZ_BASELINE]
+
+# Blatt Liquidität (Etappe 7 und 8, Projektplan Abschnitt 14): je Jahr eine Zeile,
+# je Szenario eine Tabelle mit denselben Spalten (eine Spalte Abstand)
+_LIQ = [
+    ("jahr", "Jahr", "Jahr", FMT_JAHR, 8),
+    ("einnahmen", "Mieten und weitere Einnahmen", "Einnahmen", FMT_EURO, 14),
+    ("ausgaben", "Erhaltung und weitere Ausgaben", "Ausgaben", FMT_EURO, 14),
+    ("afa", "AfA Gebäude", "AfA", FMT_EURO, 14),
+    ("ergebnis", "laufendes Ergebnis", "Ergebnis", FMT_EURO, 14),
+    ("verkauf", "steuerwirksam aus Verkauf und Rücklage", "Verkauf", FMT_EURO, 16),
+    ("zins", "Zinsertrag Alternativanlage", "Zins", FMT_EURO, 14),
+    ("zve", "Ergebnis vor Verlustvortrag", "ZvE", FMT_EURO, 14),
+    ("vortrag_genutzt", "Verlustvortrag genutzt", "VortragGenutzt", FMT_EURO, 14),
+    ("bemessung", "Bemessungsgrundlage", "Bemessung", FMT_EURO, 14),
+    ("vortrag", "Verlustvortrag Ende", "Vortrag", FMT_EURO, 14),
+    ("steuer", "Steuer", "Steuer", FMT_EURO, 14),
+    ("verkaufserloes", "Verkaufserlöse netto", "Verkaufserloes", FMT_EURO, 14),
+    ("rueckfluss", "davon Buchwert-Rückfluss", "Rueckfluss", FMT_EURO, 14),
+    ("kauf", "Kauf Neuobjekte inkl. Nebenkosten", "Kauf", FMT_EURO, 15),
+    ("zufluss", "freier Mittelzufluss", "Zufluss", FMT_EURO, 14),
+    ("kum", "Liquidität kumuliert Ende", "Kum", FMT_EURO, 15),
+]
+# Blatt Auswertung: Kennzahlen je Jahr, gleicher Aufbau je Szenario
+_AUS = [
+    ("jahr", "Jahr", "Jahr", FMT_JAHR, 8),
+    ("ergebnis", "laufendes Ergebnis", "Ergebnis", FMT_EURO, 14),
+    ("verkauf", "steuerwirksam aus Verkauf und Rücklage", "Verkauf", FMT_EURO, 16),
+    ("zins", "Zinsertrag Alternativanlage", "Zins", FMT_EURO, 14),
+    ("guv", "Gesamt-GuV vor Steuern", "GuV", FMT_EURO, 14),
+    ("steuer", "Steuer", "Steuer", FMT_EURO, 14),
+    ("nach_steuer", "Ergebnis nach Steuern", "NachSteuer", FMT_EURO, 14),
+    ("steuer_kum", "Steuer kumuliert", "SteuerKum", FMT_EURO, 14),
+    ("verkehrswert", "Verkehrswert Bestand", "Verkehrswert", FMT_EURO, 15),
+    ("buchwert", "Buchwert Bestand (Gebäude + G+B)", "Buchwert", FMT_EURO, 16),
+    ("stille_reserven", "stille Reserven", "StilleReserven", FMT_EURO, 14),
+    ("ruecklage", "§ 6b-Rücklage Bestand", "Ruecklage", FMT_EURO, 14),
+    ("vortrag", "Verlustvortrag", "Vortrag", FMT_EURO, 14),
+    ("liquiditaet", "Liquidität kumuliert", "Liquiditaet", FMT_EURO, 14),
+    ("vermoegen", "Gesamtvermögen vor latenter Steuer", "Vermoegen", FMT_EURO, 16),
+    ("latente_steuer", "latente Steuer", "LatenteSteuer", FMT_EURO, 14),
+    ("vermoegen_netto", "Gesamtvermögen nach latenter Steuer", "VermoegenNetto", FMT_EURO, 17),
+]
+
+
+def _spalten(vorlage, praefix: str) -> list:
+    return [Spalte(key, u, f"{praefix}_{name}", fmt, b) for key, u, name, fmt, b in vorlage]
+
+
+def liq_spalten(sz: Szenario) -> list:
+    return _spalten(_LIQ, sz.liq)
+
+
+def aus_spalten(sz: Szenario) -> list:
+    return _spalten(_AUS, sz.aus)
+
+
+LIQ_SPALTEN = liq_spalten(SZ_A)
+AUSWERTUNG_SPALTEN = aus_spalten(SZ_A)
+
+# Blatt Vergleich (Etappe 8): Kennzahlen je Szenario. art "ende" = Wert im letzten
+# Prognosejahr aus der Auswertung, "summe" = Summe über alle Jahre aus der Liquidität
+VERGLEICH_KENNZAHLEN = [
+    ("Endvermögen nach latenter Steuer", "aus", "VermoegenNetto", "ende",
+     "Verkehrswert + Liquidität − latente Steuer am Ende des letzten Prognosejahrs"),
+    ("Verkehrswert Immobilien", "aus", "Verkehrswert", "ende", "Objekte im Bestand"),
+    ("Liquidität (Alternativanlage)", "aus", "Liquiditaet", "ende",
+     "kumulierte freie Mittel samt Zinsen"),
+    ("latente Steuer", "aus", "LatenteSteuer", "ende",
+     "Steuer bei Verkauf aller Objekte und Auflösung der Rücklage"),
+    ("Buchwert Immobilien", "aus", "Buchwert", "ende", "Gebäude + G+B"),
+    ("stille Reserven", "aus", "StilleReserven", "ende", "Verkehrswert − Buchwert"),
+    ("§ 6b-Rücklage", "aus", "Ruecklage", "ende", "noch nicht übertragen oder aufgelöst"),
+    ("Verlustvortrag", "aus", "Vortrag", "ende", "mindert die latente Steuer"),
+    ("Mieten und weitere Einnahmen", "liq", "Einnahmen", "summe", "Summe über alle Jahre"),
+    ("Erhaltung und weitere Ausgaben", "liq", "Ausgaben", "summe", "Summe über alle Jahre"),
+    ("AfA Gebäude", "liq", "AfA", "summe", "verlorene AfA durch § 6b: A gegen C"),
+    ("laufendes Ergebnis", "liq", "Ergebnis", "summe", "Summe über alle Jahre"),
+    ("steuerwirksam aus Verkauf und Rücklage", "liq", "Verkauf", "summe",
+     "Gewinne, Auflösung und Zuschlag"),
+    ("Zinsertrag Alternativanlage", "liq", "Zins", "summe", "Summe über alle Jahre"),
+    ("Steuer", "liq", "Steuer", "summe", "gezahlte Steuer; die gestundete steht in der latenten"),
+    ("Verkaufserlöse netto", "liq", "Verkaufserloes", "summe", "Summe über alle Jahre"),
+    ("Kauf Neuobjekte", "liq", "Kauf", "summe", "Summe über alle Jahre"),
+]
 
 
 def prognosejahre() -> int:
@@ -277,6 +401,7 @@ class Neuobjekt:
     anteil_gub: Optional[float] = None
     afa_satz: Optional[float] = None
     name: Optional[str] = None
+    afa_methode: Optional[str] = None    # "linear" (leer) oder "degressiv"
     nebenkosten: Optional[float] = None
     mietrendite: Optional[float] = None
     erhaltungsquote: Optional[float] = None
@@ -288,3 +413,5 @@ class Modell:
     objekte: list = field(default_factory=list)
     verkaeufe: list = field(default_factory=list)
     neuobjekte: list = field(default_factory=list)
+    # abweichende Parameterwerte, z. B. {"par_Alternativrendite": 0}
+    parameter: dict = field(default_factory=dict)

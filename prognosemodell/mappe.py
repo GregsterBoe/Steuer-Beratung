@@ -9,12 +9,12 @@ from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from . import formeln
-from .modelle import (FMT_EURO, FMT_JAHR, FMT_PROZENT, FMT_ZAHL, MAX_NEUOBJEKTE, MAX_OBJEKTE,
-                      MAX_VERKAEUFE, NEU_FELDER, NEU_SPALTEN, NEU_STATUS_NAME, OBJEKT_FELDER,
+from .modelle import (FMT_EURO, FMT_JAHR, FMT_PROZENT, FMT_ZAHL, MAX_NEUOBJEKTE,
+                      MAX_OBJEKTE, MAX_VERKAEUFE, NEU_FELDER, NEU_SPALTEN, NEU_STATUS_NAME, OBJEKT_FELDER,
                       PARAMETER, PROGNOSE_SPALTEN, RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN,
-                      STATUS_NAME, STATUS_UEBERSCHRIFT,
-                      VERKAUF_FELDER, VERKAUF_SPALTEN, VERKAUF_STATUS_NAME, Modell,
-                      prognosejahre)
+                      STATUS_NAME, STATUS_UEBERSCHRIFT, SZ_A, SZ_BASELINE, SZENARIEN,
+                      VERGLEICH_KENNZAHLEN, VERKAUF_FELDER, VERKAUF_SPALTEN, VERKAUF_STATUS_NAME, Modell,
+                      aus_spalten, liq_spalten, prognosejahre)
 
 HINWEIS_FINANZIERUNG = "Alle Werte vor Finanzierung (ohne Zins und Tilgung)."
 
@@ -63,7 +63,7 @@ def _status_rot(ws, bereich: str, erste_zelle: str) -> None:
     )
 
 
-def _blatt_parameter(wb) -> None:
+def _blatt_parameter(wb, modell: Modell) -> None:
     ws = wb.active
     ws.title = "Parameter"
     ws["A1"] = "Parameter"
@@ -71,9 +71,12 @@ def _blatt_parameter(wb) -> None:
     ws["A2"] = HINWEIS_FINANZIERUNG
     _kopf(ws, 4, ["Bezeichnung", "Wert", "Name", "Erläuterung"])
 
+    unbekannt = set(modell.parameter) - {p.name for p in PARAMETER}
+    if unbekannt:
+        raise ValueError(f"unbekannte Parameter: {sorted(unbekannt)}")
     for zeile, p in enumerate(PARAMETER, start=5):
         ws.cell(row=zeile, column=1, value=p.bezeichnung)
-        c = ws.cell(row=zeile, column=2, value=p.wert)
+        c = ws.cell(row=zeile, column=2, value=modell.parameter.get(p.name, p.wert))
         c.number_format = p.format
         berechnet = isinstance(p.wert, str) and p.wert.startswith("=")
         c.fill = FILL_BERECHNET if berechnet else FILL_EINGABE
@@ -268,6 +271,8 @@ def _blatt_neuobjekte(wb, modell: Modell) -> None:
     ws[f"{hinweis}3"] = ("Nutzen mehrere Neuobjekte dieselbe Rücklage, gilt die Zeilenreihenfolge: "
                          "jede Zeile erhält, was die Zeilen darüber übrig lassen.")
     ws[f"{hinweis}4"] = "Kaufnebenkosten werden im Verhältnis G+B zu Gebäude aktiviert; leer = 0."
+    ws[f"{hinweis}5"] = ("AfA-Methode degressiv: par_AfADegressiv vom Restbuchwert, Wechsel zur "
+                         "linearen AfA über die Restnutzungsdauer (1 / AfA-Satz), sobald höher.")
     ws.freeze_panes = "B2"
 
 
@@ -320,14 +325,174 @@ def _blatt_ruecklagen(wb) -> None:
     ws.freeze_panes = "B2"
 
 
+TITEL_PLAN = SZ_A.kurz
+TITEL_BASELINE = SZ_BASELINE.kurz
+
+
+def _jahrestabellen(wb, ws, blatt: str, tabellen: list, hinweise: list) -> None:
+    """Tabellen je Prognosejahr nebeneinander, je eine Spalte Abstand.
+
+    tabellen: (Titel, Spalten, Formelfunktion(zeile, erstes_jahr)). Zeile 1 trägt
+    den Titel, Zeile 2 die Kopfzeile, ab Zeile 3 je Jahr eine Zeile.
+    """
+    titel_zeile, kopf, erste = 1, 2, 3
+    letzte = erste + prognosejahre() - 1
+    versatz = 0
+    for titel, spalten, formel in tabellen:
+        ws.cell(row=titel_zeile, column=versatz + 1, value=titel).font = Font(bold=True)
+        for i, s in enumerate(spalten, start=versatz + 1):
+            bst = get_column_letter(i)
+            c = ws.cell(row=kopf, column=i, value=s.ueberschrift)
+            c.font, c.fill = FONT_KOPF, FILL_KOPF
+            c.alignment = Alignment(wrap_text=True, vertical="center")
+            ws.column_dimensions[bst].width = s.breite
+            _name(wb, s.name, f"'{blatt}'!${bst}${erste}:${bst}${letzte}")
+        for zeile in range(erste, letzte + 1):
+            rechnung = formel(zeile, erstes_jahr=zeile == erste)
+            for i, s in enumerate(spalten, start=versatz + 1):
+                c = ws.cell(row=zeile, column=i, value=rechnung[s.key])
+                c.number_format = s.format
+                c.fill = FILL_BERECHNET
+        versatz += len(spalten) + 1
+        ws.column_dimensions[get_column_letter(versatz)].width = 3
+    ws.row_dimensions[kopf].height = 45
+    for i, text in enumerate(hinweise + [HINWEIS_FINANZIERUNG], start=letzte + 2):
+        ws.cell(row=i, column=1, value=text)
+    ws.freeze_panes = f"B{erste}"
+
+
+def _blatt_liquiditaet(wb) -> None:
+    """Steuer und Geldfluss je Jahr, je Szenario eine Tabelle."""
+    ws = wb.create_sheet("Liquidität")
+    _jahrestabellen(wb, ws, "Liquidität", [
+        (sz.titel, liq_spalten(sz), formeln.liquiditaet_zeile(sz)) for sz in SZENARIEN
+    ], [
+        "Steuer = Bemessungsgrundlage × Grenzsteuersatz. Verluste werden vorgetragen und mit "
+        "späteren Gewinnen verrechnet (ohne Mindestbesteuerung, ohne Rücktrag).",
+        "steuerwirksam aus Verkauf und Rücklage: in A aus dem Rücklagenspiegel (sofort versteuerte "
+        "Gewinne, Auflösung und Gewinnzuschlag), in B und C jeder Veräußerungsgewinn sofort.",
+        "Zinsertrag = Liquidität am Vorjahresende × Rendite Alternativanlage; er ist steuerpflichtig. "
+        "Negative Liquidität kostet denselben Satz.",
+        "freier Mittelzufluss = Einnahmen − Ausgaben + Zins + Verkaufserlöse − Steuer − Kauf "
+        "Neuobjekte.",
+        "B: Neuobjekte mit Quelle-Rücklage entfallen, ihr Geld bleibt in der Alternativanlage. "
+        "C: alle Neuobjekte werden gekauft, die AfA läuft von den vollen AK.",
+        "Baseline: alle Bestandsobjekte werden über das ganze Raster gehalten, ohne Verkäufe und "
+        "Neuobjekte.",
+    ])
+
+
+def _blatt_auswertung(wb) -> None:
+    """Gesamt-GuV, Steuer, stille Reserven und Gesamtvermögen je Jahr und Szenario."""
+    ws = wb.create_sheet("Auswertung")
+    _jahrestabellen(wb, ws, "Auswertung", [
+        (sz.titel, aus_spalten(sz), formeln.auswertung_zeile(sz)) for sz in SZENARIEN
+    ], [
+        "Gesamt-GuV vor Steuern = laufendes Ergebnis + steuerwirksam aus Verkauf und Rücklage "
+        "+ Zinsertrag.",
+        "stille Reserven = Verkehrswert − Buchwert (Gebäude + G+B) der Objekte im Bestand am "
+        "Jahresende. In B und C ohne § 6b-Kürzung der Neuobjekte.",
+        "latente Steuer = (stille Reserven + Rücklagenbestand − Verlustvortrag) × Grenzsteuersatz, "
+        "mindestens 0: die Steuer, wenn alle Objekte zum Verkehrswert verkauft würden.",
+        "Gesamtvermögen = Verkehrswert Bestand + Liquidität kumuliert.",
+    ])
+
+
+def _blatt_vergleich(wb) -> None:
+    """Kennzahlen der Szenarien am Ende des Rasters und Endvermögen je Jahr."""
+    ws = wb.create_sheet("Vergleich", 1)
+    ws["A1"] = "Vergleich der Szenarien"
+    ws["A1"].font = FONT_TITEL
+    ws["A2"] = ("A § 6b-Kette wie erfasst · B sofort versteuern, Kapital anlegen · C sofort "
+                "versteuern, Neuobjekte trotzdem kaufen · Baseline alles halten.")
+    ws["A3"] = ("Entscheidend ist das Endvermögen nach latenter Steuer. A − C zeigt die reine "
+                "Wirkung von § 6b (Zins auf die gestundete Steuer), A − B die Frage Immobilie oder "
+                "Geldanlage. " + HINWEIS_FINANZIERUNG)
+
+    kopf = 5
+    spalten = ([("Kennzahl", "vg_Kennzahl", 38)]
+               + [(sz.kurz, f"vg_{sz.key}", 18) for sz in SZENARIEN]
+               + [("A − B", "vg_DiffB", 16), ("A − C", "vg_DiffC", 16),
+                  ("A − Baseline", "vg_DiffBaseline", 16), ("Erläuterung", None, 60)])
+    _kopf(ws, kopf, [u for u, _, _ in spalten])
+    ws.row_dimensions[kopf].height = 32
+    erste = kopf + 1
+    letzte = erste + len(VERGLEICH_KENNZAHLEN) - 1
+    spalte_von = {sz.key: get_column_letter(2 + i) for i, sz in enumerate(SZENARIEN)}
+    for zeile, (text, blatt, name, art, erlaeuterung) in enumerate(VERGLEICH_KENNZAHLEN,
+                                                                   start=erste):
+        werte = [text] + [formeln.vergleich_zeile(blatt, name, art, sz) for sz in SZENARIEN]
+        a = spalte_von["A"]
+        werte += [f"={a}{zeile}-{spalte_von[k]}{zeile}" for k in ("B", "C", "Baseline")]
+        werte.append(erlaeuterung)
+        for i, w in enumerate(werte, start=1):
+            c = ws.cell(row=zeile, column=i, value=w)
+            if 1 < i < len(werte):
+                c.number_format = FMT_EURO
+                c.fill = FILL_BERECHNET
+        if zeile == erste:
+            for i in range(1, len(werte)):
+                ws.cell(row=zeile, column=i).font = Font(bold=True)
+    for i, (_, name, breite) in enumerate(spalten, start=1):
+        bst = get_column_letter(i)
+        ws.column_dimensions[bst].width = breite
+        if name:
+            _name(wb, name, f"'Vergleich'!${bst}${erste}:${bst}${letzte}")
+
+    # Endvermögen je Jahr und Szenario, mit Diagramm
+    titel = letzte + 2
+    ws.cell(row=titel, column=1,
+            value="Endvermögen nach latenter Steuer je Jahr").font = Font(bold=True)
+    jkopf = titel + 1
+    _kopf(ws, jkopf, ["Jahr"] + [sz.kurz for sz in SZENARIEN])
+    ws.row_dimensions[jkopf].height = 32
+    jerste, jletzte = jkopf + 1, jkopf + prognosejahre()
+    for zeile in range(jerste, jletzte + 1):
+        c = ws.cell(row=zeile, column=1,
+                    value="=par_Startjahr" if zeile == jerste else f"=A{zeile - 1}+1")
+        c.number_format, c.fill = FMT_JAHR, FILL_BERECHNET
+        for i, sz in enumerate(SZENARIEN, start=2):
+            c = ws.cell(row=zeile, column=i,
+                        value=f"=SUMIFS({sz.aus}_VermoegenNetto,{sz.aus}_Jahr,A{zeile})")
+            c.number_format, c.fill = FMT_EURO, FILL_BERECHNET
+    _name(wb, "vgj_Jahr", f"'Vergleich'!$A${jerste}:$A${jletzte}")
+    for i, sz in enumerate(SZENARIEN, start=2):
+        bst = get_column_letter(i)
+        _name(wb, f"vgj_{sz.key}", f"'Vergleich'!${bst}${jerste}:${bst}${jletzte}")
+
+    chart = LineChart()
+    chart.title = "Endvermögen nach latenter Steuer"
+    chart.y_axis.title = "€"
+    chart.y_axis.number_format = '#,##0'
+    chart.x_axis.title = "Jahr"
+    chart.add_data(Reference(ws, min_col=2, max_col=1 + len(SZENARIEN), min_row=jkopf,
+                             max_row=jletzte), titles_from_data=True)
+    chart.set_categories(Reference(ws, min_col=1, min_row=jerste, max_row=jletzte))
+    farben = {"A": "305496", "B": "C00000", "C": "70AD47", "Baseline": "A5A5A5"}
+    for serie, sz in zip(chart.series, SZENARIEN):
+        serie.smooth = False
+        serie.graphicalProperties.line.solidFill = farben[sz.key]
+        serie.graphicalProperties.line.width = 28000
+        if sz == SZ_BASELINE:
+            serie.graphicalProperties.line.dashStyle = "dash"
+    chart.x_axis.delete = False
+    chart.y_axis.delete = False
+    chart.legend.position = "b"
+    chart.height, chart.width = 12, 22
+    ws.add_chart(chart, f"H{titel}")
+    ws.freeze_panes = f"B{erste}"
+
+
 def _blatt_uebersicht(wb) -> None:
-    """Gesamtwert aller Objekte je Jahr: Plan mit Verkäufen gegen Halten ohne Verkauf."""
+    """Immobilienwert und Gesamtvermögen je Jahr: Plan mit Verkäufen gegen Halten ohne Verkauf."""
     ws = wb.create_sheet("Übersicht", 0)
     wb.active = 0
-    ws["A1"] = "Übersicht: Gesamtwert der Immobilien"
+    ws["A1"] = "Übersicht: Immobilienwert und Gesamtvermögen"
     ws["A1"].font = FONT_TITEL
     ws["A2"] = (HINWEIS_FINANZIERUNG + " Wert = Verkehrswert aktuell aus dem Objektblatt, "
                 "fortgeschrieben mit der Wertsteigerung vom Parameterblatt.")
+    ws["A3"] = ("Gesamtvermögen = Verkehrswert + kumulierte Liquidität nach Steuern − latente "
+                "Steuer auf stille Reserven und Rücklage (Blatt Auswertung).")
 
     kennzahlen = [
         ("Objekte im Modell", "ueb_Objekte", '=SUMPRODUCT(--(obj_ID<>""))', FMT_ZAHL),
@@ -349,42 +514,60 @@ def _blatt_uebersicht(wb) -> None:
         "D5", FormulaRule(formula=["D5>0"], fill=FILL_FEHLER))
 
     kopf = 10
-    _kopf(ws, kopf, ["Jahr", "Baseline: alles halten", "Plan: mit Verkäufen und Neuobjekten",
-                     "Differenz Plan − Baseline"])
+    ws.cell(row=kopf - 1, column=2, value="Immobilien (Verkehrswert)").font = Font(bold=True)
+    ws.cell(row=kopf - 1, column=5,
+            value="Gesamtvermögen nach latenter Steuer").font = Font(bold=True)
+    _kopf(ws, kopf, ["Jahr", TITEL_BASELINE, TITEL_PLAN, "Differenz Plan − Baseline",
+                     TITEL_BASELINE, TITEL_PLAN, "Differenz Plan − Baseline"])
     ws.row_dimensions[kopf].height = 32
     erste = kopf + 1
     letzte = erste + prognosejahre()  # Basisjahr plus Prognosejahre
     for zeile in range(erste, letzte + 1):
-        if zeile == erste:  # Ende Basisjahr: Stand laut Objektblatt
-            werte = ["=par_Basisjahr", "=SUM(obj_Verkehrswert)", f"=B{zeile}"]
+        if zeile == erste:
+            # Ende Basisjahr: Stand laut Objektblatt, noch keine Liquidität
+            buchwert = 'SUMIFS(obj_Restbuchwert,obj_ID,"<>")+SUMIFS(obj_AKGuB,obj_ID,"<>")'
+            werte = ["=par_Basisjahr", "=SUM(obj_Verkehrswert)", f"=B{zeile}",
+                     f"=C{zeile}-B{zeile}",
+                     f"=B{zeile}-MAX(B{zeile}-({buchwert}),0)*par_Steuersatz", f"=E{zeile}"]
         else:
             werte = [f"=A{zeile - 1}+1",
                      f"=SUMIFS(prg_Verkehrswert,prg_Jahr,A{zeile},prg_Neu,0)",
-                     f"=SUMIFS(prg_Verkehrswert,prg_Jahr,A{zeile},prg_Bestand,1)"]
-        werte.append(f"=C{zeile}-B{zeile}")
-        for spalte, (formel, fmt) in enumerate(
-                zip(werte, (FMT_JAHR, FMT_EURO, FMT_EURO, FMT_EURO)), start=1):
+                     f"=SUMIFS(prg_Verkehrswert,prg_Jahr,A{zeile},prg_Bestand,1)",
+                     f"=C{zeile}-B{zeile}",
+                     f"=SUMIFS(asb_VermoegenNetto,asb_Jahr,A{zeile})",
+                     f"=SUMIFS(aus_VermoegenNetto,aus_Jahr,A{zeile})"]
+        werte.append(f"=F{zeile}-E{zeile}")
+        for spalte, formel in enumerate(werte, start=1):
             c = ws.cell(row=zeile, column=spalte, value=formel)
-            c.number_format = fmt
+            c.number_format = FMT_JAHR if spalte == 1 else FMT_EURO
             c.fill = FILL_BERECHNET
     for name, bst in (("ueb_Jahr", "A"), ("ueb_Baseline", "B"), ("ueb_Plan", "C"),
-                      ("ueb_Differenz", "D")):
+                      ("ueb_Differenz", "D"), ("ueb_VermBaseline", "E"), ("ueb_VermPlan", "F"),
+                      ("ueb_VermDifferenz", "G")):
         _name(wb, name, f"'Übersicht'!${bst}${erste}:${bst}${letzte}")
 
-    for spalte, breite in zip("ABCD", (10, 22, 22, 24)):
+    for spalte, breite in zip("ABCDEFG", (10, 20, 20, 20, 20, 20, 20)):
         ws.column_dimensions[spalte].width = breite
     ws.page_setup.orientation = "landscape"
     ws.page_setup.fitToWidth, ws.page_setup.fitToHeight = 1, 1
     ws.sheet_properties.pageSetUpPr.fitToPage = True
 
+    for i, (titel, spalte_baseline) in enumerate(
+            (("Verkehrswert am Jahresende", 2),
+             ("Gesamtvermögen nach latenter Steuer", 5))):
+        ws.add_chart(_diagramm(ws, titel, spalte_baseline, kopf, erste, letzte), f"I{4 + i * 26}")
+
+
+def _diagramm(ws, titel: str, spalte_baseline: int, kopf: int, erste: int, letzte: int):
+    """Liniendiagramm Baseline (gestrichelt) gegen Plan aus zwei benachbarten Spalten."""
     chart = LineChart()
-    chart.title = "Verkehrswert am Jahresende"
+    chart.title = titel
     chart.y_axis.title = "€"
     chart.y_axis.number_format = '#,##0'
     chart.y_axis.majorGridlines = None
     chart.x_axis.title = "Jahr"
-    chart.add_data(Reference(ws, min_col=2, max_col=3, min_row=kopf, max_row=letzte),
-                   titles_from_data=True)
+    chart.add_data(Reference(ws, min_col=spalte_baseline, max_col=spalte_baseline + 1,
+                             min_row=kopf, max_row=letzte), titles_from_data=True)
     chart.set_categories(Reference(ws, min_col=1, min_row=erste, max_row=letzte))
     baseline, plan = chart.series
     baseline.graphicalProperties.line.solidFill = "A5A5A5"
@@ -398,16 +581,19 @@ def _blatt_uebersicht(wb) -> None:
     chart.y_axis.delete = False
     chart.legend.position = "b"
     chart.height, chart.width = 12, 22
-    ws.add_chart(chart, "F4")
+    return chart
 
 
 def erstelle_mappe(modell: Modell) -> Workbook:
     wb = Workbook()
-    _blatt_parameter(wb)
+    _blatt_parameter(wb, modell)
     _blatt_objekte(wb, modell)
     _blatt_verkaeufe(wb, modell)
     _blatt_neuobjekte(wb, modell)
     _blatt_prognose(wb)
     _blatt_ruecklagen(wb)
+    _blatt_liquiditaet(wb)
+    _blatt_auswertung(wb)
     _blatt_uebersicht(wb)
+    _blatt_vergleich(wb)
     return wb
