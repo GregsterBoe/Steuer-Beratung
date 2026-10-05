@@ -9,7 +9,9 @@ from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from . import formeln
-from .modelle import (FMT_EURO, FMT_JAHR, FMT_PROZENT, FMT_ZAHL, MAX_NEUOBJEKTE,
+from .modelle import (CODENAME_MAPPE, CODENAMEN, FEHLER, FMT_EURO, FMT_JAHR, FMT_PROZENT,
+                      FMT_TEXT, FMT_ZAHL, HINWEIS, MAX_NEUOBJEKTE, MAX_VARIANTEN, PRUEFUNGEN,
+                      VARIANTEN_KOPF, WARNUNG,
                       MAX_OBJEKTE, MAX_VERKAEUFE, NEU_FELDER, NEU_SPALTEN, NEU_STATUS_NAME, OBJEKT_FELDER,
                       PARAMETER, PROGNOSE_SPALTEN, RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN,
                       STATUS_NAME, STATUS_UEBERSCHRIFT, SZ_A, SZ_BASELINE, SZENARIEN,
@@ -24,6 +26,7 @@ FILL_KOPF = PatternFill("solid", fgColor="305496")
 FILL_EINGABE = PatternFill("solid", fgColor="FFF2CC")   # gelb = hier wird getippt
 FILL_BERECHNET = PatternFill("solid", fgColor="E7E6E6")  # grau = Formel
 FILL_FEHLER = PatternFill("solid", fgColor="F8CBAD")
+FILL_WARNUNG = PatternFill("solid", fgColor="FFE699")
 
 
 def _name(wb, name: str, ref: str) -> None:
@@ -89,6 +92,14 @@ def _blatt_parameter(wb, modell: Modell) -> None:
             ws.add_data_validation(dv)
             dv.add(c.coordinate)
 
+    zeile_pruefung = 5 + [p.name for p in PARAMETER].index("par_StatusPruefung")
+    ws.conditional_formatting.add(
+        f"B{zeile_pruefung}",
+        FormulaRule(formula=[f'B{zeile_pruefung}<>"OK"'], fill=FILL_FEHLER))
+    ws["F3"] = ("Steuerung per Makro (Datei als .xlsm, Makros aktivieren): die Schaltflächen "
+                "unten. Gerechnet wird immer in den Formeln, auch ohne Makros.")
+    ws["F3"].font = Font(italic=True)
+
     for spalte, breite in zip("ABCD", (36, 14, 22, 60)):
         ws.column_dimensions[spalte].width = breite
     ws.freeze_panes = "A5"
@@ -112,6 +123,9 @@ def _blatt_objekte(wb, modell: Modell) -> None:
     _name(wb, STATUS_NAME, f"Objekte!${st}${erste}:${st}${letzte}")
     letzte_spalte = get_column_letter(status_spalte)
     _name(wb, "obj_Basis", f"Objekte!$A${erste}:${letzte_spalte}${letzte}")
+    # nur die gelben Eingabefelder; die Makros in modObjekte schreiben nur hierhin
+    _name(wb, "obj_Eingabe",
+          f"Objekte!$A${erste}:${get_column_letter(len(OBJEKT_FELDER))}${letzte}")
 
     for zeile in range(erste, letzte + 1):
         for i, f in enumerate(OBJEKT_FELDER, start=1):
@@ -501,6 +515,7 @@ def _blatt_uebersicht(wb) -> None:
         ("geplante Verkäufe", "ueb_Verkaeufe", '=SUMPRODUCT(--(vk_ID<>""))', FMT_ZAHL),
         ("Neuobjekte im Modell", "ueb_Neuobjekte", "=SUM(ne_Gueltig)", FMT_ZAHL),
         ("Wertsteigerung p. a.", None, "=par_Wertsteig", FMT_PROZENT),
+        ("Plausibilitätsprüfung (Blatt Prüfung)", "ueb_Pruefung", "=pr_Gesamt", FMT_TEXT),
     ]
     for zeile, (text, name, formel, fmt) in enumerate(kennzahlen, start=4):
         ws.cell(row=zeile, column=1, value=text)  # läuft über die leeren Spalten B und C
@@ -512,8 +527,10 @@ def _blatt_uebersicht(wb) -> None:
     # Hinweis, solange Verkehrswerte fehlen
     ws.conditional_formatting.add(
         "D5", FormulaRule(formula=["D5>0"], fill=FILL_FEHLER))
+    ws.conditional_formatting.add(
+        "D9", FormulaRule(formula=['D9<>"OK"'], fill=FILL_FEHLER))
 
-    kopf = 10
+    kopf = 11
     ws.cell(row=kopf - 1, column=2, value="Immobilien (Verkehrswert)").font = Font(bold=True)
     ws.cell(row=kopf - 1, column=5,
             value="Gesamtvermögen nach latenter Steuer").font = Font(bold=True)
@@ -584,6 +601,89 @@ def _diagramm(ws, titel: str, spalte_baseline: int, kopf: int, erste: int, letzt
     return chart
 
 
+def _blatt_pruefung(wb) -> None:
+    """Plausibilitätsprüfungen als Formeln: je Prüfung Anzahl betroffener Zeilen und Ergebnis.
+
+    Das Makro modPruefung liest nur das Ergebnis; geprüft wird im Blatt, damit Fehler
+    auch ohne Makros sichtbar bleiben.
+    """
+    ws = wb.create_sheet("Prüfung")
+    ws["A1"] = "Plausibilitätsprüfung"
+    ws["A1"].font = FONT_TITEL
+    ws["A2"] = HINWEIS_FINANZIERUNG
+    summen = formeln.pruefung_summen()
+    for zeile, (name, text) in enumerate([("pr_Gesamt", "Gesamtergebnis"),
+                                          ("pr_Fehler", "Fehler"),
+                                          ("pr_Warnungen", "Warnungen")], start=3):
+        ws.cell(row=zeile, column=1, value=text).font = Font(bold=True)
+        c = ws.cell(row=zeile, column=2, value=summen[name])
+        c.fill = FILL_BERECHNET
+        c.number_format = FMT_TEXT if name == "pr_Gesamt" else FMT_ZAHL
+        _name(wb, name, f"'Prüfung'!$B${zeile}")
+    ws.conditional_formatting.add("B3", FormulaRule(formula=['B3<>"OK"'], fill=FILL_FEHLER))
+
+    _kopf(ws, 7, ["Nr", "Prüfung", "Art", "betroffen", "Ergebnis", "wo nachsehen"])
+    erste = 8
+    letzte = erste + len(PRUEFUNGEN) - 1
+    anzahl = formeln.pruefung_anzahl()
+    for nr, (zeile, p) in enumerate(zip(range(erste, letzte + 1), PRUEFUNGEN), start=1):
+        ws.cell(row=zeile, column=1, value=nr)
+        ws.cell(row=zeile, column=2, value=p.bezeichnung).alignment = Alignment(wrap_text=True)
+        ws.cell(row=zeile, column=3, value=p.art)
+        for spalte, formel in ((4, anzahl[p.key]), (5, formeln.pruefung_ergebnis(zeile))):
+            c = ws.cell(row=zeile, column=spalte, value=formel)
+            c.fill = FILL_BERECHNET
+        ws.cell(row=zeile, column=6, value=p.wo).alignment = Alignment(wrap_text=True)
+    for name, bst in (("pr_Bezeichnung", "B"), ("pr_Art", "C"), ("pr_Anzahl", "D"),
+                      ("pr_Ergebnis", "E")):
+        _name(wb, name, f"'Prüfung'!${bst}${erste}:${bst}${letzte}")
+    for art, fill in ((FEHLER, FILL_FEHLER), (WARNUNG, FILL_WARNUNG)):
+        ws.conditional_formatting.add(
+            f"E{erste}:E{letzte}", FormulaRule(formula=[f'E{erste}="{art}"'], fill=fill))
+
+    hinweise = [
+        f"{FEHLER}: Eingabe unvollständig oder unzulässig; die Zeile rechnet nicht oder nur "
+        f"teilweise mit. {WARNUNG}: rechnet, ist aber steuerlich ungünstig oder fachlich zu "
+        f"prüfen. {HINWEIS}: zur Kenntnis, zählt nicht ins Gesamtergebnis.",
+        "Das Gesamtergebnis steht auch auf dem Parameterblatt und in der Übersicht. Das Makro "
+        "„Plausibilität prüfen“ rechnet neu und listet die auffälligen Prüfungen auf.",
+        "Je Objekt, Verkauf und Neuobjekt steht der Grund in der Statusspalte des Blatts. "
+        "AK Gebäude und AK G+B werden getrennt erfasst, ihre Summe ist der Kaufpreis; beim "
+        "Neuobjekt ergibt der Anteil G+B mit dem Rest Gebäude immer den Kaufpreis.",
+    ]
+    for i, text in enumerate(hinweise, start=letzte + 2):
+        ws.cell(row=i, column=1, value=text)
+    for spalte, breite in zip("ABCDEF", (16, 70, 10, 10, 10, 50)):
+        ws.column_dimensions[spalte].width = breite
+    ws.freeze_panes = "A8"
+
+
+def _blatt_varianten(wb) -> None:
+    """Festgehaltene Ergebnisse: das Makro „Variante festhalten“ schreibt je Lauf eine Zeile."""
+    ws = wb.create_sheet("Varianten")
+    ws["A1"] = "Varianten: festgehaltene Ergebnisse"
+    ws["A1"].font = FONT_TITEL
+    ws["A2"] = (HINWEIS_FINANZIERUNG + " Feste Werte, keine Formeln: Eingaben ändern (etwa "
+                "Verkaufsjahr oder Preis), dann erneut festhalten und die Zeilen vergleichen.")
+    kopf = 4
+    _kopf(ws, kopf, VARIANTEN_KOPF)
+    ws.row_dimensions[kopf].height = 32
+    erste, letzte = kopf + 1, kopf + MAX_VARIANTEN
+    _name(wb, "var_Tabelle",
+          f"Varianten!$A${erste}:${get_column_letter(len(VARIANTEN_KOPF))}${letzte}")
+    for name, bst in zip(("var_Bezeichnung", "var_Datum", "var_A", "var_B", "var_C",
+                          "var_Baseline", "var_DiffB", "var_DiffC", "var_Steuer",
+                          "var_Pruefung"), "ABCDEFGHIJ"):
+        _name(wb, name, f"Varianten!${bst}${erste}:${bst}${letzte}")
+    for zeile in range(erste, letzte + 1):
+        ws.cell(row=zeile, column=2).number_format = "DD.MM.YYYY HH:MM"
+        for spalte in range(3, len(VARIANTEN_KOPF)):
+            ws.cell(row=zeile, column=spalte).number_format = FMT_EURO
+    for spalte, breite in zip("ABCDEFGHIJ", (28, 16, 16, 16, 16, 18, 14, 14, 16, 16)):
+        ws.column_dimensions[spalte].width = breite
+    ws.freeze_panes = f"B{erste}"
+
+
 def erstelle_mappe(modell: Modell) -> Workbook:
     wb = Workbook()
     _blatt_parameter(wb, modell)
@@ -596,4 +696,9 @@ def erstelle_mappe(modell: Modell) -> Workbook:
     _blatt_auswertung(wb)
     _blatt_uebersicht(wb)
     _blatt_vergleich(wb)
+    _blatt_pruefung(wb)
+    _blatt_varianten(wb)
+    wb.code_name = CODENAME_MAPPE
+    for ws in wb.worksheets:
+        ws.sheet_properties.codeName = CODENAMEN[ws.title]
     return wb

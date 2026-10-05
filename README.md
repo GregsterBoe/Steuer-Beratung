@@ -12,9 +12,9 @@
 
 ## Blätter
 
-| Eingabe | Rechnung | Ausgabe |
-| --- | --- | --- |
-| Parameter, Objekte, Verkäufe, Neuobjekte | Prognose, Rücklagen, Liquidität | Übersicht, Vergleich, Auswertung |
+| Eingabe | Rechnung | Ausgabe | Kontrolle |
+| --- | --- | --- | --- |
+| Parameter, Objekte, Verkäufe, Neuobjekte | Prognose, Rücklagen, Liquidität | Übersicht, Vergleich, Auswertung | Prüfung, Varianten |
 
 ## Etappen
 
@@ -28,7 +28,7 @@
 8. Szenariovergleich
 9. VBA-Steuerung und Plausibilitätsprüfungen
 
-Stand: Etappen 1 bis 8 sind umgesetzt.
+Stand: Etappen 1 bis 9 sind umgesetzt.
 - Parameter- und Objektblatt mit Statusprüfung
 - Prognoseblatt mit AfA-Fortschreibung und Indexierung je Objekt und Jahr
 - Verkaufsblatt mit Aufteilung des Erlöses und Veräußerungsgewinn getrennt nach Gebäude und G+B
@@ -39,6 +39,7 @@ Stand: Etappen 1 bis 8 sind umgesetzt.
 - Übersichtsblatt mit Immobilienwert und Gesamtvermögen, je mit Diagramm
 - Szenarien A, B, C und Baseline gleichzeitig, mit verzinster Alternativanlage und Vergleichsblatt
 - Einleseschicht und Vorlage für die Kostenstellenblätter (DATEV-BWA)
+- Prüfungsblatt mit allen Plausibilitätsprüfungen als Formeln, VBA-Steuerung als .xlsm
 
 ## Nutzung
 
@@ -46,13 +47,15 @@ Stand: Etappen 1 bis 8 sind umgesetzt.
 pip install -r requirements.txt
 python -m prognosemodell             # erzeugt ausgabe/Prognosemodell_VV.xlsx (mit Testobjekt)
 python -m prognosemodell --ohne-testdaten
+python -m prognosemodell --makros    # .xlsm mit VBA-Steuerung (braucht LibreOffice beim Bauen)
 python -m prognosemodell --kostenstellen Kostenstellen.xlsx --ausgabe Ordner/Prognose.xlsx   # laufende Werte je Blatt einlesen; nur Ordner = Standardname darin
 python -m pruefung.pruefen           # rechnet per LibreOffice headless und prüft gegen Sollwerte
+python -m pruefung.pruefen "Etappe 9"  # nur Fälle, deren Name den Text enthält
 python -m pruefung.pruefen_einlesen  # prüft die Einleseschicht, ohne LibreOffice
 python -m prognosemodell.vorlagen    # schreibt vorlagen/Kostenstellen_BWA_Vorlage.xlsx
 ```
 
-Das Prüfskript braucht LibreOffice mit Calc (`soffice`, unter Debian/Ubuntu Paket `libreoffice-calc`).
+Das Prüfskript und `--makros` brauchen LibreOffice mit Calc und der Python-UNO-Brücke (`soffice`, unter Debian/Ubuntu die Pakete `libreoffice-calc` und `python3-uno`).
 
 Zielformat der Eingabe ist die DATEV-BWA-Kostenstellenblattsammlung; `vorlagen/Kostenstellen_BWA_Vorlage.xlsx` zeigt das Layout mit erfundenen Werten. Als Jahresspalte gilt ein Kopf wie 2026, „Jahr 2026“ oder „Plan 2027“; ein Summenblatt „Alle Objekte“ wird übersprungen. Geplant ist, die Ergebnisse wieder in diese Struktur zu schreiben, mit einem Sonderbereich für Verkauf und Kauf (Projektplan, Abschnitt 18).
 
@@ -99,6 +102,22 @@ Alle Szenarien rechnen gleichzeitig, Liquidität und Auswertung haben je Szenari
 - **Baseline:** alles halten
 
 Das Blatt **Vergleich** stellt die Kennzahlen am Ende des Rasters nebeneinander, mit den Differenzen A − B, A − C und A − Baseline, dazu das Endvermögen nach latenter Steuer je Jahr als Diagramm. A − C zeigt die reine Wirkung von § 6b: ohne Alternativrendite ein Gleichstand, mit Rendite der Zins auf die gestundete Steuer.
+
+Das Blatt **Prüfung** rechnet alle Plausibilitätsprüfungen als Formeln, je mit Art und Anzahl betroffener Zeilen:
+- **Fehler:** Status ungleich OK in Objekten, Verkäufen oder Neuobjekten (darunter Fristverstoß), Steuerwelt nicht GmbH
+- **Warnung:** Vorbesitzzeit für § 6b zu kurz, Rücklage nur teilweise oder gar nicht übertragen, Drei-Objekt-Grenze überschritten
+- **Hinweis:** Frist nach Prognoseende, Liquidität negativ (Finanzierungsbedarf), Verkehrswert fehlt
+
+Das Gesamtergebnis steht auch auf dem Parameterblatt und in der Übersicht.
+
+Mit `--makros` entsteht eine .xlsm mit VBA-Steuerung, die Schaltflächen liegen auf dem Parameterblatt:
+- Plausibilität prüfen
+- Neu berechnen
+- Objekt anlegen, duplizieren, entfernen
+- leere Prognoseblöcke aus- und einblenden
+- Variante festhalten
+
+„Variante festhalten“ schreibt die Kennzahlen des Vergleichs als feste Werte ins Blatt **Varianten**, so lassen sich etwa verschiedene Verkaufsjahre vergleichen. VBA rechnet nichts, alle Ergebnisse entstehen in den Formeln.
 
 Gelb = Eingabe, grau = Formel. Die Statusspalte im Objektblatt meldet fehlende Pflichtfelder, doppelte IDs, ein Kaufjahr nach dem Basisjahr und einen Restbuchwert über den AK.
 

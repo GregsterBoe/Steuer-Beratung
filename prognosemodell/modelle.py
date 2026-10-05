@@ -62,7 +62,22 @@ PARAMETER = [
               "wenn mit dem Neubau vor Ende der Regelfrist begonnen wurde (§ 6b Abs. 3)"),
     Parameter("par_6bZuschlag", "§ 6b Gewinnzuschlag je Jahr", 0.06, FMT_PROZENT,
               "bei Auflösung ohne Reinvestition"),
+    Parameter("par_DOGrenze", "Drei-Objekt-Grenze (Verkäufe)", 3, FMT_ZAHL,
+              "mehr Verkäufe im Zeitraum: Warnung gewerblicher Grundstückshandel"),
+    Parameter("par_DOJahre", "Zeitraum Drei-Objekt-Grenze (Jahre)", 5, FMT_ZAHL,
+              "vereinfacht: Verkäufe innerhalb dieses Zeitraums; fachlich prüfen"),
+    Parameter("par_StatusPruefung", "Plausibilitätsprüfung", "=pr_Gesamt", FMT_TEXT,
+              "berechnet; Einzelheiten im Blatt Prüfung"),
 ]
+
+# Codenamen für VBA: ASCII, unabhängig vom angezeigten Blattnamen
+CODENAME_MAPPE = "ThisWorkbook"
+CODENAMEN = {
+    "Übersicht": "wsUebersicht", "Vergleich": "wsVergleich", "Parameter": "wsParameter",
+    "Objekte": "wsObjekte", "Verkäufe": "wsVerkaeufe", "Neuobjekte": "wsNeuobjekte",
+    "Prognose": "wsPrognose", "Rücklagen": "wsRuecklagen", "Liquidität": "wsLiquiditaet",
+    "Auswertung": "wsAuswertung", "Prüfung": "wsPruefung", "Varianten": "wsVarianten",
+}
 
 
 @dataclass(frozen=True)
@@ -406,6 +421,56 @@ class Neuobjekt:
     mietrendite: Optional[float] = None
     erhaltungsquote: Optional[float] = None
     quelle: Optional[str] = None         # RücklageID, z. B. "RL-OBJ-001"
+
+
+# Blatt Prüfung: Plausibilitätsprüfungen (Etappe 9, Projektplan Abschnitt 5 und 19)
+FEHLER, WARNUNG, HINWEIS = "Fehler", "Warnung", "Hinweis"
+
+
+@dataclass(frozen=True)
+class Pruefung:
+    """Eine Zeile im Blatt Prüfung; die Formel für die Anzahl liefert formeln.py."""
+    key: str
+    bezeichnung: str
+    art: str             # Fehler, Warnung oder Hinweis
+    wo: str              # wo nachsehen
+
+
+PRUEFUNGEN = [
+    Pruefung("objekte", "Objekte mit Status ungleich OK (Pflichtfeld, doppelte ObjektID, "
+             "Kaufjahr, Restbuchwert)", FEHLER, "Blatt Objekte, Spalte Status"),
+    Pruefung("verkaeufe", "Verkäufe mit Status ungleich OK (unbekanntes Objekt, Verkaufsjahr, "
+             "Preis, Aufteilung); die Zeile rechnet nicht mit", FEHLER,
+             "Blatt Verkäufe, Spalte Status"),
+    Pruefung("neuobjekte", "Neuobjekte mit Status ungleich OK, darunter Kauf nach Fristjahr "
+             "(Fristverstoß) und Kauf vor Bildung der Rücklage", FEHLER,
+             "Blatt Neuobjekte, Spalte Status"),
+    Pruefung("steuerwelt", "Steuerwelt außerhalb des MVP, Ergebnisse gelten nur für die GmbH",
+             FEHLER, "Blatt Parameter, Steuerwelt"),
+    Pruefung("vorbesitz", "§ 6b gewählt, aber Vorbesitzzeit unter der Mindestdauer: "
+             "Gewinn wird sofort versteuert", WARNUNG, "Blatt Verkäufe, Spalte Status"),
+    Pruefung("teiluebertrag", "Rücklage nicht voll übertragen, obwohl ein Neuobjekt sie nennt "
+             "(Gebäudeanteil oder Kaufpreis zu klein): Rest wird im Fristjahr mit "
+             "Gewinnzuschlag aufgelöst", WARNUNG,
+             "Blatt Rücklagen, Spalte Auflösung; Blatt Neuobjekte"),
+    Pruefung("ohne_reinvest", "Rücklage ohne Neuobjekt: Auflösung im Fristjahr mit "
+             "Gewinnzuschlag", WARNUNG, "Blatt Rücklagen, Spalte Auflösung"),
+    Pruefung("grundstueckshandel", "Verkäufe über der Drei-Objekt-Grenze im Zeitraum: Gefahr "
+             "gewerblicher Grundstückshandel, Objekte wären Umlaufvermögen und § 6b entfiele",
+             WARNUNG, "Blatt Verkäufe, Spalte Verkaufsjahr; Grenze auf dem Parameterblatt"),
+    Pruefung("frist_ende", "Frist einer Rücklage endet nach dem Prognoseende; Auflösung und "
+             "Zuschlag liegen außerhalb des Rasters", HINWEIS, "Blatt Rücklagen, Spalte Hinweis"),
+    Pruefung("liquiditaet", "Liquidität im Plan (A) in mindestens einem Jahr negativ: "
+             "Finanzierungsbedarf (Stufe 2)", HINWEIS, "Blatt Liquidität, Liquidität kumuliert"),
+    Pruefung("verkehrswert", "Objekte ohne Verkehrswert: zählen in Übersicht und latenter "
+             "Steuer mit 0", HINWEIS, "Blatt Objekte, Spalte Verkehrswert"),
+]
+
+# Blatt Varianten: je Makrolauf eine Zeile mit festen Werten (Projektplan Abschnitt 19)
+VARIANTEN_KOPF = ["Variante", "festgehalten am", "Endvermögen A", "Endvermögen B",
+                  "Endvermögen C", "Endvermögen Baseline", "A − B", "A − C", "Steuer A gesamt",
+                  "Prüfung"]
+MAX_VARIANTEN = 100
 
 
 @dataclass

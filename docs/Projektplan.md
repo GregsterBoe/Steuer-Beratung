@@ -28,13 +28,15 @@ Eingabe:  Parameter, Objekte, Verkäufe, Neuobjekte
 Rechnung: Prognose ⇄ Rücklagen → Liquidität
             ↓
 Ausgabe:  Auswertung, Vergleich, Übersicht
+            ↓
+Kontrolle: Prüfung, Varianten (Etappe 9)
 ```
 
 So bleibt nachvollziehbar, woher jede Zahl kommt: Alle Eingaben links, die Rechnung in der Mitte, die Ergebnisse rechts.
 
 ## 3. Blätter im Detail
 
-Zehn Blätter, getrennt nach Eingabe, Rechnung und Ausgabe. Eingabeblätter sind die einzige Stelle, an der getippt wird.
+Zwölf Blätter, getrennt nach Eingabe, Rechnung, Ausgabe und Kontrolle. Eingabeblätter sind die einzige Stelle, an der getippt wird.
 
 | Blatt | Typ | Schlüsselfelder | Zweck |
 | --- | --- | --- | --- |
@@ -48,6 +50,8 @@ Zehn Blätter, getrennt nach Eingabe, Rechnung und Ausgabe. Eingabeblätter sind
 | Auswertung | Ausgabe | Jahr, Gesamt-GuV, Steuer, stille Reserven, latente Steuer, Gesamtvermögen; Szenarien A, B, C und Baseline | Kennzahlen je Jahr |
 | Vergleich | Ausgabe | Kennzahlen je Szenario am Ende des Rasters, Differenzen A − B, A − C, A − Baseline; Endvermögen je Jahr mit Diagramm | Entscheidung § 6b-Kette oder sofort versteuern |
 | Übersicht | Ausgabe | Jahr, Verkehrswert und Gesamtvermögen je Baseline und Plan, Differenzen, zwei Diagramme | Immobilienwert und Gesamtvermögen im Jahresverlauf, Plan mit Verkäufen und Neuobjekten gegen Nichtstun |
+| Prüfung | Kontrolle | je Plausibilitätsprüfung Art, Anzahl betroffener Zeilen, Ergebnis; Gesamtergebnis | alle Plausibilitätsprüfungen als Formeln (Abschnitt 19) |
+| Varianten | Kontrolle | je festgehaltener Variante Bezeichnung, Zeitpunkt, Endvermögen A, B, C, Baseline, Differenzen, Steuer | Ergebnisse verschiedener Eingaben vergleichen; nur das Makro schreibt hier |
 
 Konvention: ObjektID ist der Schlüssel, der Objekte, Verkäufe, Rücklagen und Prognose verbindet. Neuobjekte bekommen eine eigene ID, laufen in der Prognose aber in derselben Matrix.
 
@@ -96,7 +100,8 @@ VBA steuert nur, es rechnet nicht. Die Makros schreiben Eingabewerte und lösen 
 | Modul | Aufgabe |
 | --- | --- |
 | modObjekte | Objekt anlegen, duplizieren, ausblenden; Prognosezeilen je Objekt erzeugen |
-| modSzenario | entfällt: alle Szenarien rechnen gleichzeitig in Formeln (Abschnitt 15); denkbar bleibt, Varianten der Eingaben zu speichern und zu laden |
+| modSzenario | entfällt: alle Szenarien rechnen gleichzeitig in Formeln (Abschnitt 15) |
+| modVarianten | Kennzahlen des Blatts Vergleich als feste Werte im Blatt Varianten festhalten |
 | modPruefung | Plausibilitätsprüfungen vor der Rechnung (siehe unten) |
 | modRechnen | Neuberechnung anstoßen, Auswertung aktualisieren |
 | modStart | Menü bzw. Schaltflächen auf dem Parameterblatt |
@@ -110,7 +115,7 @@ VBA steuert nur, es rechnet nicht. Die Makros schreiben Eingabewerte und lösen 
 - mehr als 3 Verkäufe in 5 Jahren: Warnung wegen gewerblichem Grundstückshandel
 - fehlende Pflichtfelder je aktivem Objekt
 
-Prüfungen schreiben ihr Ergebnis in eine Statusspalte, nicht in Pop-ups allein, damit Fehler im Blatt sichtbar bleiben.
+Prüfungen schreiben ihr Ergebnis in eine Statusspalte, nicht in Pop-ups allein, damit Fehler im Blatt sichtbar bleiben. Umgesetzt ist das in Etappe 9 als Blatt Prüfung (Abschnitt 19).
 
 ## 6. Umsetzungsreihenfolge
 
@@ -124,7 +129,7 @@ In Etappen, jede mit prüfbarem Zwischenstand. Erst wenn eine Etappe an einem Ob
 6. **Reinvestition:** Neuobjekt, Übertrag, geminderte AfA-Basis. Prüfbar: neue AfA-Basis stimmt, Gebäudeanteil reicht.
 7. **Liquidität und Auswertung:** Geldfluss und Gesamt-GuV. Prüfbar: Summen über alle Objekte.
 8. **Szenariovergleich:** A gegen B und C über 20 Jahre. Prüfbar: alle Pfade nachvollziehbar.
-9. **VBA-Steuerung und Prüfungen:** erst wenn die Formeln stehen. Prüfbar: Objekt anlegen ohne Formelbruch.
+9. **VBA-Steuerung und Prüfungen:** erst wenn die Formeln stehen. Prüfbar: Objekt anlegen ohne Formelbruch (Abschnitt 19).
 
 Dazu kommt die Ausgabe im DATEV-BWA-Format mit dem Sonderbereich Verkauf und Kauf (Abschnitt 18). Sie baut auf Etappe 8 auf.
 
@@ -653,7 +658,7 @@ Im Prüfskript, Abnahmefall der Reinvestition (Verkauf Ende 2027, Gewinn 720.000
 
 **Offen:**
 - Steuersatz der Alternativanlage: Kapitalerträge der GmbH sind voll steuerpflichtig; eine Anlage in Aktien (§ 8b KStG) wäre günstiger und ist nicht abgebildet.
-- Varianten der Eingaben (verschiedene Verkaufsjahre oder Preise) speichern und vergleichen, etwa per Makro in Etappe 9.
+- ~~Varianten der Eingaben speichern und vergleichen~~: umgesetzt in Etappe 9 als Blatt Varianten mit dem Makro „Variante festhalten“ (Abschnitt 19).
 
 ## 16. Datenanbindung: zwei Quellen
 
@@ -846,3 +851,60 @@ Je Vorgang gibt es zwei Sichten. In der Referenz stehen sie rechts neben der BWA
 - [ ] **Mietnebenkosten:** Die Referenz neutralisiert Umlagen gegen den Aufwand. Im Modell zählt BWA 1020 komplett als Miete. Klären, auf welchem Konto oder welcher BWA-Zeile die Umlagen stehen.
 - [ ] **Steuersatz:** Die Referenz rechnet mit etwa 45 %, das Parameterblatt mit 30 % (GmbH ohne erweiterte Kürzung wäre rund 30 %). Die 45 % der Alternative lassen sich nicht aus den angezeigten Werten herleiten.
 - [ ] **Zeitpunkt:** Die Referenz vergleicht ein Jahr (Basis 2025) statisch; das Modell rechnet 20 Jahre. Die Ergebnissicht zeigt deshalb das erste volle Jahr nach dem Vorgang und zusätzlich das Endvermögen nach 20 Jahren.
+
+## 19. VBA-Steuerung und Plausibilitätsprüfungen (Etappe 9)
+
+**Grundsatz:** Geprüft wird in Formeln, nicht in VBA. Das Blatt Prüfung rechnet jede Prüfung als Formel. So bleiben Fehler auch ohne Makros sichtbar, etwa in der .xlsx-Fassung oder bei deaktivierten Makros. Die Makros lesen das Ergebnis nur, schreiben Eingabewerte und lösen die Neuberechnung aus.
+
+**Blatt Prüfung**
+
+Je Prüfung eine Zeile mit Art, Anzahl betroffener Zeilen (pr\_Anzahl) und Ergebnis (pr\_Ergebnis, „OK“ oder die Art). Darüber stehen das Gesamtergebnis (pr\_Gesamt) sowie die Anzahl der Fehler und Warnungen (pr\_Fehler, pr\_Warnungen). Das Gesamtergebnis steht auch auf dem Parameterblatt (par\_StatusPruefung) und in der Übersicht (ueb\_Pruefung), rot, solange es nicht „OK“ lautet.
+
+| Prüfung | Art | Formel (fachlich) |
+| --- | --- | --- |
+| Objekte mit Status ungleich OK | Fehler | Statusspalte Objekte |
+| Verkäufe mit Status ungleich OK | Fehler | Statusspalte Verkäufe, ohne „§ 6b unzulässig“ |
+| Neuobjekte mit Status ungleich OK, darunter Fristverstoß | Fehler | Statusspalte Neuobjekte |
+| Steuerwelt außerhalb des MVP | Fehler | par\_Steuerwelt ≠ GmbH |
+| Vorbesitzzeit für § 6b zu kurz | Warnung | Status „§ 6b unzulässig: Vorbesitzzeit zu kurz“ |
+| Rücklage nur teilweise übertragen | Warnung | Auflösung > 0 und ein Neuobjekt nennt die Rücklage |
+| Rücklage ohne Neuobjekt | Warnung | Auflösung > 0 und kein Neuobjekt nennt sie |
+| Drei-Objekt-Grenze | Warnung | mehr als par\_DOGrenze gültige Verkäufe im Zeitraum par\_DOJahre, der mit einem Verkaufsjahr endet |
+| Frist endet nach Prognoseende | Hinweis | Hinweis im Rücklagenblatt gesetzt |
+| Liquidität negativ | Hinweis | Jahre mit liq\_Kum < 0 (Finanzierungsbedarf, Stufe 2) |
+| Objekte ohne Verkehrswert | Hinweis | Status OK und Verkehrswert leer |
+
+- Fehler: Eingabe unvollständig oder unzulässig, die Zeile rechnet nicht oder nur teilweise mit.
+- Warnung: rechnet, ist aber steuerlich ungünstig oder fachlich zu prüfen.
+- Hinweis: zur Kenntnis, zählt nicht ins Gesamtergebnis.
+
+„Gebäudeanteil des Neuobjekts ≥ übertragener Gebäudegewinn“ aus Abschnitt 5 steckt in der Warnung zum Teilübertrag: Reicht der Gebäudeanteil nicht, bleibt ein Rest, der im Fristjahr aufgelöst wird. „G+B plus Gebäude = Kaufpreis“ ist durch den Aufbau erfüllt: Beim Bestandsobjekt werden beide AK getrennt erfasst, beim Neuobjekt ergibt der Anteil G+B mit dem Rest Gebäude immer den Kaufpreis.
+
+Zur Drei-Objekt-Grenze: Die Prüfung ist vereinfacht. Sie zählt Verkäufe im Zeitraum und nicht Verkäufe innerhalb von fünf Jahren nach dem Erwerb. Bei der GmbH sind die Einkünfte ohnehin gewerblich. Die Gefahr ist, dass die Objekte als Umlaufvermögen gelten und § 6b dann entfällt. Fachlich prüfen.
+
+**VBA-Module**
+
+Die Module liegen als Quelltext in `prognosemodell/vba`, ohne Umlaute; Meldungstexte laufen über `Txt()`.
+
+| Modul | Makros |
+| --- | --- |
+| modStart | Schaltflächen auf dem Parameterblatt anlegen (beim Öffnen), Hilfen `Bereich`, `Txt`, `Euro` |
+| modRechnen | `NeuBerechnen` (vollständig), `NeuBerechnenStarten` |
+| modPruefung | `AnzahlFehler`, `AnzahlWarnungen`, `Auffaelligkeiten`, `PruefungStarten`, `PruefungBestanden` (fragt bei Fehlern nach) |
+| modObjekte | `ObjektAnlegen`, `ObjektDuplizieren`, `ObjektEntfernen`, `LeereBloeckeAusblenden` und die Bedienung per Schaltfläche |
+| modVarianten | `VarianteFesthalten`, `VariantenLeeren`, `FreieVariante` |
+| ThisWorkbook | beim Öffnen `Einrichten` |
+
+Die Makros fügen nie Zeilen ein und löschen nie welche. Sie schreiben nur in die gelben Eingabefelder (obj\_Eingabe). Jede Objektzeile hat in der Prognose ihren festen Block, deshalb rechnet ein angelegtes oder dupliziertes Objekt sofort ohne Formelbruch mit. „Objekt entfernen“ leert die Eingaben. „Leere Prognoseblöcke ausblenden“ blendet die Blöcke ohne ObjektID aus, auch die leeren Neuobjektblöcke.
+
+**Einbetten:** openpyxl kann kein VBA-Projekt erzeugen, nur ein vorhandenes übernehmen. `prognosemodell/makros.py` baut deshalb per LibreOffice (headless, UNO) aus den Quelltexten ein VBA-Projekt in einer leeren Hilfsmappe mit denselben Codenamen. openpyxl übernimmt daraus nur `vbaProject.bin`. Aufruf: `python -m prognosemodell --makros`. LibreOffice wird nur beim Bauen gebraucht, die fertige .xlsm nur Excel. Ohne `--makros` entsteht wie bisher eine .xlsx ohne Makros, mit denselben Formeln und Prüfungen.
+
+**Abnahme Etappe 9** (im Prüfskript)
+
+- Jede Prüfung schlägt bei einem eingebauten Fehler an, mit der richtigen Anzahl und Art. Ein sauberes Testobjekt ergibt „OK“ in Prüfung, Parameterblatt und Übersicht.
+- Objekt anlegen ohne Formelbruch. Eine Kopie von OBJ-001 rechnet im eigenen Block (Miete 2027 61.200, Buchwert 2046 160.000), die Übersicht zählt sie mit.
+- Eine doppelte ID oder eine fehlende Quelle wird abgewiesen, ohne dass etwas geschrieben wird. Eine entfernte Zeile wird wieder belegt.
+- Leere Blöcke lassen sich aus- und einblenden.
+- Eine festgehaltene Variante enthält dieselben Werte wie das Blatt Vergleich.
+
+Die Makrofälle laufen im Prüfskript in LibreOffice. Dort bricht `Err.Raise` die Funktion ab und liefert 0, Excel zeigt stattdessen die Meldung. Die Schaltflächen und Eingabedialoge sind nur in Excel bedienbar und werden nicht automatisch geprüft.
