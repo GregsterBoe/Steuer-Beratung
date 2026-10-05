@@ -17,7 +17,7 @@ import uuid
 import zipfile
 from pathlib import Path
 
-from .modelle import CODENAME_MAPPE, CODENAMEN
+from .modelle import CODENAME_MAPPE
 
 VBA_ORDNER = Path(__file__).parent / "vba"
 MODULE = ["modStart", "modRechnen", "modPruefung", "modObjekte", "modVarianten"]
@@ -117,17 +117,20 @@ class LibreOffice:
 
 
 def _vba_hilfsmappe(lo: LibreOffice, blaetter: list, ziel: Path) -> None:
-    """Leere Mappe mit den Codenamen der echten Mappe und allen Modulen als .xlsm."""
+    """Leere Mappe mit den Codenamen der echten Mappe und allen Modulen als .xlsm.
+
+    blaetter: (Blattname, Codename) in der Reihenfolge der Mappe.
+    """
     from com.sun.star.script import ModuleInfo
     doc = lo.neu()
     try:
         sheets = doc.Sheets
         while sheets.Count < len(blaetter):
             sheets.insertNewByName(f"Blatt{sheets.Count + 1}", sheets.Count)
-        for i, titel in enumerate(blaetter):
+        for i, (titel, codename) in enumerate(blaetter):
             blatt = sheets.getByIndex(i)
             blatt.Name = titel
-            blatt.CodeName = CODENAMEN[titel]
+            blatt.CodeName = codename
         doc.CodeName = CODENAME_MAPPE
 
         bibliotheken = doc.BasicLibraries
@@ -148,8 +151,8 @@ def _vba_hilfsmappe(lo: LibreOffice, blaetter: list, ziel: Path) -> None:
 
         modul(CODENAME_MAPPE, quelltext(VBA_ORDNER / "ThisWorkbook.cls"), MODUL_DOKUMENT,
               objekte.getByName(CODENAME_MAPPE))
-        for titel in blaetter:
-            modul(CODENAMEN[titel], "", MODUL_DOKUMENT)
+        for _, codename in blaetter:
+            modul(codename, "", MODUL_DOKUMENT)
         for name in MODULE:
             modul(name, quelltext(VBA_ORDNER / f"{name}.bas"), MODUL_NORMAL)
         lo.speichern(doc, ziel, FILTER_XLSM)
@@ -160,13 +163,14 @@ def _vba_hilfsmappe(lo: LibreOffice, blaetter: list, ziel: Path) -> None:
 def speichere_mit_makros(wb, ziel: Path, lo: LibreOffice = None) -> Path:
     """Mappe als .xlsm mit eingebettetem VBA-Projekt speichern."""
     ziel = Path(ziel)
+    blaetter = [(ws.title, ws.sheet_properties.codeName) for ws in wb.worksheets]
     with tempfile.TemporaryDirectory() as tmp:
         hilfsmappe = Path(tmp) / "vba.xlsm"
         if lo is None:
             with LibreOffice(Path(tmp) / "lo") as eigenes:
-                _vba_hilfsmappe(eigenes, wb.sheetnames, hilfsmappe)
+                _vba_hilfsmappe(eigenes, blaetter, hilfsmappe)
         else:
-            _vba_hilfsmappe(lo, wb.sheetnames, hilfsmappe)
+            _vba_hilfsmappe(lo, blaetter, hilfsmappe)
         with zipfile.ZipFile(hilfsmappe) as archiv:
             if "xl/vbaProject.bin" not in archiv.namelist():
                 raise RuntimeError("LibreOffice hat kein VBA-Projekt geschrieben.")

@@ -55,6 +55,7 @@ BEISPIELE = [
 ]
 VORJAHRESFAKTOR = (0.96, 0.98)  # Basisjahr − 2, − 1
 GELB = PatternFill("solid", fgColor="FFF2CC")
+FMT_BWA = "#,##0.00"
 
 
 def _summen(werte: dict) -> dict:
@@ -72,9 +73,11 @@ def _summen(werte: dict) -> dict:
     return w
 
 
-def kostenstellenblatt(ws, kst: str, name: str, werte: dict, basisjahr: int,
-                       planjahre: int = 20) -> None:
-    """Ein Blatt im BWA-Layout; Monate = Jahreswert / 12, Planspalten leer."""
+def bwa_kopf(ws, kst: str, name: str, basisjahr: int, planjahre: int = 20) -> dict:
+    """Kopf und Zeilenbeschriftung eines BWA-Blatts; liefert BWA-Nr. -> Blattzeile.
+
+    Gemeinsam für die Vorlage und die BWA-Ausgabe der Mappe (bwa.py).
+    """
     ws["B2"], ws["C2"] = kst, name
     ws["B2"].font = ws["C2"].font = Font(bold=True)
     ws["B4"], ws["C4"] = "Nr.", "Bezeichnung kurz"
@@ -92,27 +95,37 @@ def kostenstellenblatt(ws, kst: str, name: str, werte: dict, basisjahr: int,
     for spalte in range(2, SPALTE_PLAN + planjahre):
         ws.cell(row=4, column=spalte).font = Font(bold=True)
 
-    summe = _summen(werte)
+    zeilen = {}
     for i, (nr, bezeichnung) in enumerate(BWA_ZEILEN):
         zeile = ERSTE_ZEILE + i
+        zeilen[nr] = zeile
         ws.cell(row=zeile, column=2, value=nr)
-        if not bezeichnung:
-            continue
-        ws.cell(row=zeile, column=3, value=bezeichnung)
+        if bezeichnung:
+            ws.cell(row=zeile, column=3, value=bezeichnung)
+    for spalte in range(SPALTE_VORJAHRE, SPALTE_PLAN + planjahre):
+        for zeile in zeilen.values():
+            ws.cell(row=zeile, column=spalte).number_format = FMT_BWA
+        ws.column_dimensions[get_column_letter(spalte)].width = 12
+    ws.column_dimensions["C"].width = 26
+    ws.freeze_panes = "D5"
+    return zeilen
+
+
+def kostenstellenblatt(ws, kst: str, name: str, werte: dict, basisjahr: int,
+                       planjahre: int = 20) -> None:
+    """Ein Blatt im BWA-Layout; Monate = Jahreswert / 12, Planspalten leer."""
+    zeilen = bwa_kopf(ws, kst, name, basisjahr, planjahre)
+    summe = _summen(werte)
+    for nr, bezeichnung in BWA_ZEILEN:
         wert = summe[nr]
-        if wert == 0:
+        if not bezeichnung or wert == 0:
             continue
+        zeile = zeilen[nr]
         for k, faktor in enumerate(VORJAHRESFAKTOR):
             ws.cell(row=zeile, column=SPALTE_VORJAHRE + k, value=round(wert * faktor, 2))
         for m in range(12):
             ws.cell(row=zeile, column=SPALTE_MONATE + m, value=round(wert / 12, 2))
         ws.cell(row=zeile, column=SPALTE_JAHR, value=wert)
-    for spalte in range(SPALTE_VORJAHRE, SPALTE_PLAN + planjahre):
-        for zeile in range(ERSTE_ZEILE, ERSTE_ZEILE + len(BWA_ZEILEN)):
-            ws.cell(row=zeile, column=spalte).number_format = "#,##0.00"
-        ws.column_dimensions[get_column_letter(spalte)].width = 12
-    ws.column_dimensions["C"].width = 26
-    ws.freeze_panes = "D5"
 
 
 def erstelle_vorlage(beispiele=BEISPIELE, basisjahr: int = None) -> Workbook:

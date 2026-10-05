@@ -32,6 +32,7 @@ def main() -> None:
         for titel, grund in uebersprungen:
             print(f"übersprungen: Blatt {titel!r} ({grund})")
         modell.objekte = zusammenfuehren(modell.objekte, laufende)
+        modell.kostenstellen = {lw.objekt_id: lw for lw in laufende}
         for lw in laufende:
             print(f"eingelesen: {lw.objekt_id} ({lw.name}) aus Blatt {lw.blatt!r}: "
                   f"Miete {lw.miete:,.2f}, Erhaltung {lw.erhaltung:,.2f}, "

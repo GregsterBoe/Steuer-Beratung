@@ -122,6 +122,7 @@ def prognose_zeile(zeile: int, objekt_nr: int, erstes_jahr: bool) -> dict:
         "afa_ohne6b": _leer_oder(zeile, _p("afa", zeile)),
         "buchwert_ohne6b": _leer_oder(zeile, _p("buchwert", zeile)),
         "buchwert_gub_ohne6b": _leer_oder(zeile, _p("buchwert_gub", zeile)),
+        "quelle": _leer_oder(zeile, '""'),
     }
 
 
@@ -187,6 +188,9 @@ def prognose_zeile_neu(zeile: int, neu_nr: int, erstes_jahr: bool) -> dict:
         "buchwert_ohne6b": buchwert_ohne,
         "buchwert_gub_ohne6b": _leer_oder(zeile, f'IF({gueltig},IF({t}>={kj},'
                                                  f'{ne("ne_AKGuBNeu")},0),0)'),
+        # nur bei gültiger Übertragung, sonst gehört das Neuobjekt zu keinem Verkauf
+        "quelle": _leer_oder(zeile, f'IF(AND({ne("ne_Status")}="{STATUS_OK}",'
+                                    f'{ne("ne_Quelle")}<>""),{ne("ne_Quelle")},"")'),
     }
 
 

@@ -9,7 +9,8 @@ gesucht wird über die BWA-Nummer, nie über die Zeilenposition.
 
 import dataclasses
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Optional
 
@@ -52,6 +53,9 @@ class LaufendeWerte:
     erhaltung: float
     weitere_ausgaben: float
     abschreibung: float
+    # Ist-Werte je BWA-Nr. und Spalte im Ausgabelayout (vorlagen: F, G Vorjahre,
+    # H–S Monate, T Basisjahr); für das BWA-Blatt der Mappe
+    ist: dict = field(default_factory=dict)
 
 
 def _kopfjahr(wert) -> Optional[int]:
@@ -99,6 +103,37 @@ def _summe(ws, ws_formeln, zeilen: dict, nummern: tuple, spalte: int) -> float:
             raise EinleseFehler(f"Blatt {ws.title!r}, BWA {nr}: kein Zahlenwert ({wert!r})")
         summe += wert
     return summe
+
+
+def _ist_spalten(ws, basisjahr: int) -> dict:
+    """Spalte im Blatt -> Spalte im Ausgabelayout, für Vorjahre, Monate und Basisjahr."""
+    from .vorlagen import SPALTE_JAHR, SPALTE_MONATE, SPALTE_VORJAHRE
+    ziel = {}
+    for zelle in ws[KOPFZEILE]:
+        wert = zelle.value
+        if isinstance(wert, date):  # Monatsspalte; datetime ist auch ein date
+            if wert.year == basisjahr:
+                ziel[zelle.column] = SPALTE_MONATE + wert.month - 1
+            continue
+        jahr = _kopfjahr(wert)
+        if jahr in (basisjahr - 2, basisjahr - 1):
+            ziel[zelle.column] = SPALTE_VORJAHRE + jahr - (basisjahr - 2)
+        elif jahr == basisjahr:
+            ziel[zelle.column] = SPALTE_JAHR
+    return ziel
+
+
+def _ist_werte(ws, zeilen: dict, basisjahr: int) -> dict:
+    spalten = _ist_spalten(ws, basisjahr)
+    ist = {}
+    for nr, zeile in zeilen.items():
+        werte = {ziel: ws.cell(row=zeile, column=quelle).value
+                 for quelle, ziel in spalten.items()}
+        werte = {k: v for k, v in werte.items()
+                 if isinstance(v, (int, float)) and not isinstance(v, bool)}
+        if werte:
+            ist[nr] = werte
+    return ist
 
 
 def _formatfehler(ws, basisjahr: int) -> Optional[str]:
@@ -157,6 +192,7 @@ def lese_kostenstellen(pfad, basisjahr: int) -> tuple:
             erhaltung=summe(BWA_ERHALTUNG),
             weitere_ausgaben=summe(BWA_AUSGABEN),
             abschreibung=summe(BWA_ABSCHREIBUNG),
+            ist=_ist_werte(ws, zeilen, basisjahr),
         ))
     if not ergebnis:
         gruende = "; ".join(f"{t!r}: {g}" for t, g in uebersprungen)

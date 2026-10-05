@@ -30,13 +30,15 @@ Rechnung: Prognose ⇄ Rücklagen → Liquidität
 Ausgabe:  Auswertung, Vergleich, Übersicht
             ↓
 Kontrolle: Prüfung, Varianten (Etappe 9)
+            ↓
+BWA:      Alle Objekte, je Kostenstelle ein Blatt, Verkauf und Kauf (Abschnitt 18)
 ```
 
 So bleibt nachvollziehbar, woher jede Zahl kommt: Alle Eingaben links, die Rechnung in der Mitte, die Ergebnisse rechts.
 
 ## 3. Blätter im Detail
 
-Zwölf Blätter, getrennt nach Eingabe, Rechnung, Ausgabe und Kontrolle. Eingabeblätter sind die einzige Stelle, an der getippt wird.
+Zwölf feste Blätter, getrennt nach Eingabe, Rechnung, Ausgabe und Kontrolle. Dazu kommen die BWA-Ausgabe (Summenblatt, je Kostenstelle ein Blatt) und der Sonderbereich Verkauf und Kauf (Abschnitt 18). Eingabeblätter sind die einzige Stelle, an der getippt wird.
 
 | Blatt | Typ | Schlüsselfelder | Zweck |
 | --- | --- | --- | --- |
@@ -51,6 +53,8 @@ Zwölf Blätter, getrennt nach Eingabe, Rechnung, Ausgabe und Kontrolle. Eingabe
 | Vergleich | Ausgabe | Kennzahlen je Szenario am Ende des Rasters, Differenzen A − B, A − C, A − Baseline; Endvermögen je Jahr mit Diagramm | Entscheidung § 6b-Kette oder sofort versteuern |
 | Übersicht | Ausgabe | Jahr, Verkehrswert und Gesamtvermögen je Baseline und Plan, Differenzen, zwei Diagramme | Immobilienwert und Gesamtvermögen im Jahresverlauf, Plan mit Verkäufen und Neuobjekten gegen Nichtstun |
 | Prüfung | Kontrolle | je Plausibilitätsprüfung Art, Anzahl betroffener Zeilen, Ergebnis; Gesamtergebnis | alle Plausibilitätsprüfungen als Formeln (Abschnitt 19) |
+| Alle Objekte, je Kostenstelle ein Blatt | Ausgabe | BWA-Zeilen 1010–1380, Ist links, Planjahre rechts als Formeln | Ergebnisse im DATEV-BWA-Format (Abschnitt 18) |
+| Verkauf und Kauf | Ausgabe | je Verkauf Ergebnis- und Detailsicht, je Neuobjekt Detailsicht Kauf | Sonderbereich für die Berichterstattung (Abschnitt 18) |
 | Varianten | Kontrolle | je festgehaltener Variante Bezeichnung, Zeitpunkt, Endvermögen A, B, C, Baseline, Differenzen, Steuer | Ergebnisse verschiedener Eingaben vergleichen; nur das Makro schreibt hier |
 
 Konvention: ObjektID ist der Schlüssel, der Objekte, Verkäufe, Rücklagen und Prognose verbindet. Neuobjekte bekommen eine eigene ID, laufen in der Prognose aber in derselben Matrix.
@@ -785,26 +789,73 @@ Festgehalten nach Rückmeldung der Kanzlei (Oktober 2026), Grundlage ist die Dat
 
 Das Prüfskript `pruefen_einlesen` liest die Vorlage ein: Basisjahr aus „Jahr 2026“, Summenblatt übersprungen, Planspalten als Jahr erkannt.
 
-**Ausgabe in die Planspalten (geplant)**
+**Ausgabe in die Planspalten (umgesetzt, `prognosemodell/bwa.py`)**
 
-Das Modell schreibt je Kostenstelle und Planjahr in die BWA-Zeilen. Die Summenzeilen bleiben Formeln wie in der BWA.
+Die Mappe enthält hinter den Kontrollblättern:
+- das Summenblatt „Alle Objekte“ (B2 „KSt“);
+- je Objekt und Neuobjekt ein BWA-Blatt im Layout der Vorlage;
+- das Blatt „Verkauf und Kauf“.
+
+**BWA-Blätter je Kostenstelle**
+
+- Das Blatt heißt wie das eingelesene Kostenstellenblatt, sonst wie die ObjektID.
+- B2 trägt die ObjektID, alle Formeln suchen über sie.
+- Links stehen die Ist-Werte: Vorjahre, Monate und Basisjahr, wie eingelesen. Ohne eingelesene BWA zeigt das Basisjahr Miete, weitere Einnahmen, Erhaltung und weitere Ausgaben aus dem Objektblatt.
+- Rechts stehen die Planjahre als Formeln aus der Prognose, Szenario A.
+- Zeile 5 trägt das Planjahr als Zahl, nur als Hilfe für die Formeln.
+- Ein Wert 0 bleibt leer, deshalb sind die Planspalten eines verkauften Objekts ab dem Folgejahr leer und die eines Neuobjekts bis zum Kaufjahr.
+- Die Summenzeilen sind Formeln wie in der BWA: 1345 = 1300 − 1320 + 1330, 1353 = 1345 + 1351 − 1352, 1380 = 1353 − 1355.
 
 | BWA-Nr. | Planwert |
 | --- | --- |
 | 1020 | Miete aus der Prognose |
 | 1090 | weitere Einnahmen |
-| 1100–1220, 1260 | je Kostenart der Wert des Basisjahrs, fortgeschrieben mit `par_Kostensteig`; Summe = weitere Ausgaben |
+| 1100–1220 | weitere Ausgaben × Anteil der Kostenart im Basisjahr (Ist-Wert / weitere Ausgaben Basisjahr) |
+| 1260 | weitere Ausgaben minus 1100–1220; ohne Aufteilung die ganzen weiteren Ausgaben |
 | 1240 | AfA aus der Fortschreibung (Steuerbilanz) |
 | 1250 | Erhaltung |
-| 1310, 1322 | Zinsaufwand ab Stufe 2; Zinsertrag aus der Alternativanlage (Etappe 8), nur im Summenblatt |
-| 1355 | Steuer aus dem Blatt Liquidität, nur im Summenblatt (die Steuer entsteht bei der GmbH, nicht je Kostenstelle) |
+| 1323 | Veräußerungsgewinn im Verkaufsjahr, Auflösung und Zuschlag im Fristjahr |
+| 1312 | Veräußerungsverlust und Einstellung in die § 6b-Rücklage im Verkaufsjahr |
+| 1310, 1322 | nur im Summenblatt: Zins der Alternativanlage, negativ als Zinsaufwand; Darlehenszins ab Stufe 2 |
+| 1355 | nur im Summenblatt: Steuer aus dem Blatt Liquidität, mit Verlustvortrag (die Steuer entsteht bei der GmbH, nicht je Kostenstelle) |
 | 1051–1092, 1280–1380 | Summenformeln |
 
-Ein verkauftes Objekt hat ab dem Folgejahr leere Planspalten, ein Neuobjekt bekommt ein eigenes Kostenstellenblatt ab dem Kaufjahr.
+Verkauf und Rücklage stehen im neutralen Ergebnis (1312, 1323), wie in der Planungsreferenz. Die außerordentlichen Zeilen 1351 und 1352 bleiben leer.
+
+**Summenblatt „Alle Objekte“**
+
+- Die Planwerte rechnen über die ganze Prognose, also auch über Objekte, die erst in Excel angelegt werden und kein eigenes Blatt haben.
+- Die Kostenarten 1100–1220 sind die Summe der Kostenstellenblätter, 1260 nimmt den Rest der weiteren Ausgaben auf.
+- Die Ist-Spalten sind die Summe der Kostenstellenblätter.
+- Abgleich, im Prüfskript je Jahr geprüft:
+  - Ergebnis vor Steuern (1345) = Ergebnis vor Verlustvortrag im Blatt Liquidität
+  - Vorläufiges Ergebnis (1380) = Ergebnis nach Steuern im Blatt Auswertung
+  - Abschreibungen (1240) = AfA im Blatt Liquidität
+
+Benannte Bereiche: bwa\_<Nr.> je Zeile über die Planjahre, bwa\_Jahr.
 
 **Sonderbereich Verkauf und Kauf**
 
-Je Vorgang gibt es zwei Sichten. In der Referenz stehen sie rechts neben der BWA (ab Spalte AP); im Modell werden sie ein eigenes Blatt.
+Je Vorgang gibt es zwei Sichten. In der Referenz stehen sie rechts neben der BWA (ab Spalte AP); im Modell stehen sie im eigenen Blatt „Verkauf und Kauf“.
+
+**Umsetzung im Blatt „Verkauf und Kauf“**
+
+- Oben: Endvermögen nach latenter Steuer der Szenarien A, B, C und Baseline, mit Differenz zu A.
+- Je Zeile des Verkaufsblatts ein Block, mindestens drei, damit in Excel ergänzte Verkäufe passen. Der Block liest den Verkauf per INDEX und die zugehörige Rücklage aus derselben Zeile des Rücklagenblatts.
+- Neuobjekte gehören zum Verkauf, wenn ihre Quelle-RücklageID die Rücklage des Verkaufs nennt und ihr Status OK ist (Prognosespalte prg\_Quelle).
+- Vergleichsjahr ist das erste volle Jahr nach Verkauf und letztem Kauf aus der Rücklage, höchstens das letzte Prognosejahr.
+- **Ergebnissicht:**
+  - Erlös, Reinvestition (Kaufpreis und Nebenkosten), Übertrag § 6b, Steuer auf den Gewinn ca. (Gewinn − Rücklage + Auflösung + Zuschlag) × Grenzsteuersatz.
+  - Kapitalanlage = Nettoerlös − Reinvestition − Steuer ca.
+  - Restschuld: Stufe 2.
+  - Vergleich im Vergleichsjahr, Ausgangsfall (halten) gegen Alternative (Neuobjekte aus der Rücklage plus Zins auf die Kapitalanlage): Mietertrag, Kapitalertrag, Aufwand, vorläufiges Ergebnis, liquider Überschuss vor und nach Steuern ca., mit Differenz.
+- **Detailsicht:**
+  - Einzelauflistung des Verkaufs (gesamt, G+B, Gebäude): Anteil, Veräußerungspreis, Kosten, Buchwert, Gewinn, Rücklage, übertragen, Fristjahr, Auflösung, Zuschlag.
+  - Planung im Vergleichsjahr: Mieten, weitere Einnahmen, Zinsertrag, Erhaltung, weitere Ausgaben, Abschreibungen, Zinsen und Tilgungen (Stufe 2, 0), vorläufiges Ergebnis, Cash Flow.
+  - Ausgangsfall: die Werte des Objekts bei Halten, fortgeschrieben wie in der Prognose; die AfA aus dem Buchwert bei Halten.
+- **Detailsicht Kauf:** je Neuobjekt eine Spalte: Kaufdaten, AK G+B und Gebäude, ü1 bis ü3, Übertrag gesamt, AfA-Bemessungsgrundlage, AfA-Methode und -Satz, im ersten vollen Jahr Mieten, Erhaltung, AfA, Ergebnis und Cash Flow.
+- „Steuern ca.“ rechnen wie die Referenz: Ergebnis × Grenzsteuersatz, ohne Verlustvortrag. Die genaue Steuer je Jahr steht im Blatt Liquidität.
+- Die Kostenaufstellung je Kostenart steht im BWA-Blatt der Kostenstelle. Der Sonderbereich zeigt Erhaltung und weitere Ausgaben zusammengefasst, wie die Planung der Referenz.
 
 *Ergebnissicht („Für Berichterstattung“), je Vorgang eine Spalte:*
 
@@ -850,7 +901,8 @@ Je Vorgang gibt es zwei Sichten. In der Referenz stehen sie rechts neben der BWA
 - [x] **Finanzierung und Restschuld:** Entschieden: bleibt in Stufe 2, dort mit Vorrang. In der Referenz ist es schon Teil der Rechnung (Ablösung der Restschuld, Darlehen für den nicht gedeckten Teil). Bis dahin zeigt der Sonderbereich Restschuld und Finanzierung nicht.
 - [ ] **Mietnebenkosten:** Die Referenz neutralisiert Umlagen gegen den Aufwand. Im Modell zählt BWA 1020 komplett als Miete. Klären, auf welchem Konto oder welcher BWA-Zeile die Umlagen stehen.
 - [ ] **Steuersatz:** Die Referenz rechnet mit etwa 45 %, das Parameterblatt mit 30 % (GmbH ohne erweiterte Kürzung wäre rund 30 %). Die 45 % der Alternative lassen sich nicht aus den angezeigten Werten herleiten.
-- [ ] **Zeitpunkt:** Die Referenz vergleicht ein Jahr (Basis 2025) statisch; das Modell rechnet 20 Jahre. Die Ergebnissicht zeigt deshalb das erste volle Jahr nach dem Vorgang und zusätzlich das Endvermögen nach 20 Jahren.
+- [x] **Zeitpunkt:** Die Referenz vergleicht ein Jahr (Basis 2025) statisch; das Modell rechnet 20 Jahre. Umgesetzt: Die Ergebnissicht zeigt das erste volle Jahr nach Verkauf und Kauf, oben im Blatt das Endvermögen nach 20 Jahren je Szenario.
+- [ ] **Rückführung:** Die BWA-Blätter liegen in der Prognosemappe und rechnen in Formeln. Ein Export als eigene Datei mit festen Werten, etwa zum Einspielen in die Kanzlei-Excel, ist noch offen.
 
 ## 19. VBA-Steuerung und Plausibilitätsprüfungen (Etappe 9)
 

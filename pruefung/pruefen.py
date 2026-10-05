@@ -17,11 +17,13 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
+from prognosemodell.einlesen import lese_kostenstellen, zusammenfuehren
 from prognosemodell.makros import LibreOffice, speichere_mit_makros
 from prognosemodell.mappe import erstelle_mappe
 from prognosemodell.modelle import (FEHLER, HINWEIS, MAX_OBJEKTE, PRUEFUNGEN, WARNUNG, Modell,
                                     Neuobjekt, Verkauf, prognosejahre)
 from prognosemodell.testdaten import testobjekt
+from prognosemodell.vorlagen import erstelle_vorlage
 
 TOLERANZ = 0.01  # ein Cent
 FEHLT = object()        # Makro ohne Rückgabewert: nur prüfen, dass es fehlerfrei läuft
@@ -53,11 +55,50 @@ def durchrechnen(modell: Modell, arbeitsordner: Path):
 
 
 def wert(wb, name: str, zeile_im_bereich: int = 0):
-    """Wert eines benannten Bereichs (bei Spaltenbereichen: n-te Zeile)."""
+    """Wert eines benannten Bereichs (Spaltenbereich: n-te Zeile, Zeilenbereich: n-te Spalte).
+
+    Statt eines Namens gehen auch "BWA:<Blatt>:<BWA-Nr.>" (n = Jahr),
+    "SB<Vorgang>:<Beschriftung>" und "KAUF:<Beschriftung>" (n = Spalte, 1 = B).
+    """
+    if name.startswith("BWA:"):
+        _, blatt, nr = name.split(":")
+        return bwa_wert(wb[blatt], int(nr), zeile_im_bereich)
+    if name.startswith(("SB", "KAUF:")):
+        kennung, beschriftung = name.split(":", 1)
+        start = "Detailsicht Kauf" if kennung == "KAUF" else f"Vorgang {kennung[2:]}:"
+        return sonderbereich(wb, start, beschriftung, zeile_im_bereich)
     blatt, ref = next(iter(wb.defined_names[name].destinations))
-    ref = ref.replace("$", "").split(":")[0]
-    zelle = wb[blatt][ref]
+    teile = ref.replace("$", "").split(":")
+    zelle = wb[blatt][teile[0]]
+    if len(teile) == 2 and wb[blatt][teile[1]].row == zelle.row:
+        return wb[blatt].cell(row=zelle.row, column=zelle.column + zeile_im_bereich).value
     return wb[blatt].cell(row=zelle.row + zeile_im_bereich, column=zelle.column).value
+
+
+def bwa_wert(ws, nr: int, jahr: int):
+    """Wert einer BWA-Zeile im Jahr: 2024/2025 Ist-Vorjahre, 2026 Ist, ab 2027 Plan."""
+    from prognosemodell.vorlagen import SPALTE_JAHR, SPALTE_PLAN, SPALTE_VORJAHRE
+    spalte = (SPALTE_JAHR if jahr == 2026 else SPALTE_PLAN + jahr - 2027 if jahr > 2026
+              else SPALTE_VORJAHRE + jahr - 2024)
+    for zeile in range(6, ws.max_row + 1):
+        if ws.cell(row=zeile, column=2).value == nr:
+            return ws.cell(row=zeile, column=spalte).value
+    raise KeyError(f"BWA {nr} fehlt in Blatt {ws.title}")
+
+
+def sonderbereich(wb, start: str, beschriftung: str, spalte: int):
+    """Wert im Blatt Verkauf und Kauf: erste Zeile mit der Beschriftung nach dem Blocktitel."""
+    ws = wb["Verkauf und Kauf"]
+    im_block = False
+    for zeile in range(1, ws.max_row + 1):
+        text = ws.cell(row=zeile, column=1).value
+        if isinstance(text, str) and text.startswith(start):
+            im_block = True
+            if text.startswith(beschriftung):
+                return text
+        elif im_block and text == beschriftung:
+            return ws.cell(row=zeile, column=1 + spalte).value
+    raise KeyError(f"{start} / {beschriftung} nicht im Blatt Verkauf und Kauf")
 
 
 def gleich(ist, soll) -> bool:
@@ -116,6 +157,17 @@ def ueb(jahr: int) -> int:
 # Sollwerte der Etappe 2 von Hand: AfA 800.000 × 2 % = 16.000, Miete 60.000 × 1,02^n,
 # Erhaltung 8.000 × 1,025^n, weitere Ausgaben × 1,02^n, n = Jahr − 2026.
 # Übersicht: Verkehrswert 1.400.000 × 1,02^n je Objekt.
+def vorlage_eingelesen() -> Modell:
+    """Modell aus der BWA-Vorlage: KSt 1 mit den Stammdaten des Testobjekts, KSt 2 ohne."""
+    with tempfile.TemporaryDirectory() as tmp:
+        pfad = Path(tmp) / "vorlage.xlsx"
+        erstelle_vorlage().save(pfad)
+        laufende, _ = lese_kostenstellen(pfad, 2026)
+    stamm = [dataclasses.replace(testobjekt(), objekt_id="KSt 1", name=None)]
+    return Modell(objekte=zusammenfuehren(stamm, laufende),
+                  kostenstellen={lw.objekt_id: lw for lw in laufende})
+
+
 def faelle():
     obj = testobjekt()
     ohne_miete = dataclasses.replace(obj, miete=None)
@@ -763,6 +815,109 @@ def faelle():
             ("vg_DiffC", 0, 0),
             ("vg_Baseline", 16, 0),  # Kauf Neuobjekte
             ("vg_A", 16, 1_000_000),
+        ]),
+        # BWA-Ausgabe und Sonderbereich (Projektplan Abschnitt 18), Abnahmefall der
+        # Reinvestition mit 3 % Alternativrendite. Das Summenblatt stimmt mit Liquidität
+        # und Auswertung überein. Vergleichsjahr 2029, das erste volle Jahr nach dem Kauf:
+        # halten Miete 60.000 × 1,02³ = 63.672,48, Erhaltung 8.000 × 1,025³ = 8.615,125,
+        # AfA 16.000; Alternative Miete 61.200, Erhaltung 12.300, AfA 14.400, Zins auf die
+        # Kapitalanlage 1,4 Mio − 1,2 Mio = 200.000 × 3 % = 6.000
+        ("BWA: Abnahmefall Verkauf und Reinvestition",
+         Modell(objekte=[abnahme4],
+                verkaeufe=[Verkauf("OBJ-001", 2027, preis=1_400_000, nutzung_6b="ja")],
+                neuobjekte=[Neuobjekt("NEU-001", 2028, kaufpreis=1_200_000, anteil_gub=0.3,
+                                      afa_satz=0.03, mietrendite=0.05, erhaltungsquote=0.01,
+                                      quelle="RL-OBJ-001")]), [
+            ("bwa_Jahr", 0, 2027),
+            *[(f"bwa_{nr}", lj(j), Wie(name, lj(j)))
+              for j in (2027, 2028, 2029, 2046)
+              for nr, name in ((1345, "liq_ZvE"), (1355, "liq_Steuer"),
+                               (1380, "aus_NachSteuer"), (1240, "liq_AfA"))],
+            ("bwa_1323", lj(2027), 720_000),
+            ("bwa_1312", lj(2027), 720_000),
+            ("bwa_1020", lj(2027), 61_200),
+            ("bwa_1020", lj(2029), 61_200),
+            ("bwa_1322", lj(2028), 43_257),
+            ("bwa_1310", lj(2028), 0),
+            ("BWA:OBJ-001:1020", 2026, 60_000),
+            ("BWA:OBJ-001:1280", 2026, 8_000),
+            ("BWA:OBJ-001:1020", 2027, 61_200),
+            ("BWA:OBJ-001:1240", 2027, 16_000),
+            ("BWA:OBJ-001:1323", 2027, 720_000),
+            ("BWA:OBJ-001:1312", 2027, 720_000),
+            ("BWA:OBJ-001:1345", 2027, 37_000),
+            ("BWA:OBJ-001:1020", 2028, 0),
+            ("BWA:NEU-001:1020", 2028, 0),
+            ("BWA:NEU-001:1020", 2029, 61_200),
+            ("BWA:NEU-001:1250", 2029, 12_300),
+            ("BWA:NEU-001:1240", 2029, 14_400),
+            ("BWA:NEU-001:1300", 2029, 34_500),
+            ("SB1:rechnet mit (1 = ja)", 1, 1),
+            ("SB1:Vergleichsjahr: erstes volles Jahr nach Verkauf und Kauf", 1, 2029),
+            ("SB1:Bewertung/Erlös (Verkaufspreis)", 1, 1_400_000),
+            ("SB1:Reinvestition (Kaufpreis und Nebenkosten der Neuobjekte)", 1, 1_200_000),
+            ("SB1:Übertrag § 6b EStG", 1, -720_000),
+            ("SB1:Steuer auf den Gewinn ca. (Verkaufsjahr, Auflösung im Fristjahr)", 1, 0),
+            ("SB1:Kapitalanlage (Nettoerlös − Reinvestition − Steuer ca.)", 1, 200_000),
+            ("SB1:Mieten", 1, 63_672.48),
+            ("SB1:Mieten", 2, 61_200),
+            ("SB1:Zinsertrag Kapitalanlage", 2, 6_000),
+            ("SB1:./. Erhaltung", 1, -8_615.125),
+            ("SB1:./. Erhaltung", 2, -12_300),
+            ("SB1:./. Abschreibungen (Steuerbilanz)", 1, -16_000),
+            ("SB1:./. Abschreibungen (Steuerbilanz)", 2, -14_400),
+            ("SB1:= vorläufiges Ergebnis", 1, 39_057.355),
+            ("SB1:= vorläufiges Ergebnis", 2, 40_500),
+            ("SB1:= Cash Flow", 1, 55_057.355),
+            ("SB1:= Cash Flow", 2, 54_900),
+            ("SB1:vorläufiges Ergebnis", 3, 1_442.645),
+            ("SB1:Steuern ca.", 1, -11_717.2065),
+            ("SB1:liquider Überschuss nach Steuern ca.", 2, 42_750),
+            ("SB1:Veräußerungspreis", 2, 700_000),
+            ("SB1:./. Buchwert (Gebäude zum Ende des Verkaufsjahrs, G+B = AK)", 1, -680_000),
+            ("SB1:./. Buchwert (Gebäude zum Ende des Verkaufsjahrs, G+B = AK)", 3, -480_000),
+            ("SB1:= Veräußerungsgewinn", 2, 500_000),
+            ("SB1:= Veräußerungsgewinn", 3, 220_000),
+            ("SB1:Rücklage § 6b (gebildet im Verkaufsjahr)", 1, 720_000),
+            ("SB1:übertragen auf Neuobjekte (G+B-Gewinn auf G+B und Gebäude)", 2, 500_000),
+            ("SB1:übertragen auf Neuobjekte (G+B-Gewinn auf G+B und Gebäude)", 3, 220_000),
+            ("SB1:Fristjahr", 1, 2031),
+            ("SB1:aufgelöst im Fristjahr", 1, 0),
+            ("SB2:Vorgang 2: kein Verkauf erfasst", 0, "Vorgang 2: kein Verkauf erfasst"),
+            ("SB2:rechnet mit (1 = ja)", 1, 0),
+            ("SB2:Mieten", 1, None),
+            ("KAUF:NeuID (Kostenstelle)", 1, "NEU-001"),
+            ("KAUF:NeuID (Kostenstelle)", 2, None),
+            ("KAUF:AK G+B", 1, 360_000),
+            ("KAUF:ü2 G+B-Gewinn auf G+B", 1, -360_000),
+            ("KAUF:ü3 G+B-Gewinn auf Gebäude", 1, -140_000),
+            ("KAUF:Übertrag § 6b EStG gesamt", 1, -720_000),
+            ("KAUF:AfA-Bemessungsgrundlage Gebäude", 1, 480_000),
+            ("KAUF:AfA-Methode", 1, "linear"),
+            ("KAUF:erstes volles Jahr", 1, 2029),
+            ("KAUF:Mieten", 1, 61_200),
+            ("KAUF:./. Abschreibungen (Steuerbilanz)", 1, -14_400),
+            ("KAUF:= vorläufiges Ergebnis", 1, 34_500),
+            ("KAUF:= Cash Flow (vor Finanzierung)", 1, 48_900),
+        ]),
+        # Kostenstellen aus der Vorlage: weitere Ausgaben nach dem Anteil der Kostenart im
+        # Basisjahr. KSt 1: 1140 1.200, 1150 1.800, 1260 600, je × 1,02; KSt 2: Basis 9.300
+        ("BWA: Kostenstellen eingelesen, Kostenarten aufgeteilt", vorlage_eingelesen(), [
+            ("BWA:KSt 1:1020", 2025, 58_800),
+            ("BWA:KSt 1:1020", 2026, 60_000),
+            ("BWA:KSt 1:1150", 2026, 1_800),
+            ("BWA:KSt 1:1020", 2027, 61_200),
+            ("BWA:KSt 1:1140", 2027, 1_224),
+            ("BWA:KSt 1:1150", 2027, 1_836),
+            ("BWA:KSt 1:1260", 2027, 612),
+            ("BWA:KSt 1:1280", 2027, 27_872),   # mit AfA 16.000 und Erhaltung 8.200
+            ("BWA:KSt 2:1120", 2027, 2_448),
+            ("BWA:KSt 2:1260", 2027, 1_122),
+            ("BWA:Alle Objekte:1020", 2026, 180_000),
+            ("BWA:Alle Objekte:1310", 2025, 12_740),  # (4.000 + 9.000) × 0,98
+            ("bwa_1120", lj(2027), 2_448),
+            ("bwa_1260", lj(2027), 1_734),
+            ("bwa_1020", lj(2027), 183_600),
         ]),
         # Etappe 9: Plausibilitätsprüfungen melden jeden eingebauten Fehler
         ("Etappe 9: Testobjekt ohne Befund", [obj], befund() + [
