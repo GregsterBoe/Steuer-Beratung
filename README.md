@@ -1,6 +1,6 @@
 # Prognosemodell V+V
 
-20-Jahres-Prognose (2027–2046, Basis 2026) für Immobilien im Betriebsvermögen einer GmbH: AfA-Fortschreibung, Verkauf, § 6b-Rücklage und Reinvestition. Am Ende werden zwei Szenarien verglichen: 6b-Kette oder sofort versteuern und das Kapital anderweitig anlegen.
+20-Jahres-Prognose (2027–2046, Basis 2026) für Immobilien im Betriebsvermögen einer GmbH: AfA-Fortschreibung, Verkauf, § 6b-Rücklage und Reinvestition. Am Ende werden Szenarien verglichen: 6b-Kette, sofort versteuern und das Kapital anlegen, oder sofort versteuern und trotzdem reinvestieren.
 
 ## Prinzipien
 
@@ -14,7 +14,7 @@
 
 | Eingabe | Rechnung | Ausgabe |
 | --- | --- | --- |
-| Parameter, Objekte, Verkäufe, Neuobjekte | Prognose, Rücklagen, Liquidität | Übersicht, Auswertung |
+| Parameter, Objekte, Verkäufe, Neuobjekte | Prognose, Rücklagen, Liquidität | Übersicht, Vergleich, Auswertung |
 
 ## Etappen
 
@@ -28,7 +28,7 @@
 8. Szenariovergleich
 9. VBA-Steuerung und Plausibilitätsprüfungen
 
-Stand: Etappen 1 bis 7 sind umgesetzt.
+Stand: Etappen 1 bis 8 sind umgesetzt.
 - Parameter- und Objektblatt mit Statusprüfung
 - Prognoseblatt mit AfA-Fortschreibung und Indexierung je Objekt und Jahr
 - Verkaufsblatt mit Aufteilung des Erlöses und Veräußerungsgewinn getrennt nach Gebäude und G+B
@@ -37,6 +37,7 @@ Stand: Etappen 1 bis 7 sind umgesetzt.
 - Liquiditätsblatt mit Steuer, Verlustvortrag und Geldfluss je Jahr, Plan gegen Baseline
 - Auswertungsblatt mit Gesamt-GuV, stillen Reserven, latenter Steuer und Gesamtvermögen
 - Übersichtsblatt mit Immobilienwert und Gesamtvermögen, je mit Diagramm
+- Szenarien A, B, C und Baseline gleichzeitig, mit verzinster Alternativanlage und Vergleichsblatt
 - Einleseschicht und Vorlage für die Kostenstellenblätter (DATEV-BWA)
 
 ## Nutzung
@@ -82,14 +83,22 @@ Im Blatt **Neuobjekte** stehen je Reinvestition Kaufjahr, Kaufpreis, Anteil G+B,
 
 Die AfA läuft von der geminderten AfA-Basis. Neuobjekte erscheinen in der Prognose und in der Plan-Linie der Übersicht, nicht in der Baseline.
 
-Das Blatt **Liquidität** rechnet je Jahr die Steuer und den Geldfluss, links für den Plan, rechts für die Baseline:
+Das Blatt **Liquidität** rechnet je Jahr die Steuer und den Geldfluss, je Szenario eine Tabelle:
 - Steuer = (laufendes Ergebnis + steuerwirksamer Betrag aus dem Rücklagenspiegel) × Grenzsteuersatz
 - Verluste werden vorgetragen und mit späteren Gewinnen verrechnet
-- freier Mittelzufluss = Mieten und Einnahmen − Erhaltung und Ausgaben + Verkaufserlöse − Steuer − Kauf der Neuobjekte
+- freier Mittelzufluss = Mieten und Einnahmen − Erhaltung und Ausgaben + Zins + Verkaufserlöse − Steuer − Kauf der Neuobjekte
 
-Die Liquidität wird nicht verzinst; die Alternativanlage kommt mit Etappe 8.
+Die Liquidität liegt in einer Alternativanlage und wird mit der Rendite vom Parameterblatt verzinst (Standard 3 %); der Zins ist steuerpflichtig.
 
 Das Blatt **Auswertung** zeigt je Jahr die Gesamt-GuV, Steuer, kumulierte Steuer, stille Reserven, Rücklagenbestand, Verlustvortrag und Gesamtvermögen vor und nach latenter Steuer. Die latente Steuer ist die Steuer, die anfiele, wenn alle Objekte zum Verkehrswert verkauft und die Rücklage aufgelöst würden.
+
+Alle Szenarien rechnen gleichzeitig, Liquidität und Auswertung haben je Szenario eine Tabelle:
+- **A Plan:** § 6b-Kette wie erfasst
+- **B:** jeder Veräußerungsgewinn sofort versteuert, Neuobjekte mit Quelle-Rücklage entfallen, das Geld bleibt in der Alternativanlage
+- **C:** sofort versteuert, die Neuobjekte werden trotzdem gekauft, mit voller AfA-Basis
+- **Baseline:** alles halten
+
+Das Blatt **Vergleich** stellt die Kennzahlen am Ende des Rasters nebeneinander, mit den Differenzen A − B, A − C und A − Baseline, dazu das Endvermögen nach latenter Steuer je Jahr als Diagramm. A − C zeigt die reine Wirkung von § 6b: ohne Alternativrendite ein Gleichstand, mit Rendite der Zins auf die gestundete Steuer.
 
 Gelb = Eingabe, grau = Formel. Die Statusspalte im Objektblatt meldet fehlende Pflichtfelder, doppelte IDs, ein Kaufjahr nach dem Basisjahr und einen Restbuchwert über den AK.
 

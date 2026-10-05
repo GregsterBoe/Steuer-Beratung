@@ -6,10 +6,10 @@ Excel zeigt sie in der deutschen Oberfläche automatisch als WENN, ZÄHLENWENN u
 
 from openpyxl.utils import get_column_letter
 
-from .modelle import (AFA_DEGRESSIV, AUSWERTUNG_BASIS_SPALTEN, AUSWERTUNG_SPALTEN, LIQ_BASIS_SPALTEN,
-                      LIQ_SPALTEN, NEU_FELDER, NEU_SPALTEN, OBJEKT_FELDER, PROGNOSE_SPALTEN,
+from .modelle import (AFA_DEGRESSIV, NEU_FELDER, NEU_SPALTEN, OBJEKT_FELDER, PROGNOSE_SPALTEN,
                       RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN, STATUS_6B_UNZULAESSIG,
-                      STATUS_OK, VERKAUF_FELDER, VERKAUF_SPALTEN)
+                      STATUS_OK, SZ_A, SZ_B, SZ_BASELINE, SZENARIEN, VERKAUF_FELDER,
+                      VERKAUF_SPALTEN, Szenario, aus_spalten, liq_spalten)
 
 
 def spalte(key: str) -> str:
@@ -117,6 +117,11 @@ def prognose_zeile(zeile: int, objekt_nr: int, erstes_jahr: bool) -> dict:
         "buchwert_halten": _leer_oder(
             zeile, f"MAX({_stamm('obj_Restbuchwert', objekt_nr)}"
                    f"-({_p('jahr', zeile)}-par_Basisjahr)*{afa_voll},0)"),
+        # Szenarien B und C: Bestandsobjekte rechnen wie im Plan
+        "mit_quelle": _leer_oder(zeile, "0"),
+        "afa_ohne6b": _leer_oder(zeile, _p("afa", zeile)),
+        "buchwert_ohne6b": _leer_oder(zeile, _p("buchwert", zeile)),
+        "buchwert_gub_ohne6b": _leer_oder(zeile, _p("buchwert_gub", zeile)),
     }
 
 
@@ -132,12 +137,24 @@ def prognose_zeile_neu(zeile: int, neu_nr: int, erstes_jahr: bool) -> dict:
 
     t, kj, gueltig = _p("jahr", zeile), ne("ne_Kaufjahr"), f'{ne("ne_Gueltig")}=1'
     aktiv = f"{_p('aktiv', zeile)}=1"
-    bw_vor = "0" if erstes_jahr else _p("buchwert", zeile - 1)
 
-    # Degressiv vom Restbuchwert; linear über die Restnutzungsdauer, sobald das mehr ist
-    # (§ 7 Abs. 5a Satz 4 EStG). Restnutzungsdauer zu Jahresbeginn, mindestens 1 Jahr.
-    rnd = f'MAX(1/{ne("ne_AfASatz")}-({t}-{kj}-1),1)'
-    degressiv = f"MIN(MAX({bw_vor}*par_AfADegressiv,{bw_vor}/{rnd}),{bw_vor})"
+    def afa(basis, bw_key, afa_key):
+        """AfA und Buchwert ab der AfA-Basis basis, Vorjahresbuchwert aus Spalte bw_key."""
+        bw_vor = "0" if erstes_jahr else _p(bw_key, zeile - 1)
+        # Degressiv vom Restbuchwert; linear über die Restnutzungsdauer, sobald das mehr ist
+        # (§ 7 Abs. 5a Satz 4 EStG). Restnutzungsdauer zu Jahresbeginn, mindestens 1 Jahr.
+        rnd = f'MAX(1/{ne("ne_AfASatz")}-({t}-{kj}-1),1)'
+        degressiv = f"MIN(MAX({bw_vor}*par_AfADegressiv,{bw_vor}/{rnd}),{bw_vor})"
+        linear = f'MIN({basis}*{ne("ne_AfASatz")},{bw_vor})'
+        return (
+            _leer_oder(zeile, f'IF({aktiv},IF({ne("ne_AfAMethode")}="{AFA_DEGRESSIV}",'
+                              f'{degressiv},{linear}),0)'),
+            _leer_oder(zeile, f'IF({gueltig},IF({t}<{kj},0,IF({t}={kj},{basis},'
+                              f'MAX({bw_vor}-{_p(afa_key, zeile)},0))),0)'),
+        )
+
+    afa_plan, buchwert_plan = afa(ne("ne_AfABasis"), "buchwert", "afa")
+    afa_ohne, buchwert_ohne = afa(ne("ne_AKGebNeu"), "buchwert_ohne6b", "afa_ohne6b")
 
     def ab_kauf(basis, satz):
         return _leer_oder(zeile, f"IF({aktiv},{basis}*(1+{satz})^({t}-{kj}),0)")
@@ -150,11 +167,8 @@ def prognose_zeile_neu(zeile: int, neu_nr: int, erstes_jahr: bool) -> dict:
         "einnahmen": _leer_oder(zeile, "0"),
         "erhaltung": ab_kauf(f'{ne("ne_Kaufpreis")}*{ne("ne_ErhQuote")}', "par_Erhaltsteig"),
         "ausgaben": _leer_oder(zeile, "0"),
-        "afa": _leer_oder(zeile, f'IF({aktiv},IF({ne("ne_AfAMethode")}="{AFA_DEGRESSIV}",'
-                                 f'{degressiv},MIN({ne("ne_AfABasis")}*{ne("ne_AfASatz")},'
-                                 f'{bw_vor})),0)'),
-        "buchwert": _leer_oder(zeile, f'IF({gueltig},IF({t}<{kj},0,IF({t}={kj},'
-                                      f'{ne("ne_AfABasis")},MAX({bw_vor}-{_p("afa", zeile)},0))),0)'),
+        "afa": afa_plan,
+        "buchwert": buchwert_plan,
         "ergebnis": _leer_oder(
             zeile,
             f"({_p('miete', zeile)}+{_p('einnahmen', zeile)}-{_p('erhaltung', zeile)}"
@@ -167,6 +181,12 @@ def prognose_zeile_neu(zeile: int, neu_nr: int, erstes_jahr: bool) -> dict:
         "buchwert_gub": _leer_oder(zeile, f'IF({gueltig},IF({t}>={kj},{ne("ne_AKGuB")},0),0)'),
         # gehört nicht zur Baseline
         "buchwert_halten": _leer_oder(zeile, "0"),
+        # Szenarien B und C: ohne Übertragung der Rücklage, volle AK als AfA-Basis
+        "mit_quelle": _leer_oder(zeile, ne("ne_MitQuelle")),
+        "afa_ohne6b": afa_ohne,
+        "buchwert_ohne6b": buchwert_ohne,
+        "buchwert_gub_ohne6b": _leer_oder(zeile, f'IF({gueltig},IF({t}>={kj},'
+                                                 f'{ne("ne_AKGuBNeu")},0),0)'),
     }
 
 
@@ -387,6 +407,7 @@ def neu_zeile(zeile: int) -> dict:
         "ue_gesamt": wenn(f"{ue1}+{ue2}+{_n('ue3', zeile)}"),
         "afa_basis": wenn(f"{_n('ak_geb_neu', zeile)}-{ue1}-{_n('ue3', zeile)}"),
         "ak_gub": wenn(f"{_n('ak_gub_neu', zeile)}-{ue2}"),
+        "mit_quelle": wenn(f'IF({q}="",0,1)'),
     }
 
 
@@ -409,11 +430,13 @@ def status_neu(zeile: int) -> str:
     )
 
 
-# --- Liquidität und Auswertung (Etappe 7, Projektplan Abschnitt 14) ---
+# --- Liquidität und Auswertung (Etappe 7 und 8, Projektplan Abschnitte 14 und 15) ---
 #
-# Je Jahr eine Zeile, links der Plan, rechts die Baseline „alles halten“. Die
-# Steuer rechnet mit Verlustvortrag ohne Mindestbesteuerung. Die Liquidität wird
-# nicht verzinst, alle Werte sind vor Finanzierung.
+# Je Jahr eine Zeile, je Szenario eine Tabelle mit denselben Spalten nebeneinander:
+# A Plan wie erfasst, B sofort versteuern und Kapital anlegen, C sofort versteuern und
+# trotzdem kaufen, Baseline alles halten. Die Steuer rechnet mit Verlustvortrag ohne
+# Mindestbesteuerung. Die Liquidität wird in allen Szenarien mit par_Alternativrendite
+# verzinst. Alle Werte sind vor Finanzierung.
 
 
 def _zelle(spalten, versatz: int = 0):
@@ -421,15 +444,15 @@ def _zelle(spalten, versatz: int = 0):
     return lambda key, zeile: f"${_spalte_aus(spalten, key, versatz)}{zeile}"
 
 
-def _versatz(links) -> int:
-    """Spaltenversatz der rechten Tabelle: linke Tabelle plus eine Spalte Abstand."""
-    return len(links) + 1
-
-
-_l = _zelle(LIQ_SPALTEN)
-_lb = _zelle(LIQ_BASIS_SPALTEN, _versatz(LIQ_SPALTEN))
-_a = _zelle(AUSWERTUNG_SPALTEN)
-_ab = _zelle(AUSWERTUNG_BASIS_SPALTEN, _versatz(AUSWERTUNG_SPALTEN))
+def _tabelle(spalten_je_sz, sz: Szenario):
+    """Zellbezug in der Tabelle des Szenarios; Tabellen in SZENARIEN-Reihenfolge, eine Spalte Abstand."""
+    versatz = 0
+    for anderes in SZENARIEN:
+        spalten = spalten_je_sz(anderes)
+        if anderes == sz:
+            return _zelle(spalten, versatz)
+        versatz += len(spalten) + 1
+    raise KeyError(sz.key)
 
 
 def _jahr(c, zeile: int, erstes_jahr: bool) -> str:
@@ -457,106 +480,127 @@ def _summe_jahr(name: str, jahr: str, *bedingungen: str) -> str:
     return f"SUMIFS({name},prg_Jahr,{jahr}{''.join(',' + b for b in bedingungen)})"
 
 
-def liquiditaet_zeile(zeile: int, erstes_jahr: bool) -> dict:
-    """Plan: laufende Objekte, Verkäufe, Rücklagen und Neuobjekte."""
-    c, t = _l, _l("jahr", zeile)
+def _summe_zeilen(name: str, jahr: str, sz: Szenario, *bedingungen: str) -> str:
+    """Prognosesumme je Jahr über die Zeilen, die im Szenario vorkommen."""
+    if sz == SZ_B:
+        bedingungen += ("prg_MitQuelle,0",)
+    return _summe_jahr(name, jahr, *bedingungen)
+
+
+def liquiditaet_zeile(sz: Szenario):
+    """Formelfunktion (zeile, erstes_jahr) der Liquiditätstabelle des Szenarios."""
+    c = _tabelle(liq_spalten, sz)
+
+    def zeile_formeln(zeile: int, erstes_jahr: bool) -> dict:
+        t = c("jahr", zeile)
+        if sz == SZ_BASELINE:
+            laufend = _liq_baseline(c, zeile, t, erstes_jahr)
+        else:
+            laufend = _liq_plan(c, t, sz)
+        kum_vor = _vor(c, "kum", zeile, erstes_jahr)
+        return {
+            "jahr": _jahr(c, zeile, erstes_jahr),
+            **laufend,
+            "ergebnis": f"={c('einnahmen', zeile)}-{c('ausgaben', zeile)}-{c('afa', zeile)}",
+            # Zins auf den Stand am Vorjahresende, Zufluss zum Jahresende
+            "zins": f"={kum_vor}*par_Alternativrendite",
+            "zve": f"={c('ergebnis', zeile)}+{c('verkauf', zeile)}+{c('zins', zeile)}",
+            **_steuer(c, zeile, erstes_jahr, c("zve", zeile)),
+            "zufluss": (f"={c('einnahmen', zeile)}-{c('ausgaben', zeile)}+{c('zins', zeile)}"
+                        f"+{c('verkaufserloes', zeile)}-{c('steuer', zeile)}"
+                        f"-{c('kauf', zeile)}"),
+            "kum": f"={kum_vor}+{c('zufluss', zeile)}",
+        }
+    return zeile_formeln
+
+
+def _liq_plan(c, t: str, sz: Szenario) -> dict:
+    """Szenarien A, B, C: Summen aus der Prognose, Verkäufe in allen gleich."""
+    afa = "prg_AfA" if sz == SZ_A else "prg_AfAOhne6b"
+    # A: sofort versteuerte Gewinne, Auflösung und Zuschlag; B und C: jeder Gewinn sofort
+    verkauf = "rls_Steuerwirksam" if sz == SZ_A else "rls_Gewinne"
+    neu = ",ne_MitQuelle,0" if sz == SZ_B else ""
     erloese = "+".join(f'SUMIFS(vk_Nettoerloes,vk_Jahr,{t},vk_Status,"{status}")'
                        for status in (STATUS_OK, STATUS_6B_UNZULAESSIG))
     return {
-        "jahr": _jahr(c, zeile, erstes_jahr),
-        "ergebnis": f"={_summe_jahr('prg_Ergebnis', t)}",
-        "verkauf": f"=SUMIFS(rls_Steuerwirksam,rls_Jahr,{t})",
-        "zve": f"={c('ergebnis', zeile)}+{c('verkauf', zeile)}",
-        **_steuer(c, zeile, erstes_jahr, c("zve", zeile)),
-        "einnahmen": f"={_summe_jahr('prg_Miete', t)}+{_summe_jahr('prg_Einnahmen', t)}",
-        "ausgaben": f"={_summe_jahr('prg_Erhaltung', t)}+{_summe_jahr('prg_Ausgaben', t)}",
+        "einnahmen": f"={_summe_zeilen('prg_Miete', t, sz)}+{_summe_zeilen('prg_Einnahmen', t, sz)}",
+        "ausgaben": f"={_summe_zeilen('prg_Erhaltung', t, sz)}+{_summe_zeilen('prg_Ausgaben', t, sz)}",
+        "afa": f"={_summe_zeilen(afa, t, sz)}",
+        "verkauf": f"=SUMIFS({verkauf},rls_Jahr,{t})",
         # nur Verkäufe, deren Gewinn auch versteuert wird (gleicher Filter wie der Rücklagenspiegel)
         "verkaufserloes": f"={erloese}",
         # steuerneutraler Teil: Erlös minus Veräußerungsgewinn = Buchwert Gebäude + AK G+B
-        "rueckfluss": f"={c('verkaufserloes', zeile)}-SUMIFS(rls_Gewinne,rls_Jahr,{t})",
-        "kauf": (f"=SUMIFS(ne_Kaufpreis,ne_Kaufjahr,{t},ne_Gueltig,1)"
-                 f"+SUMIFS(ne_Nebenkosten,ne_Kaufjahr,{t},ne_Gueltig,1)"),
-        "zufluss": (f"={c('einnahmen', zeile)}-{c('ausgaben', zeile)}"
-                    f"+{c('verkaufserloes', zeile)}-{c('steuer', zeile)}-{c('kauf', zeile)}"),
-        "kum": f"={_vor(c, 'kum', zeile, erstes_jahr)}+{c('zufluss', zeile)}",
+        "rueckfluss": f"={erloese}-SUMIFS(rls_Gewinne,rls_Jahr,{t})",
+        "kauf": (f"=SUMIFS(ne_Kaufpreis,ne_Kaufjahr,{t},ne_Gueltig,1{neu})"
+                 f"+SUMIFS(ne_Nebenkosten,ne_Kaufjahr,{t},ne_Gueltig,1{neu})"),
     }
 
 
-def liquiditaet_basis_zeile(zeile: int, erstes_jahr: bool) -> dict:
+def _liq_baseline(c, zeile: int, t: str, erstes_jahr: bool) -> dict:
     """Baseline: alle Bestandsobjekte werden gehalten, ohne Verkäufe und Neuobjekte."""
-    c, t = _lb, _lb("jahr", zeile)
-
     def stamm(name, satz):
         return f'SUMIFS({name},obj_ID,"<>")*(1+{satz})^({t}-par_Basisjahr)'
 
     bw_vor = ('SUMIFS(obj_Restbuchwert,obj_ID,"<>")' if erstes_jahr
               else _summe_jahr("prg_BuchwertHalten", f"{t}-1"))
     return {
-        "jahr": _jahr(c, zeile, erstes_jahr),
         "einnahmen": (f"={stamm('obj_MieteBasis', 'par_Mietsteig')}"
                       f"+{stamm('obj_EinnBasis', 'par_Mietsteig')}"),
         "ausgaben": (f"={stamm('obj_ErhBasis', 'par_Erhaltsteig')}"
                      f"+{stamm('obj_AusgBasis', 'par_Kostensteig')}"),
         # AfA = Rückgang des Buchwerts bei Halten
         "afa": f"={bw_vor}-{_summe_jahr('prg_BuchwertHalten', t)}",
-        "ergebnis": f"={c('einnahmen', zeile)}-{c('ausgaben', zeile)}-{c('afa', zeile)}",
-        **_steuer(c, zeile, erstes_jahr, c("ergebnis", zeile)),
-        "zufluss": f"={c('einnahmen', zeile)}-{c('ausgaben', zeile)}-{c('steuer', zeile)}",
-        "kum": f"={_vor(c, 'kum', zeile, erstes_jahr)}+{c('zufluss', zeile)}",
+        "verkauf": "=0",
+        "verkaufserloes": "=0",
+        "rueckfluss": "=0",
+        "kauf": "=0",
     }
 
 
-def _vermoegen(c, zeile: int, ruecklage: str) -> dict:
-    """Stille Reserven, Gesamtvermögen und latente Steuer bei Verkauf aller Objekte zum Verkehrswert."""
-    return {
-        "stille_reserven": f"={c('verkehrswert', zeile)}-{c('buchwert', zeile)}",
-        "vermoegen": f"={c('verkehrswert', zeile)}+{c('liquiditaet', zeile)}",
-        "latente_steuer": (f"=MAX({c('stille_reserven', zeile)}+{ruecklage}"
-                           f"-{c('vortrag', zeile)},0)*par_Steuersatz"),
-        "vermoegen_netto": f"={c('vermoegen', zeile)}-{c('latente_steuer', zeile)}",
-    }
+def auswertung_zeile(sz: Szenario):
+    """Formelfunktion (zeile, erstes_jahr) der Auswertungstabelle des Szenarios."""
+    c = _tabelle(aus_spalten, sz)
+
+    def zeile_formeln(zeile: int, erstes_jahr: bool) -> dict:
+        t = c("jahr", zeile)
+
+        def liq(name):
+            return f"=SUMIFS({sz.liq}_{name},{sz.liq}_Jahr,{t})"
+
+        if sz == SZ_BASELINE:
+            bestand = "prg_Neu,0"
+            gebaeude, gub = "prg_BuchwertHalten", "prg_BuchwertGuB"
+        else:
+            bestand = "prg_Bestand,1"
+            gebaeude, gub = (("prg_Buchwert", "prg_BuchwertGuB") if sz == SZ_A
+                             else ("prg_BuchwertOhne6b", "prg_BuchwertGuBOhne6b"))
+        ruecklage = f"=SUMIFS(rls_Bestand,rls_Jahr,{t})" if sz == SZ_A else "=0"
+        return {
+            "jahr": _jahr(c, zeile, erstes_jahr),
+            "ergebnis": liq("Ergebnis"),
+            "verkauf": liq("Verkauf"),
+            "zins": liq("Zins"),
+            "guv": f"={c('ergebnis', zeile)}+{c('verkauf', zeile)}+{c('zins', zeile)}",
+            "steuer": liq("Steuer"),
+            "nach_steuer": f"={c('guv', zeile)}-{c('steuer', zeile)}",
+            "steuer_kum": f"={_vor(c, 'steuer_kum', zeile, erstes_jahr)}+{c('steuer', zeile)}",
+            "verkehrswert": f"={_summe_zeilen('prg_Verkehrswert', t, sz, bestand)}",
+            "buchwert": (f"={_summe_zeilen(gebaeude, t, sz, bestand)}"
+                         f"+{_summe_zeilen(gub, t, sz, bestand)}"),
+            "stille_reserven": f"={c('verkehrswert', zeile)}-{c('buchwert', zeile)}",
+            "ruecklage": ruecklage,
+            "vortrag": liq("Vortrag"),
+            "liquiditaet": liq("Kum"),
+            "vermoegen": f"={c('verkehrswert', zeile)}+{c('liquiditaet', zeile)}",
+            # Steuer, wenn alle Objekte zum Verkehrswert verkauft und die Rücklage aufgelöst würde
+            "latente_steuer": (f"=MAX({c('stille_reserven', zeile)}+{c('ruecklage', zeile)}"
+                               f"-{c('vortrag', zeile)},0)*par_Steuersatz"),
+            "vermoegen_netto": f"={c('vermoegen', zeile)}-{c('latente_steuer', zeile)}",
+        }
+    return zeile_formeln
 
 
-def auswertung_zeile(zeile: int, erstes_jahr: bool) -> dict:
-    """Plan: Gesamt-GuV, Steuer und Vermögen je Jahr."""
-    c, t = _a, _a("jahr", zeile)
-
-    def liq(name):
-        return f"=SUMIFS({name},liq_Jahr,{t})"
-
-    im_bestand = "prg_Bestand,1"
-    return {
-        "jahr": _jahr(c, zeile, erstes_jahr),
-        "ergebnis": liq("liq_Ergebnis"),
-        "verkauf": liq("liq_Verkauf"),
-        "guv": f"={c('ergebnis', zeile)}+{c('verkauf', zeile)}",
-        "steuer": liq("liq_Steuer"),
-        "nach_steuer": f"={c('guv', zeile)}-{c('steuer', zeile)}",
-        "steuer_kum": f"={_vor(c, 'steuer_kum', zeile, erstes_jahr)}+{c('steuer', zeile)}",
-        "verkehrswert": f"={_summe_jahr('prg_Verkehrswert', t, im_bestand)}",
-        "buchwert": (f"={_summe_jahr('prg_Buchwert', t, im_bestand)}"
-                     f"+{_summe_jahr('prg_BuchwertGuB', t, im_bestand)}"),
-        "ruecklage": f"=SUMIFS(rls_Bestand,rls_Jahr,{t})",
-        "vortrag": liq("liq_Vortrag"),
-        "liquiditaet": liq("liq_Kum"),
-        **_vermoegen(c, zeile, c("ruecklage", zeile)),
-    }
-
-
-def auswertung_basis_zeile(zeile: int, erstes_jahr: bool) -> dict:
-    """Baseline: Vermögen, wenn alle Bestandsobjekte gehalten werden."""
-    c, t = _ab, _ab("jahr", zeile)
-
-    def lqb(name):
-        return f"=SUMIFS({name},lqb_Jahr,{t})"
-
-    nur_bestandsobjekte = "prg_Neu,0"
-    return {
-        "jahr": _jahr(c, zeile, erstes_jahr),
-        "verkehrswert": f"={_summe_jahr('prg_Verkehrswert', t, nur_bestandsobjekte)}",
-        "buchwert": (f"={_summe_jahr('prg_BuchwertHalten', t, nur_bestandsobjekte)}"
-                     f"+{_summe_jahr('prg_BuchwertGuB', t, nur_bestandsobjekte)}"),
-        "vortrag": lqb("lqb_Vortrag"),
-        "liquiditaet": lqb("lqb_Kum"),
-        **_vermoegen(c, zeile, "0"),
-    }
+def vergleich_zeile(praefix_art: str, name: str, art: str, sz: Szenario) -> str:
+    """Kennzahl eines Szenarios im Blatt Vergleich: Endwert oder Summe über alle Jahre."""
+    bereich = f"{sz.liq if praefix_art == 'liq' else sz.aus}_{name}"
+    return f"=INDEX({bereich},par_Prognosejahre)" if art == "ende" else f"=SUM({bereich})"

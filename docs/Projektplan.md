@@ -27,25 +27,26 @@ Eingabe:  Parameter, Objekte, Verkäufe, Neuobjekte
             ↓
 Rechnung: Prognose ⇄ Rücklagen → Liquidität
             ↓
-Ausgabe:  Auswertung (inkl. Szenariovergleich)
+Ausgabe:  Auswertung, Vergleich, Übersicht
 ```
 
 So bleibt nachvollziehbar, woher jede Zahl kommt: Alle Eingaben links, die Rechnung in der Mitte, die Ergebnisse rechts.
 
 ## 3. Blätter im Detail
 
-Acht Blätter, getrennt nach Eingabe, Rechnung und Ausgabe. Eingabeblätter sind die einzige Stelle, an der getippt wird.
+Zehn Blätter, getrennt nach Eingabe, Rechnung und Ausgabe. Eingabeblätter sind die einzige Stelle, an der getippt wird.
 
 | Blatt | Typ | Schlüsselfelder | Zweck |
 | --- | --- | --- | --- |
-| Parameter | Eingabe | Steuerwelt-Schalter, Grenzsteuersatz, Mietsteigerung, Erhaltungssteigerung, Kostensteigerung, Wertsteigerung, GrESt-Satz, aktives Szenario | alle globalen Annahmen und Schalter |
+| Parameter | Eingabe | Steuerwelt-Schalter, Grenzsteuersatz, Mietsteigerung, Erhaltungssteigerung, Kostensteigerung, Wertsteigerung, GrESt-Satz, degressive AfA, Alternativrendite, § 6b-Fristen | alle globalen Annahmen und Schalter |
 | Objekte | Eingabe | ObjektID, AK Gebäude, AK G+B, AfA-Satz, Kaufjahr, Restbuchwert 2026, Miete 2026, Erhaltung 2026 | Stammdaten je Bestandsobjekt |
 | Verkäufe | Eingabe | ObjektID, Verkaufsjahr, Verkaufspreis oder Faktor, Verkaufskosten, 6b-Nutzung (ja/nein), Neubau begonnen (ja/nein) | ein Datensatz je geplantem Verkauf |
 | Neuobjekte | Eingabe | NeuID, Kaufjahr, Kaufpreis, Anteil G+B, Nebenkosten, AfA-Satz, AfA-Methode, Mietrendite, Erhaltungsquote, Quelle-Rücklage | Reinvestitionsobjekte |
 | Prognose | Rechnung | ObjektID × Jahr (2027-2046), Miete, Erhaltung, AfA, Buchwert, Ergebnis, aktiv-Flag | Jahresmatrix je Objekt, Herzstück |
 | Rücklagen | Rechnung | RücklageID, Verkaufsjahr, Betrag G+B, Betrag Gebäude, Fristjahr, übertragen Gebäude und G+B, Auflösung, Zuschlag; Spiegel je Jahr | § 6b-Spiegel je Rücklage und je Jahr |
-| Liquidität | Rechnung | Jahr, Steuer mit Verlustvortrag, Verkaufserlöse, Buchwert-Rückfluss, Kauf Neuobjekte, Liquidität kumuliert; Plan und Baseline | Steuer und Geldfluss je Jahr |
-| Auswertung | Ausgabe | Jahr, Gesamt-GuV, Steuer, stille Reserven, latente Steuer, Gesamtvermögen; Plan und Baseline, später Szenariovergleich | Kennzahlen und Vergleich |
+| Liquidität | Rechnung | Jahr, Steuer mit Verlustvortrag, Verkaufserlöse, Buchwert-Rückfluss, Kauf Neuobjekte, Liquidität kumuliert, Zinsertrag; Szenarien A, B, C und Baseline | Steuer und Geldfluss je Jahr |
+| Auswertung | Ausgabe | Jahr, Gesamt-GuV, Steuer, stille Reserven, latente Steuer, Gesamtvermögen; Szenarien A, B, C und Baseline | Kennzahlen je Jahr |
+| Vergleich | Ausgabe | Kennzahlen je Szenario am Ende des Rasters, Differenzen A − B, A − C, A − Baseline; Endvermögen je Jahr mit Diagramm | Entscheidung § 6b-Kette oder sofort versteuern |
 | Übersicht | Ausgabe | Jahr, Verkehrswert und Gesamtvermögen je Baseline und Plan, Differenzen, zwei Diagramme | Immobilienwert und Gesamtvermögen im Jahresverlauf, Plan mit Verkäufen und Neuobjekten gegen Nichtstun |
 
 Konvention: ObjektID ist der Schlüssel, der Objekte, Verkäufe, Rücklagen und Prognose verbindet. Neuobjekte bekommen eine eigene ID, laufen in der Prognose aber in derselben Matrix.
@@ -85,7 +86,8 @@ Vier Rechenbausteine, alle als Zellformeln. Die Notation unten ist fachlich, in 
 
 - Szenario A (6b-Kette): Steuer im Verkaufsjahr = 0 bei voller Rücklage; dafür spätere AfA geringer
 - Szenario B (sofort versteuern): Steuer = Veräußerungsgewinn × Grenzsteuersatz; freigesetztes Kapital in Alternativanlage mit eigener Rendite
-- Vergleich über Endvermögen und kumulierte Steuer nach 20 Jahren
+- Szenario C (sofort versteuern, trotzdem kaufen): wie B, aber die Neuobjekte werden gekauft, mit voller AfA-Basis
+- Vergleich über das Endvermögen nach latenter Steuer nach 20 Jahren; alle Szenarien rechnen gleichzeitig (Abschnitt 15)
 
 ## 5. VBA-Module
 
@@ -94,7 +96,7 @@ VBA steuert nur, es rechnet nicht. Die Makros schreiben Eingabewerte und lösen 
 | Modul | Aufgabe |
 | --- | --- |
 | modObjekte | Objekt anlegen, duplizieren, ausblenden; Prognosezeilen je Objekt erzeugen |
-| modSzenario | aktuelles Szenario speichern, laden und benennen; A gegen B vergleichen |
+| modSzenario | entfällt: alle Szenarien rechnen gleichzeitig in Formeln (Abschnitt 15); denkbar bleibt, Varianten der Eingaben zu speichern und zu laden |
 | modPruefung | Plausibilitätsprüfungen vor der Rechnung (siehe unten) |
 | modRechnen | Neuberechnung anstoßen, Auswertung aktualisieren |
 | modStart | Menü bzw. Schaltflächen auf dem Parameterblatt |
@@ -121,8 +123,8 @@ In Etappen, jede mit prüfbarem Zwischenstand. Erst wenn eine Etappe an einem Ob
 5. **Rücklage:** Rücklagenspiegel, Bildung und Fristjahr. Prüfbar: Gewinn landet getrennt nach G+B und Gebäude in der Rücklage.
 6. **Reinvestition:** Neuobjekt, Übertrag, geminderte AfA-Basis. Prüfbar: neue AfA-Basis stimmt, Gebäudeanteil reicht.
 7. **Liquidität und Auswertung:** Geldfluss und Gesamt-GuV. Prüfbar: Summen über alle Objekte.
-8. **Szenariovergleich:** A gegen B über 20 Jahre. Prüfbar: beide Pfade nachvollziehbar.
-9. **VBA-Steuerung und Prüfungen:** erst wenn die Formeln stehen. Prüfbar: Objekt anlegen und Szenario wechseln ohne Formelbruch.
+8. **Szenariovergleich:** A gegen B und C über 20 Jahre. Prüfbar: alle Pfade nachvollziehbar.
+9. **VBA-Steuerung und Prüfungen:** erst wenn die Formeln stehen. Prüfbar: Objekt anlegen ohne Formelbruch.
 
 Dazu kommt die Ausgabe im DATEV-BWA-Format mit dem Sonderbereich Verkauf und Kauf (Abschnitt 18). Sie baut auf Etappe 8 auf.
 
@@ -141,7 +143,7 @@ Jeder Testfall ist eine Rechnung von Hand, gegen die das Blatt geprüft wird.
 | Verkauf mit Kaufvertragsaufteilung | Preis 1,4 Mio, Kosten 40.000, 30 % G+B, Verkauf Ende 2030 | Gewinn Gebäude 536.000, G+B 208.000 |
 | Übertrag | Rücklage Gebäude 220.000, G+B 500.000; Neuobjekt G+B 360.000, Gebäude 840.000 | AfA-Basis 480.000, AK G+B 0 (G+B-Gewinn zuerst auf G+B) |
 | Frist verpasst | keine Reinvestition bis Fristjahr | Auflösung + 6 % je Jahr |
-| Szenariovergleich | A gegen B, gleiche Objekte | zwei Endvermögen, Differenz nachvollziehbar |
+| Szenariovergleich | A, B, C, gleiche Objekte | Endvermögen je Szenario; ohne Alternativrendite A = C |
 
 **Abnahmekriterien**
 
@@ -171,7 +173,7 @@ Eine Zeile je Objekt und Jahr, das sogenannte Long-Format. Es ist mit SUMMEWENNS
 | I | Buchwert Gebäude Ende | Formel |
 | J | Ergebnis vor Finanzierung | Formel |
 
-Zusätzlich für Übersicht und Auswertung: K Verkehrswert Ende (prg\_Verkehrswert, Verkehrswert aktuell × (1 + par\_Wertsteig)^(Jahr − Basisjahr), unabhängig vom Verkauf) und L im Bestand Ende (prg\_Bestand, 1 solange Jahr < Verkaufsjahr). Seit Etappe 6 und 7 folgen M Neuobjekt (prg\_Neu), N Buchwert G+B Ende (prg\_BuchwertGuB, AK G+B, beim Neuobjekt die steuerlichen AK G+B ab dem Kaufjahr) und O Buchwert Gebäude bei Halten (prg\_BuchwertHalten = MAX(Restbuchwert − (Jahr − Basisjahr) × AK Gebäude × AfA-Satz; 0), für Neuobjekte 0).
+Zusätzlich für Übersicht und Auswertung: K Verkehrswert Ende (prg\_Verkehrswert, Verkehrswert aktuell × (1 + par\_Wertsteig)^(Jahr − Basisjahr), unabhängig vom Verkauf) und L im Bestand Ende (prg\_Bestand, 1 solange Jahr < Verkaufsjahr). Seit Etappe 6 und 7 folgen M Neuobjekt (prg\_Neu), N Buchwert G+B Ende (prg\_BuchwertGuB, AK G+B, beim Neuobjekt die steuerlichen AK G+B ab dem Kaufjahr) und O Buchwert Gebäude bei Halten (prg\_BuchwertHalten = MAX(Restbuchwert − (Jahr − Basisjahr) × AK Gebäude × AfA-Satz; 0), für Neuobjekte 0). Für den Szenariovergleich (Etappe 8) folgen P Neuobjekt mit Rücklage (prg\_MitQuelle) sowie Q bis S AfA, Gebäudebuchwert und Buchwert G+B ohne § 6b (prg\_AfAOhne6b, prg\_BuchwertOhne6b, prg\_BuchwertGuBOhne6b; Abschnitt 15).
 
 Die Spalten tragen benannte Bereiche (prg\_ID, prg\_Jahr, prg\_Aktiv, prg\_Miete, prg\_Einnahmen, prg\_Erhaltung, prg\_Ausgaben, prg\_AfA, prg\_Buchwert, prg\_Ergebnis) für die SUMMEWENNS der späteren Etappen.
 
@@ -468,29 +470,31 @@ Weitere geprüfte Fälle in `pruefung/pruefen.py`:
 
 ## 14. Liquidität und Auswertung (Etappe 7)
 
-Die Prognosematrix liefert je Objekt und Jahr die Einzelwerte. Liquidität und Auswertung fassen sie über alle Objekte zu Jahreswerten zusammen, per SUMMEWENNS über das Jahr. Beide Blätter haben links den Plan (mit Verkäufen und Neuobjekten) und rechts die Baseline „alles halten“, mit einer Spalte Abstand. Zeile 1 trägt den Tabellentitel, Zeile 2 die Kopfzeile, ab Zeile 3 je Prognosejahr eine Zeile. Alle Angaben sind vor Finanzierung.
+Die Prognosematrix liefert je Objekt und Jahr die Einzelwerte. Liquidität und Auswertung fassen sie über alle Objekte zu Jahreswerten zusammen, per SUMMEWENNS über das Jahr. Seit Etappe 8 haben beide Blätter je Szenario eine Tabelle mit denselben Spalten, nebeneinander mit einer Spalte Abstand: A Plan, B, C, Baseline (Abschnitt 15). Zeile 1 trägt den Tabellentitel, Zeile 2 die Kopfzeile, ab Zeile 3 je Prognosejahr eine Zeile. Alle Angaben sind vor Finanzierung.
 
-**Blatt Liquidität, Plan (umgesetzt)**
+**Blatt Liquidität, Szenario A (umgesetzt)**
 
 | Spalte | Feld | Name | Formel |
 | --- | --- | --- | --- |
 | A | Jahr | liq\_Jahr | 2027 bis 2046 |
-| B | laufendes Ergebnis | liq\_Ergebnis | SUMMEWENNS(prg\_Ergebnis; prg\_Jahr; A) |
-| C | steuerwirksam aus Verkauf und Rücklage | liq\_Verkauf | rls\_Steuerwirksam des Jahres |
-| D | Ergebnis vor Verlustvortrag | liq\_ZvE | B + C |
-| E | Verlustvortrag genutzt | liq\_VortragGenutzt | MIN(Vortrag Vorjahr; MAX(D; 0)) |
-| F | Bemessungsgrundlage | liq\_Bemessung | MAX(D; 0) − E |
-| G | Verlustvortrag Ende | liq\_Vortrag | Vortrag Vorjahr − E + MAX(−D; 0) |
-| H | Steuer | liq\_Steuer | F × par\_Steuersatz |
-| I | Mieten und weitere Einnahmen | liq\_Einnahmen | Summe prg\_Miete + prg\_Einnahmen |
-| J | Erhaltung und weitere Ausgaben | liq\_Ausgaben | Summe prg\_Erhaltung + prg\_Ausgaben |
-| K | Verkaufserlöse netto | liq\_Verkaufserloes | vk\_Nettoerloes der Verkäufe mit Status OK oder „§ 6b unzulässig“ |
-| L | davon Buchwert-Rückfluss | liq\_Rueckfluss | K − rls\_Gewinne, also Buchwert Gebäude + AK G+B |
-| M | Kauf Neuobjekte inkl. Nebenkosten | liq\_Kauf | Kaufpreis + Nebenkosten der gültigen Neuobjekte im Kaufjahr |
-| N | freier Mittelzufluss | liq\_Zufluss | I − J + K − H − M |
-| O | Liquidität kumuliert Ende | liq\_Kum | Vorjahr + N |
+| B | Mieten und weitere Einnahmen | liq\_Einnahmen | Summe prg\_Miete + prg\_Einnahmen |
+| C | Erhaltung und weitere Ausgaben | liq\_Ausgaben | Summe prg\_Erhaltung + prg\_Ausgaben |
+| D | AfA Gebäude | liq\_AfA | Summe prg\_AfA |
+| E | laufendes Ergebnis | liq\_Ergebnis | B − C − D, gleich der Summe prg\_Ergebnis |
+| F | steuerwirksam aus Verkauf und Rücklage | liq\_Verkauf | rls\_Steuerwirksam des Jahres |
+| G | Zinsertrag Alternativanlage | liq\_Zins | Liquidität Vorjahr × par\_Alternativrendite (Etappe 8) |
+| H | Ergebnis vor Verlustvortrag | liq\_ZvE | E + F + G |
+| I | Verlustvortrag genutzt | liq\_VortragGenutzt | MIN(Vortrag Vorjahr; MAX(H; 0)) |
+| J | Bemessungsgrundlage | liq\_Bemessung | MAX(H; 0) − I |
+| K | Verlustvortrag Ende | liq\_Vortrag | Vortrag Vorjahr − I + MAX(−H; 0) |
+| L | Steuer | liq\_Steuer | J × par\_Steuersatz |
+| M | Verkaufserlöse netto | liq\_Verkaufserloes | vk\_Nettoerloes der Verkäufe mit Status OK oder „§ 6b unzulässig“ |
+| N | davon Buchwert-Rückfluss | liq\_Rueckfluss | M − rls\_Gewinne, also Buchwert Gebäude + AK G+B |
+| O | Kauf Neuobjekte inkl. Nebenkosten | liq\_Kauf | Kaufpreis + Nebenkosten der gültigen Neuobjekte im Kaufjahr |
+| P | freier Mittelzufluss | liq\_Zufluss | B − C + G + M − L − O |
+| Q | Liquidität kumuliert Ende | liq\_Kum | Vorjahr + P |
 
-**Blatt Liquidität, Baseline (umgesetzt):** Spalten Q bis AA mit Jahr, Einnahmen, Ausgaben, AfA, laufendem Ergebnis, Verlustvortrag, Steuer, Mittelzufluss und Liquidität kumuliert (Namen lqb\_…). Einnahmen und Ausgaben sind die Basiswerte aller Objekte mit ihrer Steigerungsrate, unabhängig von Verkäufen. Die AfA ist der Rückgang von prg\_BuchwertHalten gegenüber dem Vorjahr, im ersten Jahr gegenüber der Summe der Restbuchwerte. Die Steuer rechnet wie im Plan, nur ohne Verkauf und Rücklage.
+**Blatt Liquidität, Baseline (umgesetzt):** gleiche Spalten, Namen lqb\_…. Einnahmen und Ausgaben sind die Basiswerte aller Objekte mit ihrer Steigerungsrate, unabhängig von Verkäufen. Die AfA ist der Rückgang von prg\_BuchwertHalten gegenüber dem Vorjahr, im ersten Jahr gegenüber der Summe der Restbuchwerte. Verkauf, Erlöse und Kauf sind 0.
 
 **Zur Steuer**
 
@@ -498,36 +502,39 @@ Die Steuer hängt am 6b-Schalter des jeweiligen Verkaufs. Bei Rücklage ist sie 
 
 Ein Verlust, etwa aus dem Gebäudeteil eines Verkaufs, ergibt keine negative Steuer. Er wird vorgetragen und mit den nächsten Gewinnen verrechnet; das entspricht der GmbH, deren Verluste nur mit eigenen Gewinnen verrechnet werden. Die Mindestbesteuerung (§ 10d Abs. 2 EStG, § 10a GewStG: über 1 Mio nur zu 60 %) und der Verlustrücktrag fehlen noch.
 
-Die Liquidität wird nicht verzinst. Die Rendite auf freies Kapital gehört zur Alternativanlage in Etappe 8.
+Seit Etappe 8 wird die Liquidität mit par\_Alternativrendite verzinst (Abschnitt 15).
 
-**Blatt Auswertung, Plan (umgesetzt)**
+**Blatt Auswertung, Szenario A (umgesetzt)**
 
 | Spalte | Feld | Name | Formel |
 | --- | --- | --- | --- |
 | A | Jahr | aus\_Jahr | 2027 bis 2046 |
 | B | laufendes Ergebnis | aus\_Ergebnis | aus Liquidität |
 | C | steuerwirksam aus Verkauf und Rücklage | aus\_Verkauf | aus Liquidität |
-| D | Gesamt-GuV vor Steuern | aus\_GuV | B + C |
-| E | Steuer | aus\_Steuer | aus Liquidität |
-| F | Ergebnis nach Steuern | aus\_NachSteuer | D − E |
-| G | Steuer kumuliert | aus\_SteuerKum | laufende Summe über E |
-| H | Verkehrswert Bestand | aus\_Verkehrswert | prg\_Verkehrswert der Zeilen mit prg\_Bestand = 1 |
-| I | Buchwert Bestand | aus\_Buchwert | prg\_Buchwert + prg\_BuchwertGuB, ebenso gefiltert |
-| J | stille Reserven | aus\_StilleReserven | H − I |
-| K | § 6b-Rücklage Bestand | aus\_Ruecklage | rls\_Bestand |
-| L | Verlustvortrag | aus\_Vortrag | aus Liquidität |
-| M | Liquidität kumuliert | aus\_Liquiditaet | aus Liquidität |
-| N | Gesamtvermögen vor latenter Steuer | aus\_Vermoegen | H + M |
-| O | latente Steuer | aus\_LatenteSteuer | MAX(J + K − L; 0) × par\_Steuersatz |
-| P | Gesamtvermögen nach latenter Steuer | aus\_VermoegenNetto | N − O |
+| D | Zinsertrag Alternativanlage | aus\_Zins | aus Liquidität |
+| E | Gesamt-GuV vor Steuern | aus\_GuV | B + C + D |
+| F | Steuer | aus\_Steuer | aus Liquidität |
+| G | Ergebnis nach Steuern | aus\_NachSteuer | E − F |
+| H | Steuer kumuliert | aus\_SteuerKum | laufende Summe über F |
+| I | Verkehrswert Bestand | aus\_Verkehrswert | prg\_Verkehrswert der Zeilen mit prg\_Bestand = 1 |
+| J | Buchwert Bestand | aus\_Buchwert | prg\_Buchwert + prg\_BuchwertGuB, ebenso gefiltert |
+| K | stille Reserven | aus\_StilleReserven | I − J |
+| L | § 6b-Rücklage Bestand | aus\_Ruecklage | rls\_Bestand |
+| M | Verlustvortrag | aus\_Vortrag | aus Liquidität |
+| N | Liquidität kumuliert | aus\_Liquiditaet | aus Liquidität |
+| O | Gesamtvermögen vor latenter Steuer | aus\_Vermoegen | I + N |
+| P | latente Steuer | aus\_LatenteSteuer | MAX(K + L − M; 0) × par\_Steuersatz |
+| Q | Gesamtvermögen nach latenter Steuer | aus\_VermoegenNetto | O − P |
 
-**Blatt Auswertung, Baseline (umgesetzt):** Spalten R bis Z mit Verkehrswert, Buchwert, stillen Reserven, Verlustvortrag, Liquidität und Gesamtvermögen vor und nach latenter Steuer (Namen asb\_…). Gezählt werden alle Bestandsobjekte (prg\_Neu = 0) unabhängig vom Verkauf, der Gebäudebuchwert aus prg\_BuchwertHalten.
+**Blatt Auswertung, Baseline (umgesetzt):** gleiche Spalten, Namen asb\_…. Gezählt werden alle Bestandsobjekte (prg\_Neu = 0) unabhängig vom Verkauf, der Gebäudebuchwert aus prg\_BuchwertHalten, Rücklage 0.
 
 **Stille Reserven und latente Steuer**
 
 Stille Reserven zeigen, wie viel unversteuerter Wert im Bestand steckt: Verkehrswert minus Buchwert über alle Objekte, die am Jahresende noch im Bestand sind. Beim Neuobjekt stecken die übertragenen Gewinne darin, weil der Buchwert um sie gemindert ist. Die nicht übertragene Rücklage ist ebenfalls gestundete Steuer. Die latente Steuer ist deshalb die Steuer auf stille Reserven plus Rücklage, gemindert um den Verlustvortrag. Sie gilt für einen gedachten Verkauf aller Objekte zum Verkehrswert ohne neue Rücklage und ohne Gewinnzuschlag.
 
 Erst das Gesamtvermögen nach latenter Steuer macht Halten und Verkaufen vergleichbar: Die Baseline hat höhere stille Reserven, der Plan hat Liquidität, aber schon Steuer gezahlt.
+
+Die Zahlen der Abnahme Etappe 7 gelten ohne Zins auf die Liquidität; die Prüffälle setzen dafür par\_Alternativrendite = 0.
 
 **Übersicht (umgesetzt):** Neben dem Verkehrswert (Spalten B bis D) zeigt die Tabelle das Gesamtvermögen nach latenter Steuer für Baseline und Plan und die Differenz (E bis G, ueb\_VermBaseline, ueb\_VermPlan, ueb\_VermDifferenz), mit einem zweiten Diagramm. Im Basisjahr ist es für beide gleich: Verkehrswert minus latente Steuer auf Verkehrswert − Restbuchwert − AK G+B.
 
@@ -542,37 +549,111 @@ Weitere geprüfte Fälle in `pruefung/pruefen.py`:
 
 **Offen:**
 - Mindestbesteuerung und Verlustrücktrag
-- Zins auf die Liquidität (Etappe 8, Alternativanlage)
 - Grunderwerbsteuer und Nebenkosten des Neuobjekts nur über die Eingabe Kaufnebenkosten; par\_GrESt wird noch nicht verwendet
 - Ein Verkauf mit anderem Status als OK oder „§ 6b unzulässig“ nimmt das Objekt aus dem Plan, bringt aber keinen Erlös. Der Status ist rot, bis die Eingabe vollständig ist.
 
 ## 15. Szenariovergleich (Etappe 8)
 
-Der Vergleich beantwortet die Kernfrage des Mandanten: Lohnt die § 6b-Kette, oder ist es besser, die Steuer sofort zu zahlen und das freie Kapital anderweitig anzulegen? Beide Pfade laufen über dieselben Objekte und 20 Jahre, nur die Behandlung des Veräußerungsgewinns unterscheidet sich.
+Der Vergleich beantwortet die Kernfrage des Mandanten: Lohnt die § 6b-Kette, oder ist es besser, die Steuer sofort zu zahlen und das freie Kapital anderweitig anzulegen? Alle Pfade laufen über dieselben Objekte, Verkäufe und 20 Jahre, nur die Behandlung des Veräußerungsgewinns und der Neuobjekte unterscheidet sich.
 
-**Die zwei Szenarien**
+**Die Szenarien**
 
-- **Szenario A, 6b-Kette:** Gewinn in die Rücklage, keine Steuer im Verkaufsjahr, Reinvestition in ein Neuobjekt mit geminderter AfA-Basis. Das Neuobjekt wirft Miete ab, die AfA ist aber kleiner.
-- **Szenario B, sofort versteuern:** Gewinn wird im Verkaufsjahr versteuert. Das verbleibende Kapital geht in eine Alternativanlage mit eigener Rendite, statt in eine Immobilie.
+| | Verkauf mit § 6b ja | Neuobjekt mit Quelle-Rücklage | Neuobjekt ohne Quelle | freie Mittel |
+| --- | --- | --- | --- | --- |
+| A Plan, § 6b-Kette | Rücklage wie in Abschnitt 12 | Kauf mit Übertragung, geminderte AfA-Basis | Kauf | Alternativanlage |
+| B sofort versteuern, anlegen | Gewinn sofort steuerpflichtig | entfällt, das Geld bleibt angelegt | Kauf | Alternativanlage |
+| C sofort versteuern, kaufen | Gewinn sofort steuerpflichtig | Kauf ohne Übertragung, volle AfA-Basis | Kauf | Alternativanlage |
+| Baseline alles halten | kein Verkauf | kein Kauf | kein Kauf | Alternativanlage |
 
-**Umsetzung im Blatt**
+A − C zeigt die reine Wirkung von § 6b, A − B die Frage Immobilie oder Geldanlage, A − Baseline die Frage Umschichten oder Halten.
 
-Ein Schalter auf dem Parameterblatt, par\_Szenario, steuert, welcher Pfad gerechnet wird. Für den Vergleich werden beide Läufe gespeichert: VBA rechnet A, kopiert die Endwerte in eine Vergleichsspalte, rechnet B, kopiert ebenso. So stehen beide Ergebnisse nebeneinander, ohne zwei komplette Mappen.
+**Umsetzung: alle Szenarien gleichzeitig (umgesetzt)**
 
-**Vergleichskennzahlen nach 20 Jahren**
+Statt eines Schalters mit gespeicherten Läufen rechnen alle Szenarien zugleich in Formeln. So ist der Vergleich immer aktuell und braucht kein Makro. Der Schalter par\_Szenario entfällt. Möglich ist das, weil sich B und C von A nur an zwei Stellen unterscheiden:
 
-| Kennzahl | Szenario A | Szenario B |
+- **Steuer auf den Verkauf:** A nimmt rls\_Steuerwirksam aus dem Rücklagenspiegel, B und C nehmen rls\_Gewinne, also jeden Veräußerungsgewinn im Verkaufsjahr.
+- **Neuobjekte:** Die Prognose hat vier Zusatzspalten. prg\_MitQuelle ist 1 für Neuobjekte mit Quelle-Rücklage (ne\_MitQuelle); B summiert nur Zeilen mit 0. prg\_AfAOhne6b, prg\_BuchwertOhne6b und prg\_BuchwertGuBOhne6b rechnen das Neuobjekt mit den vollen AK (ne\_AKGebNeu, ne\_AKGuBNeu), nach derselben AfA-Methode. Für Bestandsobjekte sind sie gleich prg\_AfA, prg\_Buchwert und prg\_BuchwertGuB.
+
+Liquidität und Auswertung haben je Szenario eine Tabelle mit denselben Spalten wie in Abschnitt 14:
+
+| Szenario | Liquidität | Auswertung | Zeilen der Prognose | AfA und Buchwert | Verkauf | Kauf |
+| --- | --- | --- | --- | --- | --- | --- |
+| A | liq\_… | aus\_… | alle | prg\_AfA, prg\_Buchwert, prg\_BuchwertGuB | rls\_Steuerwirksam | alle gültigen Neuobjekte |
+| B | lvb\_… | avb\_… | prg\_MitQuelle = 0 | …Ohne6b | rls\_Gewinne | nur ne\_MitQuelle = 0 |
+| C | lvc\_… | avc\_… | alle | …Ohne6b | rls\_Gewinne | alle gültigen Neuobjekte |
+| Baseline | lqb\_… | asb\_… | Bestandsobjekte | prg\_BuchwertHalten | 0 | 0 |
+
+Die Rücklage steht nur in A in der latenten Steuer. B und C haben keine.
+
+**Alternativanlage**
+
+- In allen Szenarien liegen die freien Mittel in einer Alternativanlage mit par\_Alternativrendite (Standard 3 %, wie in der Planungsreferenz). Auch in A und C, damit die Differenz nur die Wirkung der Kette zeigt.
+- Zins = Liquidität am Vorjahresende × Rendite. Der Mittelzufluss gilt zum Jahresende, der Zins also ab dem Folgejahr.
+- Der Zinsertrag ist voll steuerpflichtig und geht in das Ergebnis vor Verlustvortrag ein.
+- Negative Liquidität kostet denselben Satz, vor Finanzierung gibt es keinen eigenen Kreditzins.
+
+**Blatt Vergleich (umgesetzt)**
+
+Das Blatt steht direkt hinter der Übersicht.
+
+| Spalte | Inhalt | Name |
 | --- | --- | --- |
-| Endvermögen Immobilien plus Anlage | aus Auswertung | aus Auswertung |
-| kumulierte Steuer | geringer, aber später | höher, aber sofort |
-| laufende Mieterträge | inklusive Neuobjekt | nur Alt plus Alternativanlage |
-| verlorene AfA durch Minderung | ja | nein |
+| A | Kennzahl | vg\_Kennzahl |
+| B–E | A Plan, B, C, Baseline | vg\_A, vg\_B, vg\_C, vg\_Baseline |
+| F–H | A − B, A − C, A − Baseline | vg\_DiffB, vg\_DiffC, vg\_DiffBaseline |
+| I | Erläuterung | |
+
+Die Kennzahlen in dieser Reihenfolge (Zeile im Bereich in Klammern):
+
+- **Bestände am Ende des letzten Prognosejahrs:**
+  - Endvermögen nach latenter Steuer (0)
+  - Verkehrswert (1)
+  - Liquidität (2)
+  - latente Steuer (3)
+  - Buchwert (4)
+  - stille Reserven (5)
+  - Rücklage (6)
+  - Verlustvortrag (7)
+- **Summen über alle Jahre:**
+  - Einnahmen (8)
+  - Ausgaben (9)
+  - AfA (10)
+  - laufendes Ergebnis (11)
+  - steuerwirksam aus Verkauf und Rücklage (12)
+  - Zinsertrag (13)
+  - Steuer (14)
+  - Verkaufserlöse (15)
+  - Kauf Neuobjekte (16)
+
+Darunter steht eine Tabelle mit dem Endvermögen nach latenter Steuer je Jahr und Szenario (vgj\_Jahr, vgj\_A, vgj\_B, vgj\_C, vgj\_Baseline) mit Liniendiagramm.
 
 **Die ehrliche Kennzahl**
 
-Entscheidend ist das Endvermögen nach Steuern, nicht die gesparte Steuer allein. Szenario A spart Steuer heute, verliert aber AfA und bindet Kapital in Immobilien. Ob sich das lohnt, hängt an der Rendite der Alternativanlage und an der Wertsteigerung der Neuimmobilie. Genau diesen Vergleich macht das Blatt sichtbar.
+Entscheidend ist das Endvermögen nach latenter Steuer, nicht die gesparte Steuer allein. Szenario A spart Steuer heute, verliert aber AfA und bindet Kapital in Immobilien. Ohne den Abzug der latenten Steuer wäre A geschönt, weil die gestundete Steuer nie auftauchte.
 
-**Abnahme Etappe 8:** Beide Pfade liefern je ein Endvermögen; die Differenz ist nachvollziehbar aus gestundeter Steuer, verlorener AfA und Alternativrendite. Bei Alternativrendite null und gleicher Wertentwicklung muss A vorn liegen, weil die Steuerstundung dann reiner Zinsvorteil ist.
+**Abnahme Etappe 8:**
+- Jeder Pfad liefert ein Endvermögen. Die Differenz ist nachvollziehbar aus gestundeter Steuer, verlorener AfA und Alternativrendite.
+- Bei Alternativrendite null liegen A und C gleichauf: § 6b spart keine Steuer, sondern stundet sie, und ohne Zins ist die Stundung nichts wert. Das gilt, solange kein Verlustvortrag verfällt und die latente Steuer nicht bei 0 gekappt wird.
+- Mit positiver Alternativrendite liegt A vor C, der Vorsprung ist der Zins auf die gestundete Steuer.
+
+*Korrektur gegenüber dem ersten Entwurf:* Dort stand, bei Alternativrendite null müsse A vorn liegen. Das gilt nur gegenüber B, weil das Neuobjekt Miete und Wertsteigerung bringt. Gegenüber C ist es ein Gleichstand.
+
+Im Prüfskript, Abnahmefall der Reinvestition (Verkauf Ende 2027, Gewinn 720.000, Neuobjekt Ende 2028 für 1,2 Mio). Die Sollwerte stammen aus einem eigenen Nachbau außerhalb der Mappe:
+
+| | A | B | C |
+| --- | --- | --- | --- |
+| Steuer 2027 | 11.100 | 227.100 | 227.100 |
+| AfA Neuobjekt ab 2029 | 14.400 | – | 25.200 |
+| Endvermögen 2046, Rendite 0 % | 2.310.183,85 | 1.225.900 | 2.310.183,85 |
+| Endvermögen 2046, Rendite 3 % | 2.615.589,88 | 1.819.466,84 | 2.522.678,66 |
+
+- Bei 3 % ist A − C = 92.911,22. Der Zins 2028 in A ist 1.441.900 × 3 % = 43.257.
+- Ohne § 6b-Rücklage sind A, B und C gleich, ohne Verkauf ist A gleich der Baseline, auch mit Zins.
+- Ein Neuobjekt ohne Quelle-Rücklage bleibt in B erhalten.
+
+**Offen:**
+- Steuersatz der Alternativanlage: Kapitalerträge der GmbH sind voll steuerpflichtig; eine Anlage in Aktien (§ 8b KStG) wäre günstiger und ist nicht abgebildet.
+- Varianten der Eingaben (verschiedene Verkaufsjahre oder Preise) speichern und vergleichen, etwa per Makro in Etappe 9.
 
 ## 16. Datenanbindung: zwei Quellen
 

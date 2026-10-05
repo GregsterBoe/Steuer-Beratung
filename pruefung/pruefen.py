@@ -91,6 +91,8 @@ def faelle():
     obj2 = dataclasses.replace(obj, objekt_id="OBJ-002", weitere_einnahmen=1_000,
                                weitere_ausgaben=2_000)
     obj3 = dataclasses.replace(obj, objekt_id="OBJ-003", verkehrswert=None)
+    # Etappe 7 rechnet ohne Zins auf die Liquidität
+    OHNE_ZINS = {"par_Alternativrendite": 0}
     abnahme4 = dataclasses.replace(obj, restbuchwert=496_000)  # Buchwert Ende 2027: 480.000
     ohne_quote = dataclasses.replace(obj, objekt_id="OBJ-005", vk_quote_gebaeude=None)
     jung = dataclasses.replace(obj, objekt_id="OBJ-004", kaufjahr=2024)
@@ -510,7 +512,7 @@ def faelle():
         # Etappe 7: Steuersatz 30 %. Zwei Objekte 2027: Ergebnis 37.000 + 35.980,
         # Einnahmen 2 × 61.200 + 1.020, Ausgaben 2 × 8.200 + 2.040
         ("Etappe 7: Abnahme Summen über alle Objekte, Plan gleich Baseline",
-         [obj, obj2], [
+         Modell(objekte=[obj, obj2], parameter=OHNE_ZINS), [
             ("liq_Jahr", lj(2027), 2027),
             ("liq_Jahr", lj(2046), 2046),
             ("liq_Ergebnis", lj(2027), 72_980),
@@ -549,7 +551,8 @@ def faelle():
         ("Etappe 7: Abnahme Verkauf ohne § 6b, Steuer im Verkaufsjahr",
          Modell(objekte=[obj], verkaeufe=[Verkauf("OBJ-001", 2030, preis=1_400_000,
                                                   kosten=40_000, anteil_gub=0.3,
-                                                  nutzung_6b="nein")]), [
+                                                  nutzung_6b="nein")],
+                parameter=OHNE_ZINS), [
             ("liq_Ergebnis", lj(2030), 40_115.43),
             ("liq_Verkauf", lj(2030), 744_000),
             ("liq_Steuer", lj(2030), 235_234.63),  # 12.034,63 + 744.000 × 30 %
@@ -575,7 +578,8 @@ def faelle():
         # Rücklage 720.000 ohne Reinvestition: Auflösung und Zuschlag 2031 werden versteuert
         ("Etappe 7: Rücklage ohne Reinvestition, Steuer im Fristjahr",
          Modell(objekte=[abnahme4],
-                verkaeufe=[Verkauf("OBJ-001", 2027, preis=1_400_000, nutzung_6b="ja")]), [
+                verkaeufe=[Verkauf("OBJ-001", 2027, preis=1_400_000, nutzung_6b="ja")],
+                parameter=OHNE_ZINS), [
             ("liq_Verkauf", lj(2027), 0),
             ("liq_Steuer", lj(2027), 11_100),  # nur laufendes Ergebnis 37.000
             ("liq_Verkaufserloes", lj(2027), 1_400_000),
@@ -596,7 +600,8 @@ def faelle():
                 verkaeufe=[Verkauf("OBJ-001", 2027, preis=1_400_000, nutzung_6b="ja")],
                 neuobjekte=[Neuobjekt("NEU-001", 2028, kaufpreis=1_200_000, anteil_gub=0.3,
                                       afa_satz=0.03, mietrendite=0.05, erhaltungsquote=0.01,
-                                      quelle="RL-OBJ-001")]), [
+                                      quelle="RL-OBJ-001")],
+                parameter=OHNE_ZINS), [
             ("liq_Kauf", lj(2028), 1_200_000),
             ("liq_Zufluss", lj(2028), -1_200_000),
             ("liq_Kum", lj(2028), 241_900),
@@ -615,7 +620,8 @@ def faelle():
         # Verlust Gebäude −136.000 wirkt sofort, Rücklage G+B 920.000 wird 2034 aufgelöst
         ("Etappe 7: Verlustvortrag",
          Modell(objekte=[obj], verkaeufe=[Verkauf("OBJ-001", 2030, preis=1_400_000,
-                                                  anteil_gub=0.8, nutzung_6b="ja")]), [
+                                                  anteil_gub=0.8, nutzung_6b="ja")],
+                parameter=OHNE_ZINS), [
             ("liq_Verkauf", lj(2030), -136_000),
             ("liq_ZvE", lj(2030), -95_884.57),
             ("liq_Bemessung", lj(2030), 0),
@@ -629,6 +635,98 @@ def faelle():
             ("liq_Vortrag", lj(2034), 0),
             ("aus_Vortrag", lj(2030), 95_884.57),
             ("aus_LatenteSteuer", lj(2030), 247_234.63),  # (920.000 − 95.884,57) × 30 %
+        ]),
+        # Etappe 8: Abnahmefall der Reinvestition, Handrechnung mit eigenem Nachbau.
+        # A: Rücklage 720.000 auf das Neuobjekt, AfA-Basis 480.000, AfA 14.400.
+        # B: Gewinn 720.000 sofort versteuert, Neuobjekt entfällt, nur Geld.
+        # C: Gewinn sofort versteuert, Neuobjekt mit voller AfA-Basis 840.000, AfA 25.200.
+        # Ohne Zins gleichen A und C sich aus: § 6b stundet die Steuer nur.
+        ("Etappe 8: Abnahme A, B, C ohne Alternativrendite",
+         Modell(objekte=[abnahme4],
+                verkaeufe=[Verkauf("OBJ-001", 2027, preis=1_400_000, nutzung_6b="ja")],
+                neuobjekte=[Neuobjekt("NEU-001", 2028, kaufpreis=1_200_000, anteil_gub=0.3,
+                                      afa_satz=0.03, mietrendite=0.05, erhaltungsquote=0.01,
+                                      quelle="RL-OBJ-001")],
+                parameter=OHNE_ZINS), [
+            ("ne_MitQuelle", 0, 1),
+            ("prg_MitQuelle", prg_neu(1, 2029), 1),
+            ("prg_AfAOhne6b", prg_neu(1, 2029), 25_200),
+            ("prg_BuchwertOhne6b", prg_neu(1, 2028), 840_000),
+            ("prg_BuchwertGuBOhne6b", prg_neu(1, 2028), 360_000),
+            ("prg_AfAOhne6b", prg(1, 2027), 16_000),
+            ("liq_Steuer", lj(2027), 11_100),
+            ("lvb_Verkauf", lj(2027), 720_000),
+            ("lvb_Steuer", lj(2027), 227_100),  # (37.000 + 720.000) × 30 %
+            ("lvb_Kum", lj(2027), 1_225_900),
+            ("lvb_Kauf", lj(2028), 0),
+            ("lvb_Einnahmen", lj(2029), 0),
+            ("lvb_Kum", lj(2046), 1_225_900),
+            ("lvc_Steuer", lj(2027), 227_100),
+            ("lvc_Kauf", lj(2028), 1_200_000),
+            ("lvc_AfA", lj(2029), 25_200),
+            ("liq_AfA", lj(2029), 14_400),
+            ("avc_Buchwert", lj(2028), 1_200_000),
+            ("avc_StilleReserven", lj(2028), 0),
+            ("avc_VermoegenNetto", lj(2028), 1_225_900),
+            ("aus_VermoegenNetto", lj(2028), 1_225_900),
+            ("avb_VermoegenNetto", lj(2028), 1_225_900),
+            ("aus_LatenteSteuer", lj(2046), 447_928.65),
+            ("avc_LatenteSteuer", lj(2046), 290_248.65),
+            ("liq_Kum", lj(2046), 1_044_217),
+            ("lvc_Kum", lj(2046), 886_537),
+            ("vg_A", 0, 2_310_183.85),
+            ("vg_B", 0, 1_225_900),
+            ("vg_C", 0, 2_310_183.85),
+            ("vg_DiffC", 0, 0),
+            ("vg_DiffB", 0, 1_084_283.85),
+            ("vgj_C", lj(2046), 2_310_183.85),
+            ("vgj_Jahr", lj(2046), 2046),
+        ]),
+        # Gleiche Eingaben mit 3 % Alternativrendite (Standard): A liegt vor C, der Vorsprung
+        # ist der Zins auf die gestundete Steuer. Zins 2028 in A: 1.441.900 × 3 %
+        ("Etappe 8: A, B, C mit Alternativrendite 3 %",
+         Modell(objekte=[abnahme4],
+                verkaeufe=[Verkauf("OBJ-001", 2027, preis=1_400_000, nutzung_6b="ja")],
+                neuobjekte=[Neuobjekt("NEU-001", 2028, kaufpreis=1_200_000, anteil_gub=0.3,
+                                      afa_satz=0.03, mietrendite=0.05, erhaltungsquote=0.01,
+                                      quelle="RL-OBJ-001")]), [
+            ("liq_Zins", lj(2027), 0),
+            ("liq_Zins", lj(2028), 43_257),
+            ("liq_Kum", lj(2028), 272_179.90),
+            ("lvb_Zins", lj(2028), 36_777),
+            ("lvc_Kum", lj(2028), 51_643.90),
+            ("aus_Zins", lj(2028), 43_257),
+            ("liq_Zins", lj(2046), 38_151.36),
+            ("lvb_Zins", lj(2046), 53_461.32),
+            ("vg_A", 0, 2_615_589.88),
+            ("vg_B", 0, 1_819_466.84),
+            ("vg_C", 0, 2_522_678.66),
+            ("vg_DiffC", 0, 92_911.22),
+            ("vg_A", 2, 1_349_623.03),  # Liquidität Ende
+            ("vg_C", 3, 290_248.65),    # latente Steuer Ende
+        ]),
+        # Ohne § 6b-Rücklage sind A, B und C gleich; ein Neuobjekt ohne Quelle bleibt in B.
+        # Ohne Verkauf ist A gleich der Baseline, auch mit Zins: 2028 Zins 83.086 × 3 %
+        ("Etappe 8: ohne Rücklage sind alle Szenarien gleich",
+         Modell(objekte=[obj, obj2]), [
+            ("liq_Zins", lj(2028), 2_492.58),
+            ("lqb_Zins", lj(2028), 2_492.58),
+            ("vg_DiffB", 0, 0),
+            ("vg_DiffC", 0, 0),
+            ("vg_DiffBaseline", 0, 0),
+            ("vg_DiffBaseline", 2, 0),
+        ]),
+        ("Etappe 8: Neuobjekt ohne Rücklage bleibt in Szenario B",
+         Modell(objekte=[obj], neuobjekte=[
+             Neuobjekt("NEU-001", 2027, kaufpreis=1_000_000, anteil_gub=0.2, afa_satz=0.03,
+                       mietrendite=0.05)]), [
+            ("ne_MitQuelle", 0, 0),
+            ("lvb_Kauf", lj(2027), 1_000_000),
+            ("lvb_AfA", lj(2028), 40_000),  # 16.000 + 24.000
+            ("vg_DiffB", 0, 0),
+            ("vg_DiffC", 0, 0),
+            ("vg_Baseline", 16, 0),  # Kauf Neuobjekte
+            ("vg_A", 16, 1_000_000),
         ]),
     ]
 

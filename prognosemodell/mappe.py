@@ -9,13 +9,12 @@ from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from . import formeln
-from .modelle import (AUSWERTUNG_BASIS_SPALTEN, AUSWERTUNG_SPALTEN, FMT_EURO, FMT_JAHR,
-                      FMT_PROZENT, FMT_ZAHL, LIQ_BASIS_SPALTEN, LIQ_SPALTEN, MAX_NEUOBJEKTE,
+from .modelle import (FMT_EURO, FMT_JAHR, FMT_PROZENT, FMT_ZAHL, MAX_NEUOBJEKTE,
                       MAX_OBJEKTE, MAX_VERKAEUFE, NEU_FELDER, NEU_SPALTEN, NEU_STATUS_NAME, OBJEKT_FELDER,
                       PARAMETER, PROGNOSE_SPALTEN, RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN,
-                      STATUS_NAME, STATUS_UEBERSCHRIFT,
-                      VERKAUF_FELDER, VERKAUF_SPALTEN, VERKAUF_STATUS_NAME, Modell,
-                      prognosejahre)
+                      STATUS_NAME, STATUS_UEBERSCHRIFT, SZ_A, SZ_BASELINE, SZENARIEN,
+                      VERGLEICH_KENNZAHLEN, VERKAUF_FELDER, VERKAUF_SPALTEN, VERKAUF_STATUS_NAME, Modell,
+                      aus_spalten, liq_spalten, prognosejahre)
 
 HINWEIS_FINANZIERUNG = "Alle Werte vor Finanzierung (ohne Zins und Tilgung)."
 
@@ -64,7 +63,7 @@ def _status_rot(ws, bereich: str, erste_zelle: str) -> None:
     )
 
 
-def _blatt_parameter(wb) -> None:
+def _blatt_parameter(wb, modell: Modell) -> None:
     ws = wb.active
     ws.title = "Parameter"
     ws["A1"] = "Parameter"
@@ -72,9 +71,12 @@ def _blatt_parameter(wb) -> None:
     ws["A2"] = HINWEIS_FINANZIERUNG
     _kopf(ws, 4, ["Bezeichnung", "Wert", "Name", "Erläuterung"])
 
+    unbekannt = set(modell.parameter) - {p.name for p in PARAMETER}
+    if unbekannt:
+        raise ValueError(f"unbekannte Parameter: {sorted(unbekannt)}")
     for zeile, p in enumerate(PARAMETER, start=5):
         ws.cell(row=zeile, column=1, value=p.bezeichnung)
-        c = ws.cell(row=zeile, column=2, value=p.wert)
+        c = ws.cell(row=zeile, column=2, value=modell.parameter.get(p.name, p.wert))
         c.number_format = p.format
         berechnet = isinstance(p.wert, str) and p.wert.startswith("=")
         c.fill = FILL_BERECHNET if berechnet else FILL_EINGABE
@@ -323,8 +325,8 @@ def _blatt_ruecklagen(wb) -> None:
     ws.freeze_panes = "B2"
 
 
-TITEL_PLAN = "Plan: mit Verkäufen und Neuobjekten"
-TITEL_BASELINE = "Baseline: alles halten"
+TITEL_PLAN = SZ_A.kurz
+TITEL_BASELINE = SZ_BASELINE.kurz
 
 
 def _jahrestabellen(wb, ws, blatt: str, tabellen: list, hinweise: list) -> None:
@@ -360,37 +362,125 @@ def _jahrestabellen(wb, ws, blatt: str, tabellen: list, hinweise: list) -> None:
 
 
 def _blatt_liquiditaet(wb) -> None:
-    """Steuer und Geldfluss je Jahr, Plan gegen Baseline."""
+    """Steuer und Geldfluss je Jahr, je Szenario eine Tabelle."""
     ws = wb.create_sheet("Liquidität")
     _jahrestabellen(wb, ws, "Liquidität", [
-        (TITEL_PLAN, LIQ_SPALTEN, formeln.liquiditaet_zeile),
-        (TITEL_BASELINE, LIQ_BASIS_SPALTEN, formeln.liquiditaet_basis_zeile),
+        (sz.titel, liq_spalten(sz), formeln.liquiditaet_zeile(sz)) for sz in SZENARIEN
     ], [
         "Steuer = Bemessungsgrundlage × Grenzsteuersatz. Verluste werden vorgetragen und mit "
         "späteren Gewinnen verrechnet (ohne Mindestbesteuerung, ohne Rücktrag).",
-        "steuerwirksam aus Verkauf und Rücklage kommt aus dem Rücklagenspiegel: sofort versteuerte "
-        "Gewinne, Auflösung und Gewinnzuschlag.",
-        "freier Mittelzufluss = Einnahmen − Ausgaben + Verkaufserlöse − Steuer − Kauf Neuobjekte. "
-        "Die Liquidität wird nicht verzinst.",
+        "steuerwirksam aus Verkauf und Rücklage: in A aus dem Rücklagenspiegel (sofort versteuerte "
+        "Gewinne, Auflösung und Gewinnzuschlag), in B und C jeder Veräußerungsgewinn sofort.",
+        "Zinsertrag = Liquidität am Vorjahresende × Rendite Alternativanlage; er ist steuerpflichtig. "
+        "Negative Liquidität kostet denselben Satz.",
+        "freier Mittelzufluss = Einnahmen − Ausgaben + Zins + Verkaufserlöse − Steuer − Kauf "
+        "Neuobjekte.",
+        "B: Neuobjekte mit Quelle-Rücklage entfallen, ihr Geld bleibt in der Alternativanlage. "
+        "C: alle Neuobjekte werden gekauft, die AfA läuft von den vollen AK.",
         "Baseline: alle Bestandsobjekte werden über das ganze Raster gehalten, ohne Verkäufe und "
         "Neuobjekte.",
     ])
 
 
 def _blatt_auswertung(wb) -> None:
-    """Gesamt-GuV, Steuer, stille Reserven und Gesamtvermögen je Jahr."""
+    """Gesamt-GuV, Steuer, stille Reserven und Gesamtvermögen je Jahr und Szenario."""
     ws = wb.create_sheet("Auswertung")
     _jahrestabellen(wb, ws, "Auswertung", [
-        (TITEL_PLAN, AUSWERTUNG_SPALTEN, formeln.auswertung_zeile),
-        (TITEL_BASELINE, AUSWERTUNG_BASIS_SPALTEN, formeln.auswertung_basis_zeile),
+        (sz.titel, aus_spalten(sz), formeln.auswertung_zeile(sz)) for sz in SZENARIEN
     ], [
-        "Gesamt-GuV vor Steuern = laufendes Ergebnis + steuerwirksam aus Verkauf und Rücklage.",
+        "Gesamt-GuV vor Steuern = laufendes Ergebnis + steuerwirksam aus Verkauf und Rücklage "
+        "+ Zinsertrag.",
         "stille Reserven = Verkehrswert − Buchwert (Gebäude + G+B) der Objekte im Bestand am "
-        "Jahresende.",
+        "Jahresende. In B und C ohne § 6b-Kürzung der Neuobjekte.",
         "latente Steuer = (stille Reserven + Rücklagenbestand − Verlustvortrag) × Grenzsteuersatz, "
         "mindestens 0: die Steuer, wenn alle Objekte zum Verkehrswert verkauft würden.",
         "Gesamtvermögen = Verkehrswert Bestand + Liquidität kumuliert.",
     ])
+
+
+def _blatt_vergleich(wb) -> None:
+    """Kennzahlen der Szenarien am Ende des Rasters und Endvermögen je Jahr."""
+    ws = wb.create_sheet("Vergleich", 1)
+    ws["A1"] = "Vergleich der Szenarien"
+    ws["A1"].font = FONT_TITEL
+    ws["A2"] = ("A § 6b-Kette wie erfasst · B sofort versteuern, Kapital anlegen · C sofort "
+                "versteuern, Neuobjekte trotzdem kaufen · Baseline alles halten.")
+    ws["A3"] = ("Entscheidend ist das Endvermögen nach latenter Steuer. A − C zeigt die reine "
+                "Wirkung von § 6b (Zins auf die gestundete Steuer), A − B die Frage Immobilie oder "
+                "Geldanlage. " + HINWEIS_FINANZIERUNG)
+
+    kopf = 5
+    spalten = ([("Kennzahl", "vg_Kennzahl", 38)]
+               + [(sz.kurz, f"vg_{sz.key}", 18) for sz in SZENARIEN]
+               + [("A − B", "vg_DiffB", 16), ("A − C", "vg_DiffC", 16),
+                  ("A − Baseline", "vg_DiffBaseline", 16), ("Erläuterung", None, 60)])
+    _kopf(ws, kopf, [u for u, _, _ in spalten])
+    ws.row_dimensions[kopf].height = 32
+    erste = kopf + 1
+    letzte = erste + len(VERGLEICH_KENNZAHLEN) - 1
+    spalte_von = {sz.key: get_column_letter(2 + i) for i, sz in enumerate(SZENARIEN)}
+    for zeile, (text, blatt, name, art, erlaeuterung) in enumerate(VERGLEICH_KENNZAHLEN,
+                                                                   start=erste):
+        werte = [text] + [formeln.vergleich_zeile(blatt, name, art, sz) for sz in SZENARIEN]
+        a = spalte_von["A"]
+        werte += [f"={a}{zeile}-{spalte_von[k]}{zeile}" for k in ("B", "C", "Baseline")]
+        werte.append(erlaeuterung)
+        for i, w in enumerate(werte, start=1):
+            c = ws.cell(row=zeile, column=i, value=w)
+            if 1 < i < len(werte):
+                c.number_format = FMT_EURO
+                c.fill = FILL_BERECHNET
+        if zeile == erste:
+            for i in range(1, len(werte)):
+                ws.cell(row=zeile, column=i).font = Font(bold=True)
+    for i, (_, name, breite) in enumerate(spalten, start=1):
+        bst = get_column_letter(i)
+        ws.column_dimensions[bst].width = breite
+        if name:
+            _name(wb, name, f"'Vergleich'!${bst}${erste}:${bst}${letzte}")
+
+    # Endvermögen je Jahr und Szenario, mit Diagramm
+    titel = letzte + 2
+    ws.cell(row=titel, column=1,
+            value="Endvermögen nach latenter Steuer je Jahr").font = Font(bold=True)
+    jkopf = titel + 1
+    _kopf(ws, jkopf, ["Jahr"] + [sz.kurz for sz in SZENARIEN])
+    ws.row_dimensions[jkopf].height = 32
+    jerste, jletzte = jkopf + 1, jkopf + prognosejahre()
+    for zeile in range(jerste, jletzte + 1):
+        c = ws.cell(row=zeile, column=1,
+                    value="=par_Startjahr" if zeile == jerste else f"=A{zeile - 1}+1")
+        c.number_format, c.fill = FMT_JAHR, FILL_BERECHNET
+        for i, sz in enumerate(SZENARIEN, start=2):
+            c = ws.cell(row=zeile, column=i,
+                        value=f"=SUMIFS({sz.aus}_VermoegenNetto,{sz.aus}_Jahr,A{zeile})")
+            c.number_format, c.fill = FMT_EURO, FILL_BERECHNET
+    _name(wb, "vgj_Jahr", f"'Vergleich'!$A${jerste}:$A${jletzte}")
+    for i, sz in enumerate(SZENARIEN, start=2):
+        bst = get_column_letter(i)
+        _name(wb, f"vgj_{sz.key}", f"'Vergleich'!${bst}${jerste}:${bst}${jletzte}")
+
+    chart = LineChart()
+    chart.title = "Endvermögen nach latenter Steuer"
+    chart.y_axis.title = "€"
+    chart.y_axis.number_format = '#,##0'
+    chart.x_axis.title = "Jahr"
+    chart.add_data(Reference(ws, min_col=2, max_col=1 + len(SZENARIEN), min_row=jkopf,
+                             max_row=jletzte), titles_from_data=True)
+    chart.set_categories(Reference(ws, min_col=1, min_row=jerste, max_row=jletzte))
+    farben = {"A": "305496", "B": "C00000", "C": "70AD47", "Baseline": "A5A5A5"}
+    for serie, sz in zip(chart.series, SZENARIEN):
+        serie.smooth = False
+        serie.graphicalProperties.line.solidFill = farben[sz.key]
+        serie.graphicalProperties.line.width = 28000
+        if sz == SZ_BASELINE:
+            serie.graphicalProperties.line.dashStyle = "dash"
+    chart.x_axis.delete = False
+    chart.y_axis.delete = False
+    chart.legend.position = "b"
+    chart.height, chart.width = 12, 22
+    ws.add_chart(chart, f"H{titel}")
+    ws.freeze_panes = f"B{erste}"
 
 
 def _blatt_uebersicht(wb) -> None:
@@ -496,7 +586,7 @@ def _diagramm(ws, titel: str, spalte_baseline: int, kopf: int, erste: int, letzt
 
 def erstelle_mappe(modell: Modell) -> Workbook:
     wb = Workbook()
-    _blatt_parameter(wb)
+    _blatt_parameter(wb, modell)
     _blatt_objekte(wb, modell)
     _blatt_verkaeufe(wb, modell)
     _blatt_neuobjekte(wb, modell)
@@ -505,4 +595,5 @@ def erstelle_mappe(modell: Modell) -> Workbook:
     _blatt_liquiditaet(wb)
     _blatt_auswertung(wb)
     _blatt_uebersicht(wb)
+    _blatt_vergleich(wb)
     return wb
