@@ -28,13 +28,15 @@
 8. Szenariovergleich
 9. VBA-Steuerung und Plausibilitätsprüfungen
 
-Stand: Etappen 1 bis 6 sind umgesetzt.
+Stand: Etappen 1 bis 7 sind umgesetzt.
 - Parameter- und Objektblatt mit Statusprüfung
 - Prognoseblatt mit AfA-Fortschreibung und Indexierung je Objekt und Jahr
 - Verkaufsblatt mit Aufteilung des Erlöses und Veräußerungsgewinn getrennt nach Gebäude und G+B
 - Rücklagenblatt mit § 6b-Rücklage je Verkauf und Spiegel je Jahr
 - Neuobjektblatt mit Übertragung der Rücklage und geminderter AfA-Basis
-- Übersichtsblatt mit Diagramm
+- Liquiditätsblatt mit Steuer, Verlustvortrag und Geldfluss je Jahr, Plan gegen Baseline
+- Auswertungsblatt mit Gesamt-GuV, stillen Reserven, latenter Steuer und Gesamtvermögen
+- Übersichtsblatt mit Immobilienwert und Gesamtvermögen, je mit Diagramm
 - Einleseschicht für die Kostenstellenblätter (DATEV-BWA)
 
 ## Nutzung
@@ -54,12 +56,12 @@ Das Prüfskript braucht LibreOffice mit Calc (`soffice`, unter Debian/Ubuntu Pak
 
 Das Prognoseblatt hat je Objektzeile einen Block mit 20 Jahreszeilen: Miete, weitere Einnahmen, Erhaltung und weitere Ausgaben wachsen mit ihren Steigerungsraten. Die AfA beträgt AK Gebäude × Satz, höchstens aber den Restbuchwert. Danach sind AfA und Buchwert null.
 
-Das Blatt **Übersicht** öffnet als erstes. Es zeigt den Gesamtwert aller Objekte am Jahresende von 2026 bis 2046 als Tabelle und Liniendiagramm, und zwar in zwei Linien:
+Das Blatt **Übersicht** öffnet als erstes. Es zeigt von 2026 bis 2046 den Wert der Immobilien und das Gesamtvermögen am Jahresende, je als Tabelle und Liniendiagramm, und zwar in zwei Linien:
 
 - **Baseline:** alles halten, nichts verkaufen.
 - **Plan:** mit den Verkäufen und Neuobjekten aus den Blättern Verkäufe und Neuobjekte.
 
-Der Wert ist der Verkehrswert aus dem Objektblatt, fortgeschrieben mit der Wertsteigerung vom Parameterblatt. Objekte ohne Verkehrswert zählen mit 0, die Übersicht zeigt ihre Anzahl rot an. Ein Verkauf gilt zum Jahresende. Miete und AfA laufen im Verkaufsjahr noch, ab dem Folgejahr ist das Objekt inaktiv. Der Plan enthält auch die Neuobjekte. Verkaufserlöse, Steuer und Liquidität kommen mit Etappe 7. Bis dahin vergleicht die Übersicht nur den Immobilienbestand, nicht das Gesamtvermögen.
+Der Wert ist der Verkehrswert aus dem Objektblatt, fortgeschrieben mit der Wertsteigerung vom Parameterblatt. Objekte ohne Verkehrswert zählen mit 0, die Übersicht zeigt ihre Anzahl rot an. Ein Verkauf gilt zum Jahresende. Miete und AfA laufen im Verkaufsjahr noch, ab dem Folgejahr ist das Objekt inaktiv. Der Plan enthält auch die Neuobjekte. Das Gesamtvermögen ist der Verkehrswert plus die kumulierte Liquidität nach Steuern, abzüglich der latenten Steuer auf stille Reserven und Rücklage. So stehen Halten und Verkaufen vergleichbar nebeneinander.
 
 Im Blatt **Verkäufe** stehen je Verkauf ObjektID, Jahr, Preis, Kosten, optional der Anteil G+B laut Kaufvertrag und § 6b ja/nein. Daraus rechnet das Blatt:
 - den Gebäudebuchwert am Ende des Verkaufsjahrs aus der Prognose
@@ -76,6 +78,15 @@ Im Blatt **Neuobjekte** stehen je Reinvestition Kaufjahr, Kaufpreis, Anteil G+B,
 3. Rest des G+B-Gewinns auf das Gebäude
 
 Die AfA läuft von der geminderten AfA-Basis. Neuobjekte erscheinen in der Prognose und in der Plan-Linie der Übersicht, nicht in der Baseline.
+
+Das Blatt **Liquidität** rechnet je Jahr die Steuer und den Geldfluss, links für den Plan, rechts für die Baseline:
+- Steuer = (laufendes Ergebnis + steuerwirksamer Betrag aus dem Rücklagenspiegel) × Grenzsteuersatz
+- Verluste werden vorgetragen und mit späteren Gewinnen verrechnet
+- freier Mittelzufluss = Mieten und Einnahmen − Erhaltung und Ausgaben + Verkaufserlöse − Steuer − Kauf der Neuobjekte
+
+Die Liquidität wird nicht verzinst; die Alternativanlage kommt mit Etappe 8.
+
+Das Blatt **Auswertung** zeigt je Jahr die Gesamt-GuV, Steuer, kumulierte Steuer, stille Reserven, Rücklagenbestand, Verlustvortrag und Gesamtvermögen vor und nach latenter Steuer. Die latente Steuer ist die Steuer, die anfiele, wenn alle Objekte zum Verkehrswert verkauft und die Rücklage aufgelöst würden.
 
 Gelb = Eingabe, grau = Formel. Die Statusspalte im Objektblatt meldet fehlende Pflichtfelder, doppelte IDs, ein Kaufjahr nach dem Basisjahr und einen Restbuchwert über den AK.
 

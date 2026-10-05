@@ -6,8 +6,10 @@ Excel zeigt sie in der deutschen Oberfläche automatisch als WENN, ZÄHLENWENN u
 
 from openpyxl.utils import get_column_letter
 
-from .modelle import (NEU_FELDER, NEU_SPALTEN, OBJEKT_FELDER, PROGNOSE_SPALTEN, RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN,
-                      STATUS_6B_UNZULAESSIG, STATUS_OK, VERKAUF_FELDER, VERKAUF_SPALTEN)
+from .modelle import (AUSWERTUNG_BASIS_SPALTEN, AUSWERTUNG_SPALTEN, LIQ_BASIS_SPALTEN,
+                      LIQ_SPALTEN, NEU_FELDER, NEU_SPALTEN, OBJEKT_FELDER, PROGNOSE_SPALTEN,
+                      RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN, STATUS_6B_UNZULAESSIG,
+                      STATUS_OK, VERKAUF_FELDER, VERKAUF_SPALTEN)
 
 
 def spalte(key: str) -> str:
@@ -109,6 +111,12 @@ def prognose_zeile(zeile: int, objekt_nr: int, erstes_jahr: bool) -> dict:
         # Verkauf zum Jahresende: im Verkaufsjahr schon nicht mehr im Bestand
         "bestand": _leer_oder(zeile, f"IF({_p('jahr', zeile)}<{_verkaufsjahr(zeile)},1,0)"),
         "neu": _leer_oder(zeile, "0"),
+        # G+B wird nicht abgeschrieben; ob das Objekt noch im Bestand ist, filtert die Auswertung
+        "buchwert_gub": _leer_oder(zeile, _stamm("obj_AKGuB", objekt_nr)),
+        # Buchwert ohne Verkauf: Restbuchwert minus volle AfA je Jahr seit dem Basisjahr
+        "buchwert_halten": _leer_oder(
+            zeile, f"MAX({_stamm('obj_Restbuchwert', objekt_nr)}"
+                   f"-({_p('jahr', zeile)}-par_Basisjahr)*{afa_voll},0)"),
     }
 
 
@@ -150,6 +158,9 @@ def prognose_zeile_neu(zeile: int, neu_nr: int, erstes_jahr: bool) -> dict:
                                           f'{ne("ne_Kaufpreis")}*(1+par_Wertsteig)^({t}-{kj}),0),0)'),
         "bestand": _leer_oder(zeile, f"IF({gueltig},IF({t}>={kj},1,0),0)"),
         "neu": _leer_oder(zeile, "1"),
+        "buchwert_gub": _leer_oder(zeile, f'IF({gueltig},IF({t}>={kj},{ne("ne_AKGuB")},0),0)'),
+        # gehört nicht zur Baseline
+        "buchwert_halten": _leer_oder(zeile, "0"),
     }
 
 
@@ -390,3 +401,156 @@ def status_neu(zeile: int) -> str:
         f'IF({kj}>INDEX(rl_Fristjahr,{rl}),"Kauf nach Fristjahr, keine Übertragung",'
         f'"{STATUS_OK}")))))))))'
     )
+
+
+# --- Liquidität und Auswertung (Etappe 7, Projektplan Abschnitt 14) ---
+#
+# Je Jahr eine Zeile, links der Plan, rechts die Baseline „alles halten“. Die
+# Steuer rechnet mit Verlustvortrag ohne Mindestbesteuerung. Die Liquidität wird
+# nicht verzinst, alle Werte sind vor Finanzierung.
+
+
+def _zelle(spalten, versatz: int = 0):
+    """Zellbezug key, zeile in einer Tabelle, die nach versatz Spalten beginnt."""
+    return lambda key, zeile: f"${_spalte_aus(spalten, key, versatz)}{zeile}"
+
+
+def _versatz(links) -> int:
+    """Spaltenversatz der rechten Tabelle: linke Tabelle plus eine Spalte Abstand."""
+    return len(links) + 1
+
+
+_l = _zelle(LIQ_SPALTEN)
+_lb = _zelle(LIQ_BASIS_SPALTEN, _versatz(LIQ_SPALTEN))
+_a = _zelle(AUSWERTUNG_SPALTEN)
+_ab = _zelle(AUSWERTUNG_BASIS_SPALTEN, _versatz(AUSWERTUNG_SPALTEN))
+
+
+def _jahr(c, zeile: int, erstes_jahr: bool) -> str:
+    return "=par_Startjahr" if erstes_jahr else f"={c('jahr', zeile - 1)}+1"
+
+
+def _vor(c, key: str, zeile: int, erstes_jahr: bool) -> str:
+    """Wert des Vorjahres; vor dem ersten Prognosejahr 0."""
+    return "0" if erstes_jahr else c(key, zeile - 1)
+
+
+def _steuer(c, zeile: int, erstes_jahr: bool, zve: str) -> dict:
+    """Steuer mit Verlustvortrag: Verluste mindern spätere Gewinne, ein Rücktrag entfällt."""
+    vor = _vor(c, "vortrag", zeile, erstes_jahr)
+    genutzt = c("vortrag_genutzt", zeile)
+    return {
+        "vortrag_genutzt": f"=MIN({vor},MAX({zve},0))",
+        "bemessung": f"=MAX({zve},0)-{genutzt}",
+        "vortrag": f"={vor}-{genutzt}+MAX(-{zve},0)",
+        "steuer": f"={c('bemessung', zeile)}*par_Steuersatz",
+    }
+
+
+def _summe_jahr(name: str, jahr: str, *bedingungen: str) -> str:
+    return f"SUMIFS({name},prg_Jahr,{jahr}{''.join(',' + b for b in bedingungen)})"
+
+
+def liquiditaet_zeile(zeile: int, erstes_jahr: bool) -> dict:
+    """Plan: laufende Objekte, Verkäufe, Rücklagen und Neuobjekte."""
+    c, t = _l, _l("jahr", zeile)
+    erloese = "+".join(f'SUMIFS(vk_Nettoerloes,vk_Jahr,{t},vk_Status,"{status}")'
+                       for status in (STATUS_OK, STATUS_6B_UNZULAESSIG))
+    return {
+        "jahr": _jahr(c, zeile, erstes_jahr),
+        "ergebnis": f"={_summe_jahr('prg_Ergebnis', t)}",
+        "verkauf": f"=SUMIFS(rls_Steuerwirksam,rls_Jahr,{t})",
+        "zve": f"={c('ergebnis', zeile)}+{c('verkauf', zeile)}",
+        **_steuer(c, zeile, erstes_jahr, c("zve", zeile)),
+        "einnahmen": f"={_summe_jahr('prg_Miete', t)}+{_summe_jahr('prg_Einnahmen', t)}",
+        "ausgaben": f"={_summe_jahr('prg_Erhaltung', t)}+{_summe_jahr('prg_Ausgaben', t)}",
+        # nur Verkäufe, deren Gewinn auch versteuert wird (gleicher Filter wie der Rücklagenspiegel)
+        "verkaufserloes": f"={erloese}",
+        # steuerneutraler Teil: Erlös minus Veräußerungsgewinn = Buchwert Gebäude + AK G+B
+        "rueckfluss": f"={c('verkaufserloes', zeile)}-SUMIFS(rls_Gewinne,rls_Jahr,{t})",
+        "kauf": (f"=SUMIFS(ne_Kaufpreis,ne_Kaufjahr,{t},ne_Gueltig,1)"
+                 f"+SUMIFS(ne_Nebenkosten,ne_Kaufjahr,{t},ne_Gueltig,1)"),
+        "zufluss": (f"={c('einnahmen', zeile)}-{c('ausgaben', zeile)}"
+                    f"+{c('verkaufserloes', zeile)}-{c('steuer', zeile)}-{c('kauf', zeile)}"),
+        "kum": f"={_vor(c, 'kum', zeile, erstes_jahr)}+{c('zufluss', zeile)}",
+    }
+
+
+def liquiditaet_basis_zeile(zeile: int, erstes_jahr: bool) -> dict:
+    """Baseline: alle Bestandsobjekte werden gehalten, ohne Verkäufe und Neuobjekte."""
+    c, t = _lb, _lb("jahr", zeile)
+
+    def stamm(name, satz):
+        return f'SUMIFS({name},obj_ID,"<>")*(1+{satz})^({t}-par_Basisjahr)'
+
+    bw_vor = ('SUMIFS(obj_Restbuchwert,obj_ID,"<>")' if erstes_jahr
+              else _summe_jahr("prg_BuchwertHalten", f"{t}-1"))
+    return {
+        "jahr": _jahr(c, zeile, erstes_jahr),
+        "einnahmen": (f"={stamm('obj_MieteBasis', 'par_Mietsteig')}"
+                      f"+{stamm('obj_EinnBasis', 'par_Mietsteig')}"),
+        "ausgaben": (f"={stamm('obj_ErhBasis', 'par_Erhaltsteig')}"
+                     f"+{stamm('obj_AusgBasis', 'par_Kostensteig')}"),
+        # AfA = Rückgang des Buchwerts bei Halten
+        "afa": f"={bw_vor}-{_summe_jahr('prg_BuchwertHalten', t)}",
+        "ergebnis": f"={c('einnahmen', zeile)}-{c('ausgaben', zeile)}-{c('afa', zeile)}",
+        **_steuer(c, zeile, erstes_jahr, c("ergebnis", zeile)),
+        "zufluss": f"={c('einnahmen', zeile)}-{c('ausgaben', zeile)}-{c('steuer', zeile)}",
+        "kum": f"={_vor(c, 'kum', zeile, erstes_jahr)}+{c('zufluss', zeile)}",
+    }
+
+
+def _vermoegen(c, zeile: int, ruecklage: str) -> dict:
+    """Stille Reserven, Gesamtvermögen und latente Steuer bei Verkauf aller Objekte zum Verkehrswert."""
+    return {
+        "stille_reserven": f"={c('verkehrswert', zeile)}-{c('buchwert', zeile)}",
+        "vermoegen": f"={c('verkehrswert', zeile)}+{c('liquiditaet', zeile)}",
+        "latente_steuer": (f"=MAX({c('stille_reserven', zeile)}+{ruecklage}"
+                           f"-{c('vortrag', zeile)},0)*par_Steuersatz"),
+        "vermoegen_netto": f"={c('vermoegen', zeile)}-{c('latente_steuer', zeile)}",
+    }
+
+
+def auswertung_zeile(zeile: int, erstes_jahr: bool) -> dict:
+    """Plan: Gesamt-GuV, Steuer und Vermögen je Jahr."""
+    c, t = _a, _a("jahr", zeile)
+
+    def liq(name):
+        return f"=SUMIFS({name},liq_Jahr,{t})"
+
+    im_bestand = "prg_Bestand,1"
+    return {
+        "jahr": _jahr(c, zeile, erstes_jahr),
+        "ergebnis": liq("liq_Ergebnis"),
+        "verkauf": liq("liq_Verkauf"),
+        "guv": f"={c('ergebnis', zeile)}+{c('verkauf', zeile)}",
+        "steuer": liq("liq_Steuer"),
+        "nach_steuer": f"={c('guv', zeile)}-{c('steuer', zeile)}",
+        "steuer_kum": f"={_vor(c, 'steuer_kum', zeile, erstes_jahr)}+{c('steuer', zeile)}",
+        "verkehrswert": f"={_summe_jahr('prg_Verkehrswert', t, im_bestand)}",
+        "buchwert": (f"={_summe_jahr('prg_Buchwert', t, im_bestand)}"
+                     f"+{_summe_jahr('prg_BuchwertGuB', t, im_bestand)}"),
+        "ruecklage": f"=SUMIFS(rls_Bestand,rls_Jahr,{t})",
+        "vortrag": liq("liq_Vortrag"),
+        "liquiditaet": liq("liq_Kum"),
+        **_vermoegen(c, zeile, c("ruecklage", zeile)),
+    }
+
+
+def auswertung_basis_zeile(zeile: int, erstes_jahr: bool) -> dict:
+    """Baseline: Vermögen, wenn alle Bestandsobjekte gehalten werden."""
+    c, t = _ab, _ab("jahr", zeile)
+
+    def lqb(name):
+        return f"=SUMIFS({name},lqb_Jahr,{t})"
+
+    nur_bestandsobjekte = "prg_Neu,0"
+    return {
+        "jahr": _jahr(c, zeile, erstes_jahr),
+        "verkehrswert": f"={_summe_jahr('prg_Verkehrswert', t, nur_bestandsobjekte)}",
+        "buchwert": (f"={_summe_jahr('prg_BuchwertHalten', t, nur_bestandsobjekte)}"
+                     f"+{_summe_jahr('prg_BuchwertGuB', t, nur_bestandsobjekte)}"),
+        "vortrag": lqb("lqb_Vortrag"),
+        "liquiditaet": lqb("lqb_Kum"),
+        **_vermoegen(c, zeile, "0"),
+    }

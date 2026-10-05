@@ -133,6 +133,10 @@ PROGNOSE_SPALTEN = [
     Spalte("bestand", "im Bestand Ende", "prg_Bestand", FMT_ZAHL, 10),
     # 1 = Neuobjekt (Etappe 6); zählt nur im Plan, nicht in der Baseline
     Spalte("neu", "Neuobjekt", "prg_Neu", FMT_ZAHL, 10),
+    # Etappe 7: Buchwerte für stille Reserven und Baseline
+    Spalte("buchwert_gub", "Buchwert G+B Ende", "prg_BuchwertGuB", FMT_EURO),
+    # Gebäudebuchwert, als würde das Objekt nie verkauft (nur Bestandsobjekte, sonst 0)
+    Spalte("buchwert_halten", "Buchwert Gebäude bei Halten", "prg_BuchwertHalten", FMT_EURO, 16),
 ]
 
 # Blatt Verkäufe (Etappe 4, Projektplan Abschnitt 11): Eingaben, dann berechnete Spalten
@@ -231,6 +235,73 @@ NEU_SPALTEN = [
     Spalte("ak_gub", "steuerliche AK G+B", "ne_AKGuB", FMT_EURO),
 ]
 NEU_STATUS_NAME = "ne_Status"
+
+
+# Blatt Liquidität (Etappe 7, Projektplan Abschnitt 14): je Jahr eine Zeile,
+# links der Plan, rechts die Baseline „alles halten“ (eine Spalte Abstand)
+LIQ_SPALTEN = [
+    Spalte("jahr", "Jahr", "liq_Jahr", FMT_JAHR, 8),
+    Spalte("ergebnis", "laufendes Ergebnis", "liq_Ergebnis", FMT_EURO),
+    Spalte("verkauf", "steuerwirksam aus Verkauf und Rücklage", "liq_Verkauf", FMT_EURO, 16),
+    Spalte("zve", "Ergebnis vor Verlustvortrag", "liq_ZvE", FMT_EURO),
+    Spalte("vortrag_genutzt", "Verlustvortrag genutzt", "liq_VortragGenutzt", FMT_EURO),
+    Spalte("bemessung", "Bemessungsgrundlage", "liq_Bemessung", FMT_EURO),
+    Spalte("vortrag", "Verlustvortrag Ende", "liq_Vortrag", FMT_EURO),
+    Spalte("steuer", "Steuer", "liq_Steuer", FMT_EURO),
+    Spalte("einnahmen", "Mieten und weitere Einnahmen", "liq_Einnahmen", FMT_EURO),
+    Spalte("ausgaben", "Erhaltung und weitere Ausgaben", "liq_Ausgaben", FMT_EURO),
+    Spalte("verkaufserloes", "Verkaufserlöse netto", "liq_Verkaufserloes", FMT_EURO),
+    Spalte("rueckfluss", "davon Buchwert-Rückfluss", "liq_Rueckfluss", FMT_EURO),
+    Spalte("kauf", "Kauf Neuobjekte inkl. Nebenkosten", "liq_Kauf", FMT_EURO, 15),
+    Spalte("zufluss", "freier Mittelzufluss", "liq_Zufluss", FMT_EURO),
+    Spalte("kum", "Liquidität kumuliert Ende", "liq_Kum", FMT_EURO, 15),
+]
+LIQ_BASIS_SPALTEN = [
+    Spalte("jahr", "Jahr", "lqb_Jahr", FMT_JAHR, 8),
+    Spalte("einnahmen", "Mieten und weitere Einnahmen", "lqb_Einnahmen", FMT_EURO),
+    Spalte("ausgaben", "Erhaltung und weitere Ausgaben", "lqb_Ausgaben", FMT_EURO),
+    Spalte("afa", "AfA Gebäude", "lqb_AfA", FMT_EURO),
+    Spalte("ergebnis", "laufendes Ergebnis", "lqb_Ergebnis", FMT_EURO),
+    Spalte("vortrag_genutzt", "Verlustvortrag genutzt", "lqb_VortragGenutzt", FMT_EURO),
+    Spalte("bemessung", "Bemessungsgrundlage", "lqb_Bemessung", FMT_EURO),
+    Spalte("vortrag", "Verlustvortrag Ende", "lqb_Vortrag", FMT_EURO),
+    Spalte("steuer", "Steuer", "lqb_Steuer", FMT_EURO),
+    Spalte("zufluss", "freier Mittelzufluss", "lqb_Zufluss", FMT_EURO),
+    Spalte("kum", "Liquidität kumuliert Ende", "lqb_Kum", FMT_EURO, 15),
+]
+
+# Blatt Auswertung (Etappe 7): Kennzahlen je Jahr, links Plan, rechts Baseline
+AUSWERTUNG_SPALTEN = [
+    Spalte("jahr", "Jahr", "aus_Jahr", FMT_JAHR, 8),
+    Spalte("ergebnis", "laufendes Ergebnis", "aus_Ergebnis", FMT_EURO),
+    Spalte("verkauf", "steuerwirksam aus Verkauf und Rücklage", "aus_Verkauf", FMT_EURO, 16),
+    Spalte("guv", "Gesamt-GuV vor Steuern", "aus_GuV", FMT_EURO),
+    Spalte("steuer", "Steuer", "aus_Steuer", FMT_EURO),
+    Spalte("nach_steuer", "Ergebnis nach Steuern", "aus_NachSteuer", FMT_EURO),
+    Spalte("steuer_kum", "Steuer kumuliert", "aus_SteuerKum", FMT_EURO),
+    Spalte("verkehrswert", "Verkehrswert Bestand", "aus_Verkehrswert", FMT_EURO, 15),
+    Spalte("buchwert", "Buchwert Bestand (Gebäude + G+B)", "aus_Buchwert", FMT_EURO, 16),
+    Spalte("stille_reserven", "stille Reserven", "aus_StilleReserven", FMT_EURO),
+    Spalte("ruecklage", "§ 6b-Rücklage Bestand", "aus_Ruecklage", FMT_EURO),
+    Spalte("vortrag", "Verlustvortrag", "aus_Vortrag", FMT_EURO),
+    Spalte("liquiditaet", "Liquidität kumuliert", "aus_Liquiditaet", FMT_EURO),
+    Spalte("vermoegen", "Gesamtvermögen vor latenter Steuer", "aus_Vermoegen", FMT_EURO, 16),
+    Spalte("latente_steuer", "latente Steuer", "aus_LatenteSteuer", FMT_EURO),
+    Spalte("vermoegen_netto", "Gesamtvermögen nach latenter Steuer", "aus_VermoegenNetto",
+           FMT_EURO, 17),
+]
+AUSWERTUNG_BASIS_SPALTEN = [
+    Spalte("jahr", "Jahr", "asb_Jahr", FMT_JAHR, 8),
+    Spalte("verkehrswert", "Verkehrswert Bestand", "asb_Verkehrswert", FMT_EURO, 15),
+    Spalte("buchwert", "Buchwert Bestand (Gebäude + G+B)", "asb_Buchwert", FMT_EURO, 16),
+    Spalte("stille_reserven", "stille Reserven", "asb_StilleReserven", FMT_EURO),
+    Spalte("vortrag", "Verlustvortrag", "asb_Vortrag", FMT_EURO),
+    Spalte("liquiditaet", "Liquidität kumuliert", "asb_Liquiditaet", FMT_EURO),
+    Spalte("vermoegen", "Gesamtvermögen vor latenter Steuer", "asb_Vermoegen", FMT_EURO, 16),
+    Spalte("latente_steuer", "latente Steuer", "asb_LatenteSteuer", FMT_EURO),
+    Spalte("vermoegen_netto", "Gesamtvermögen nach latenter Steuer", "asb_VermoegenNetto",
+           FMT_EURO, 17),
+]
 
 
 def prognosejahre() -> int:

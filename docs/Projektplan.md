@@ -44,9 +44,9 @@ Acht Blätter, getrennt nach Eingabe, Rechnung und Ausgabe. Eingabeblätter sind
 | Neuobjekte | Eingabe | NeuID, Kaufjahr, Kaufpreis, Anteil G+B, Nebenkosten, AfA-Satz, Mietrendite, Erhaltungsquote, Quelle-Rücklage | Reinvestitionsobjekte |
 | Prognose | Rechnung | ObjektID × Jahr (2027-2046), Miete, Erhaltung, AfA, Buchwert, Ergebnis, aktiv-Flag | Jahresmatrix je Objekt, Herzstück |
 | Rücklagen | Rechnung | RücklageID, Verkaufsjahr, Betrag G+B, Betrag Gebäude, Fristjahr, übertragen Gebäude und G+B, Auflösung, Zuschlag; Spiegel je Jahr | § 6b-Spiegel je Rücklage und je Jahr |
-| Liquidität | Rechnung | Jahr, Buchwert-Rückfluss, Steuer, Eigenkapital Reinvest, Alternativanlage | Geldfluss je Jahr |
-| Auswertung | Ausgabe | Jahr, Gesamt-GuV, Steuer, stille Reserven, Szenariovergleich | Kennzahlen und Vergleich |
-| Übersicht | Ausgabe | Jahr, Verkehrswert Baseline, Verkehrswert Plan, Differenz, Diagramm | Gesamtwert des Bestands im Jahresverlauf, Plan mit Verkäufen und Neuobjekten gegen Nichtstun |
+| Liquidität | Rechnung | Jahr, Steuer mit Verlustvortrag, Verkaufserlöse, Buchwert-Rückfluss, Kauf Neuobjekte, Liquidität kumuliert; Plan und Baseline | Steuer und Geldfluss je Jahr |
+| Auswertung | Ausgabe | Jahr, Gesamt-GuV, Steuer, stille Reserven, latente Steuer, Gesamtvermögen; Plan und Baseline, später Szenariovergleich | Kennzahlen und Vergleich |
+| Übersicht | Ausgabe | Jahr, Verkehrswert und Gesamtvermögen je Baseline und Plan, Differenzen, zwei Diagramme | Immobilienwert und Gesamtvermögen im Jahresverlauf, Plan mit Verkäufen und Neuobjekten gegen Nichtstun |
 
 Konvention: ObjektID ist der Schlüssel, der Objekte, Verkäufe, Rücklagen und Prognose verbindet. Neuobjekte bekommen eine eigene ID, laufen in der Prognose aber in derselben Matrix.
 
@@ -169,7 +169,7 @@ Eine Zeile je Objekt und Jahr, das sogenannte Long-Format. Es ist mit SUMMEWENNS
 | I | Buchwert Gebäude Ende | Formel |
 | J | Ergebnis vor Finanzierung | Formel |
 
-Zusätzlich für die Übersicht: K Verkehrswert Ende (prg\_Verkehrswert, Verkehrswert aktuell × (1 + par\_Wertsteig)^(Jahr − Basisjahr), unabhängig vom Verkauf) und L im Bestand Ende (prg\_Bestand, 1 solange Jahr < Verkaufsjahr).
+Zusätzlich für Übersicht und Auswertung: K Verkehrswert Ende (prg\_Verkehrswert, Verkehrswert aktuell × (1 + par\_Wertsteig)^(Jahr − Basisjahr), unabhängig vom Verkauf) und L im Bestand Ende (prg\_Bestand, 1 solange Jahr < Verkaufsjahr). Seit Etappe 6 und 7 folgen M Neuobjekt (prg\_Neu), N Buchwert G+B Ende (prg\_BuchwertGuB, AK G+B, beim Neuobjekt die steuerlichen AK G+B ab dem Kaufjahr) und O Buchwert Gebäude bei Halten (prg\_BuchwertHalten = MAX(Restbuchwert − (Jahr − Basisjahr) × AK Gebäude × AfA-Satz; 0), für Neuobjekte 0).
 
 Die Spalten tragen benannte Bereiche (prg\_ID, prg\_Jahr, prg\_Aktiv, prg\_Miete, prg\_Einnahmen, prg\_Erhaltung, prg\_Ausgaben, prg\_AfA, prg\_Buchwert, prg\_Ergebnis) für die SUMMEWENNS der späteren Etappen.
 
@@ -464,44 +464,83 @@ Weitere geprüfte Fälle in `pruefung/pruefen.py`:
 
 ## 14. Liquidität und Auswertung (Etappe 7)
 
-Die Prognosematrix liefert je Objekt und Jahr die Einzelwerte. Liquidität und Auswertung fassen sie über alle Objekte zu Jahreswerten zusammen, per SUMMEWENNS über das Jahr. Alle Angaben sind vor Finanzierung.
+Die Prognosematrix liefert je Objekt und Jahr die Einzelwerte. Liquidität und Auswertung fassen sie über alle Objekte zu Jahreswerten zusammen, per SUMMEWENNS über das Jahr. Beide Blätter haben links den Plan (mit Verkäufen und Neuobjekten) und rechts die Baseline „alles halten“, mit einer Spalte Abstand. Zeile 1 trägt den Tabellentitel, Zeile 2 die Kopfzeile, ab Zeile 3 je Prognosejahr eine Zeile. Alle Angaben sind vor Finanzierung.
 
-**Blatt Liquidität, je Jahr eine Zeile**
+**Blatt Liquidität, Plan (umgesetzt)**
 
-| Spalte | Feld | Formel-Idee |
-| --- | --- | --- |
-| A | Jahr | 2027 bis 2046 |
-| B | laufendes Ergebnis | SUMMEWENNS über Prognose Ergebnis, Jahr = A |
-| C | Buchwert-Rückfluss aus Verkauf | SUMMEWENNS über Verkäufe, steuerneutraler Teil |
-| D | Veräußerungsgewinn | SUMMEWENNS über Verkäufe, Jahr = A |
-| E | Steuer | (laufendes Ergebnis + rls\_Steuerwirksam) × Satz |
-| F | Eigenkapital in Reinvestition | aus Neuobjekte, Kaufjahr = A |
-| G | freier Mittelzufluss | B + C + D − E − F |
+| Spalte | Feld | Name | Formel |
+| --- | --- | --- | --- |
+| A | Jahr | liq\_Jahr | 2027 bis 2046 |
+| B | laufendes Ergebnis | liq\_Ergebnis | SUMMEWENNS(prg\_Ergebnis; prg\_Jahr; A) |
+| C | steuerwirksam aus Verkauf und Rücklage | liq\_Verkauf | rls\_Steuerwirksam des Jahres |
+| D | Ergebnis vor Verlustvortrag | liq\_ZvE | B + C |
+| E | Verlustvortrag genutzt | liq\_VortragGenutzt | MIN(Vortrag Vorjahr; MAX(D; 0)) |
+| F | Bemessungsgrundlage | liq\_Bemessung | MAX(D; 0) − E |
+| G | Verlustvortrag Ende | liq\_Vortrag | Vortrag Vorjahr − E + MAX(−D; 0) |
+| H | Steuer | liq\_Steuer | F × par\_Steuersatz |
+| I | Mieten und weitere Einnahmen | liq\_Einnahmen | Summe prg\_Miete + prg\_Einnahmen |
+| J | Erhaltung und weitere Ausgaben | liq\_Ausgaben | Summe prg\_Erhaltung + prg\_Ausgaben |
+| K | Verkaufserlöse netto | liq\_Verkaufserloes | vk\_Nettoerloes der Verkäufe mit Status OK oder „§ 6b unzulässig“ |
+| L | davon Buchwert-Rückfluss | liq\_Rueckfluss | K − rls\_Gewinne, also Buchwert Gebäude + AK G+B |
+| M | Kauf Neuobjekte inkl. Nebenkosten | liq\_Kauf | Kaufpreis + Nebenkosten der gültigen Neuobjekte im Kaufjahr |
+| N | freier Mittelzufluss | liq\_Zufluss | I − J + K − H − M |
+| O | Liquidität kumuliert Ende | liq\_Kum | Vorjahr + N |
 
-**Blatt Auswertung, Kennzahlen je Jahr**
+**Blatt Liquidität, Baseline (umgesetzt):** Spalten Q bis AA mit Jahr, Einnahmen, Ausgaben, AfA, laufendem Ergebnis, Verlustvortrag, Steuer, Mittelzufluss und Liquidität kumuliert (Namen lqb\_…). Einnahmen und Ausgaben sind die Basiswerte aller Objekte mit ihrer Steigerungsrate, unabhängig von Verkäufen. Die AfA ist der Rückgang von prg\_BuchwertHalten gegenüber dem Vorjahr, im ersten Jahr gegenüber der Summe der Restbuchwerte. Die Steuer rechnet wie im Plan, nur ohne Verkauf und Rücklage.
 
-| Spalte | Feld | Formel-Idee |
-| --- | --- | --- |
-| A | Jahr | 2027 bis 2046 |
-| B | Gesamt-GuV vor Finanzierung | laufendes Ergebnis plus steuerpflichtiger Gewinn |
-| C | Steuer | aus Liquidität Spalte E |
-| D | Ergebnis nach Steuer | B − C |
-| E | stille Reserven | Summe aus Verkehrswert minus Buchwert je aktivem Objekt |
-| F | kumulierte Steuer | laufende Summe über C |
+**Zur Steuer**
 
-**Zur Steuerformel in Spalte E der Liquidität**
+Die Steuer hängt am 6b-Schalter des jeweiligen Verkaufs. Bei Rücklage ist sie im Verkaufsjahr null, der Gewinn ist gestundet; Auflösung und Zuschlag erhöhen sie im Fristjahr. Ohne Rücklage fällt sie sofort an. All das fasst der Rücklagenspiegel in rls\_Steuerwirksam zusammen (Abschnitt 12).
 
-Die Steuer hängt am 6b-Schalter des jeweiligen Verkaufs. Bei Rücklage ist sie im Verkaufsjahr null, der Gewinn ist gestundet; Auflösung und Zuschlag erhöhen sie im Fristjahr. Ohne Rücklage fällt sie sofort an, mit dem Grenzsteuersatz vom Parameterblatt. All das fasst der Rücklagenspiegel in rls\_Steuerwirksam zusammen (Abschnitt 12).
+Ein Verlust, etwa aus dem Gebäudeteil eines Verkaufs, ergibt keine negative Steuer. Er wird vorgetragen und mit den nächsten Gewinnen verrechnet; das entspricht der GmbH, deren Verluste nur mit eigenen Gewinnen verrechnet werden. Die Mindestbesteuerung (§ 10d Abs. 2 EStG, § 10a GewStG: über 1 Mio nur zu 60 %) und der Verlustrücktrag fehlen noch.
 
-```text
-E2  =(B2 + INDEX(rls_Steuerwirksam, MATCH(A2, rls_Jahr, 0))) * par_Steuersatz
-```
+Die Liquidität wird nicht verzinst. Die Rendite auf freies Kapital gehört zur Alternativanlage in Etappe 8.
 
-**Stille Reserven als Kennzahl**
+**Blatt Auswertung, Plan (umgesetzt)**
 
-Stille Reserven zeigen, wie viel unversteuerter Wert im Bestand steckt: der Verkehrswert minus Buchwert über alle noch aktiven Objekte. Das ist keine Steuerposition, sondern eine Steuerungsgröße für die Entscheidung, wann sich ein Verkauf lohnt.
+| Spalte | Feld | Name | Formel |
+| --- | --- | --- | --- |
+| A | Jahr | aus\_Jahr | 2027 bis 2046 |
+| B | laufendes Ergebnis | aus\_Ergebnis | aus Liquidität |
+| C | steuerwirksam aus Verkauf und Rücklage | aus\_Verkauf | aus Liquidität |
+| D | Gesamt-GuV vor Steuern | aus\_GuV | B + C |
+| E | Steuer | aus\_Steuer | aus Liquidität |
+| F | Ergebnis nach Steuern | aus\_NachSteuer | D − E |
+| G | Steuer kumuliert | aus\_SteuerKum | laufende Summe über E |
+| H | Verkehrswert Bestand | aus\_Verkehrswert | prg\_Verkehrswert der Zeilen mit prg\_Bestand = 1 |
+| I | Buchwert Bestand | aus\_Buchwert | prg\_Buchwert + prg\_BuchwertGuB, ebenso gefiltert |
+| J | stille Reserven | aus\_StilleReserven | H − I |
+| K | § 6b-Rücklage Bestand | aus\_Ruecklage | rls\_Bestand |
+| L | Verlustvortrag | aus\_Vortrag | aus Liquidität |
+| M | Liquidität kumuliert | aus\_Liquiditaet | aus Liquidität |
+| N | Gesamtvermögen vor latenter Steuer | aus\_Vermoegen | H + M |
+| O | latente Steuer | aus\_LatenteSteuer | MAX(J + K − L; 0) × par\_Steuersatz |
+| P | Gesamtvermögen nach latenter Steuer | aus\_VermoegenNetto | N − O |
 
-**Abnahme Etappe 7:** Die Summe des laufenden Ergebnisses über alle Objekte eines Jahres muss mit der Einzelsumme aus der Prognosematrix übereinstimmen. In einem Verkaufsjahr ohne 6b muss die Steuer gleich Veräußerungsgewinn mal Satz sein.
+**Blatt Auswertung, Baseline (umgesetzt):** Spalten R bis Z mit Verkehrswert, Buchwert, stillen Reserven, Verlustvortrag, Liquidität und Gesamtvermögen vor und nach latenter Steuer (Namen asb\_…). Gezählt werden alle Bestandsobjekte (prg\_Neu = 0) unabhängig vom Verkauf, der Gebäudebuchwert aus prg\_BuchwertHalten.
+
+**Stille Reserven und latente Steuer**
+
+Stille Reserven zeigen, wie viel unversteuerter Wert im Bestand steckt: Verkehrswert minus Buchwert über alle Objekte, die am Jahresende noch im Bestand sind. Beim Neuobjekt stecken die übertragenen Gewinne darin, weil der Buchwert um sie gemindert ist. Die nicht übertragene Rücklage ist ebenfalls gestundete Steuer. Die latente Steuer ist deshalb die Steuer auf stille Reserven plus Rücklage, gemindert um den Verlustvortrag. Sie gilt für einen gedachten Verkauf aller Objekte zum Verkehrswert ohne neue Rücklage und ohne Gewinnzuschlag.
+
+Erst das Gesamtvermögen nach latenter Steuer macht Halten und Verkaufen vergleichbar: Die Baseline hat höhere stille Reserven, der Plan hat Liquidität, aber schon Steuer gezahlt.
+
+**Übersicht (umgesetzt):** Neben dem Verkehrswert (Spalten B bis D) zeigt die Tabelle das Gesamtvermögen nach latenter Steuer für Baseline und Plan und die Differenz (E bis G, ueb\_VermBaseline, ueb\_VermPlan, ueb\_VermDifferenz), mit einem zweiten Diagramm. Im Basisjahr ist es für beide gleich: Verkehrswert minus latente Steuer auf Verkehrswert − Restbuchwert − AK G+B.
+
+**Abnahme Etappe 7:**
+- Zwei Objekte ohne Verkauf, 2027: laufendes Ergebnis 72.980 = 37.000 + 35.980, gleich der Einzelsumme aus der Prognose. Plan und Baseline liefern dieselbe Steuer (21.894), dieselbe Liquidität und dasselbe Gesamtvermögen.
+- Verkauf Ende 2030 ohne § 6b, Gewinn 744.000: Steuer 2030 = (40.115,43 + 744.000) × 30 % = 235.234,63, also 223.200 mehr als ohne Verkauf. Der Buchwert-Rückfluss ist 616.000 = 416.000 + 200.000.
+
+Weitere geprüfte Fälle in `pruefung/pruefen.py`:
+- Rücklage ohne Reinvestition: Steuer 2027 nur auf das laufende Ergebnis, 2031 Steuer 267.840 auf Auflösung und Zuschlag; bis dahin steht die Rücklage in der latenten Steuer
+- Reinvestition Ende 2028: Kauf 1,2 Mio mindert die Liquidität, das Gesamtvermögen nach latenter Steuer bleibt gleich (1.225.900), die gestundete Steuer wandert aus der Rücklage in die stillen Reserven des Neuobjekts
+- Verlustvortrag: Verlust 2030 von 95.884,57 wird 2034 mit der Auflösung verrechnet
+
+**Offen:**
+- Mindestbesteuerung und Verlustrücktrag
+- Zins auf die Liquidität (Etappe 8, Alternativanlage)
+- Grunderwerbsteuer und Nebenkosten des Neuobjekts nur über die Eingabe Kaufnebenkosten; par\_GrESt wird noch nicht verwendet
+- Ein Verkauf mit anderem Status als OK oder „§ 6b unzulässig“ nimmt das Objekt aus dem Plan, bringt aber keinen Erlös. Der Status ist rot, bis die Eingabe vollständig ist.
 
 ## 15. Szenariovergleich (Etappe 8)
 

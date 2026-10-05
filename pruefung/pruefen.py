@@ -66,6 +66,11 @@ def rls(jahr: int) -> int:
     return jahr - 2027
 
 
+def lj(jahr: int) -> int:
+    """Zeile in den Jahrestabellen von Liquidität und Auswertung; erste Zeile ist 2027."""
+    return jahr - 2027
+
+
 def ueb(jahr: int) -> int:
     """Zeile im Übersichtsbereich; erste Zeile ist das Basisjahr."""
     return jahr - 2026
@@ -474,6 +479,129 @@ def faelle():
                                       afa_satz=0.02, quelle="RL-OBJ-001")]), [
             ("ne_Status", 0, "Kauf vor Bildung der Rücklage, keine Übertragung"),
             ("ne_UeGesamt", 0, 0),
+        ]),
+        # Etappe 7: Steuersatz 30 %. Zwei Objekte 2027: Ergebnis 37.000 + 35.980,
+        # Einnahmen 2 × 61.200 + 1.020, Ausgaben 2 × 8.200 + 2.040
+        ("Etappe 7: Abnahme Summen über alle Objekte, Plan gleich Baseline",
+         [obj, obj2], [
+            ("liq_Jahr", lj(2027), 2027),
+            ("liq_Jahr", lj(2046), 2046),
+            ("liq_Ergebnis", lj(2027), 72_980),
+            ("liq_Einnahmen", lj(2027), 123_420),
+            ("liq_Ausgaben", lj(2027), 18_440),
+            ("liq_Steuer", lj(2027), 21_894),
+            ("liq_Zufluss", lj(2027), 83_086),
+            ("liq_Kum", lj(2027), 83_086),
+            ("liq_Ergebnis", lj(2046), 118_609.88),
+            ("liq_Steuer", lj(2046), 35_582.96),
+            ("liq_Kum", lj(2046), 1_963_197.65),
+            ("lqb_Einnahmen", lj(2027), 123_420),
+            ("lqb_AfA", lj(2027), 32_000),
+            ("lqb_Ergebnis", lj(2027), 72_980),
+            ("lqb_Ergebnis", lj(2046), 118_609.88),
+            ("lqb_Kum", lj(2046), 1_963_197.65),
+            ("aus_GuV", lj(2027), 72_980),
+            ("aus_NachSteuer", lj(2027), 51_086),
+            ("aus_SteuerKum", lj(2046), 567_084.71),
+            # Verkehrswert 2 × 1.428.000, Buchwert 2 × (464.000 + 200.000)
+            ("aus_Verkehrswert", lj(2027), 2_856_000),
+            ("aus_Buchwert", lj(2027), 1_328_000),
+            ("aus_StilleReserven", lj(2027), 1_528_000),
+            ("aus_LatenteSteuer", lj(2027), 458_400),
+            ("aus_Vermoegen", lj(2027), 2_939_086),
+            ("aus_VermoegenNetto", lj(2027), 2_480_686),
+            ("asb_VermoegenNetto", lj(2027), 2_480_686),
+            ("aus_VermoegenNetto", lj(2046), 5_091_654.55),
+            ("ueb_VermBaseline", ueb(2026), 2_368_000),  # 2,8 Mio − 1,44 Mio × 30 %
+            ("ueb_VermPlan", ueb(2026), 2_368_000),
+            ("ueb_VermPlan", ueb(2027), 2_480_686),
+            ("ueb_VermBaseline", ueb(2046), 5_091_654.55),
+            ("ueb_VermDifferenz", ueb(2046), 0),
+        ]),
+        # Gewinn 744.000 ohne § 6b; Ergebnis 2030 = 64.945,93 − 8.830,50 − 16.000
+        ("Etappe 7: Abnahme Verkauf ohne § 6b, Steuer im Verkaufsjahr",
+         Modell(objekte=[obj], verkaeufe=[Verkauf("OBJ-001", 2030, preis=1_400_000,
+                                                  kosten=40_000, anteil_gub=0.3,
+                                                  nutzung_6b="nein")]), [
+            ("liq_Ergebnis", lj(2030), 40_115.43),
+            ("liq_Verkauf", lj(2030), 744_000),
+            ("liq_Steuer", lj(2030), 235_234.63),  # 12.034,63 + 744.000 × 30 %
+            ("liq_Verkaufserloes", lj(2030), 1_360_000),
+            ("liq_Rueckfluss", lj(2030), 616_000),  # Buchwert 416.000 + AK G+B 200.000
+            ("liq_Kum", lj(2030), 1_308_734.25),
+            ("liq_Ergebnis", lj(2031), 0),
+            ("liq_Steuer", lj(2031), 0),
+            ("liq_Zufluss", lj(2031), 0),
+            ("liq_Kum", lj(2046), 1_308_734.25),
+            ("lqb_Ergebnis", lj(2031), 41_193.58),  # Baseline hält das Objekt
+            ("lqb_Kum", lj(2030), 171_934.25),
+            ("aus_Verkehrswert", lj(2030), 0),
+            ("aus_Buchwert", lj(2030), 0),
+            ("aus_LatenteSteuer", lj(2030), 0),
+            ("aus_VermoegenNetto", lj(2030), 1_308_734.25),
+            ("asb_Verkehrswert", lj(2030), 1_515_405.02),
+            ("asb_Buchwert", lj(2030), 616_000),
+            ("asb_VermoegenNetto", lj(2030), 1_417_517.76),
+            ("ueb_VermPlan", ueb(2030), 1_308_734.25),
+            ("ueb_VermBaseline", ueb(2030), 1_417_517.76),
+        ]),
+        # Rücklage 720.000 ohne Reinvestition: Auflösung und Zuschlag 2031 werden versteuert
+        ("Etappe 7: Rücklage ohne Reinvestition, Steuer im Fristjahr",
+         Modell(objekte=[abnahme4],
+                verkaeufe=[Verkauf("OBJ-001", 2027, preis=1_400_000, nutzung_6b="ja")]), [
+            ("liq_Verkauf", lj(2027), 0),
+            ("liq_Steuer", lj(2027), 11_100),  # nur laufendes Ergebnis 37.000
+            ("liq_Verkaufserloes", lj(2027), 1_400_000),
+            ("liq_Rueckfluss", lj(2027), 680_000),
+            ("liq_Zufluss", lj(2027), 1_441_900),
+            ("liq_Steuer", lj(2031), 267_840),  # 892.800 × 30 %
+            ("liq_Kum", lj(2031), 1_441_900 - 267_840),
+            ("aus_Ruecklage", lj(2027), 720_000),
+            ("aus_LatenteSteuer", lj(2027), 216_000),  # Rücklage ist gestundete Steuer
+            ("aus_VermoegenNetto", lj(2027), 1_225_900),
+            ("aus_Ruecklage", lj(2031), 0),
+            ("aus_LatenteSteuer", lj(2031), 0),
+            ("aus_SteuerKum", lj(2031), 11_100 + 267_840),
+        ]),
+        # Kauf Ende 2028 für 1,2 Mio, AfA-Basis 480.000: Tausch Liquidität gegen Objekt
+        ("Etappe 7: Reinvestition, Kauf aus der Liquidität",
+         Modell(objekte=[abnahme4],
+                verkaeufe=[Verkauf("OBJ-001", 2027, preis=1_400_000, nutzung_6b="ja")],
+                neuobjekte=[Neuobjekt("NEU-001", 2028, kaufpreis=1_200_000, anteil_gub=0.3,
+                                      afa_satz=0.03, mietrendite=0.05, erhaltungsquote=0.01,
+                                      quelle="RL-OBJ-001")]), [
+            ("liq_Kauf", lj(2028), 1_200_000),
+            ("liq_Zufluss", lj(2028), -1_200_000),
+            ("liq_Kum", lj(2028), 241_900),
+            ("liq_Ergebnis", lj(2029), 34_500),
+            ("liq_Steuer", lj(2029), 10_350),
+            ("liq_Zufluss", lj(2029), 38_550),  # 61.200 − 12.300 − 10.350
+            ("liq_Steuer", lj(2031), 10_904.94),  # keine Auflösung mehr, nur laufend
+            ("aus_Verkehrswert", lj(2028), 1_200_000),
+            ("aus_Buchwert", lj(2028), 480_000),  # AK G+B 0
+            ("aus_StilleReserven", lj(2028), 720_000),
+            ("aus_Ruecklage", lj(2028), 0),
+            ("aus_LatenteSteuer", lj(2028), 216_000),
+            ("aus_VermoegenNetto", lj(2028), 1_225_900),
+            ("asb_Verkehrswert", lj(2028), 1_456_560),  # Baseline ohne Neuobjekt
+        ]),
+        # Verlust Gebäude −136.000 wirkt sofort, Rücklage G+B 920.000 wird 2034 aufgelöst
+        ("Etappe 7: Verlustvortrag",
+         Modell(objekte=[obj], verkaeufe=[Verkauf("OBJ-001", 2030, preis=1_400_000,
+                                                  anteil_gub=0.8, nutzung_6b="ja")]), [
+            ("liq_Verkauf", lj(2030), -136_000),
+            ("liq_ZvE", lj(2030), -95_884.57),
+            ("liq_Bemessung", lj(2030), 0),
+            ("liq_Steuer", lj(2030), 0),
+            ("liq_Vortrag", lj(2030), 95_884.57),
+            ("liq_Vortrag", lj(2033), 95_884.57),
+            ("liq_Verkauf", lj(2034), 1_140_800),  # 920.000 + 24 % Zuschlag
+            ("liq_VortragGenutzt", lj(2034), 95_884.57),
+            ("liq_Bemessung", lj(2034), 1_044_915.43),
+            ("liq_Steuer", lj(2034), 313_474.63),
+            ("liq_Vortrag", lj(2034), 0),
+            ("aus_Vortrag", lj(2030), 95_884.57),
+            ("aus_LatenteSteuer", lj(2030), 247_234.63),  # (920.000 − 95.884,57) × 30 %
         ]),
     ]
 
