@@ -37,8 +37,12 @@ FMT_BWA = '#,##0.00;-#,##0.00;""'   # 0 bleibt leer, etwa nach dem Verkauf
 FONT_TITEL = Font(bold=True, size=14)
 FONT_ABSCHNITT = Font(bold=True, size=12)
 FONT_HILFE = Font(italic=True, color="808080", size=8)
+FONT_HILFE_GROSS = Font(italic=True, color="595959")
 FILL_BERECHNET = PatternFill("solid", fgColor="E7E6E6")
 FILL_KOPF = PatternFill("solid", fgColor="D9E1F2")
+FILL_EINGABE = PatternFill("solid", fgColor="FFF2CC")
+FILL_GEAENDERT = PatternFill("solid", fgColor="FFE699")   # abweichend vom Standard
+FILL_FEHLER = PatternFill("solid", fgColor="F8CBAD")
 GUELTIG = (STATUS_OK, STATUS_6B_UNZULAESSIG)
 
 UNGUELTIGE_ZEICHEN = re.compile(r"[\[\]:*?/\\]")
@@ -86,68 +90,183 @@ def _gewinne(jahr: str, vergleich: str, *bedingung: str) -> str:
                     for st in GUELTIG)
 
 
-def _planformeln_objekt(z: dict, sp: str, neu: bool) -> dict:
-    """Planspalte eines Kostenstellenblatts; ObjektID in $B$2, Planjahr in Zeile 5."""
-    jahr = f"{sp}${ZEILE_JAHR}"
+def _verkauf(feld: str, jahr: str, *bedingung: str) -> str:
+    """Summe eines Verkaufsfelds über die gültigen Verkäufe im Jahr."""
+    extra = "".join(f",{b}" for b in bedingung)
+    return "(" + "+".join(f'SUMIFS({feld},vk_Jahr,{jahr},vk_Status,"{st}"{extra})'
+                          for st in GUELTIG) + ")"
 
-    def p(name):
-        return f"SUMIFS({name},prg_ID,$B$2,prg_Jahr,{jahr})"
 
-    formeln = {
-        1020: f"={p('prg_Miete')}",
-        1090: f"={p('prg_Einnahmen')}",
-        1240: f"={p('prg_AfA')}",
-        1250: f"={p('prg_Erhaltung')}",
-    }
-    if neu:
-        formeln[1260] = f"={p('prg_Ausgaben')}"
-    else:
-        # Aufteilung der weiteren Ausgaben nach dem Anteil der Kostenart im Basisjahr
-        basis = "IFERROR(INDEX(obj_AusgBasis,MATCH($B$2,obj_ID,0)),0)"
-        for nr in AUSGABEN_ZEILEN:
-            formeln[nr] = (f"=IF(N({basis})=0,0,{p('prg_Ausgaben')}"
-                           f"*N(${get_column_letter(SPALTE_JAHR)}${z[nr]})/{basis})")
-        andere = "+".join(f"{sp}{z[nr]}" for nr in AUSGABEN_ZEILEN)
-        formeln[1260] = f"={p('prg_Ausgaben')}-({andere})"
-        # Verkauf: Gewinn als neutraler Ertrag, Verlust und Einstellung in die Rücklage
-        # als neutraler Aufwand; Auflösung und Zuschlag im Fristjahr als Ertrag
-        objekt = "vk_ID,$B$2"
-        formeln[1323] = (f"={_gewinne(jahr, '>0', objekt)}"
-                         f"+SUMIFS(rl_Aufloesung,rl_ObjektID,$B$2,rl_Fristjahr,{jahr})"
-                         f"+SUMIFS(rl_Zuschlag,rl_ObjektID,$B$2,rl_Fristjahr,{jahr})")
-        formeln[1312] = (f"=-({_gewinne(jahr, '<0', objekt)})"
-                         f"+SUMIFS(rl_Betrag,rl_ObjektID,$B$2,rl_Jahr,{jahr})")
+# --- Zuordnung der Sonderposten zu BWA-Zeilen (Blatt BWA-Zuordnung) ---
+#
+# Verkauf, Rücklage, Neuobjekte und Zins stehen je BWA-Blatt in einem Herleitungsblock
+# unter der BWA, ergebniswirksam gerechnet (Ertrag positiv, Aufwand negativ). Die BWA-Zeile
+# je Posten wählt der Anwender im Blatt BWA-Zuordnung; die Zeile nimmt den Posten mit dem
+# Vorzeichen ihrer Art auf (Aufwandszeilen negativ), das Ergebnis bleibt daher gleich.
+
+ZUORDNUNG = "BWA-Zuordnung"
+ERTRAGSZEILEN = (1020, 1090, 1322, 1323, 1351)
+AUFWANDSZEILEN = (1240, 1250, 1260, 1310, 1312, 1352)
+# Kostenarten 1100–1220 bleiben den eingelesenen Kosten vorbehalten
+ZIELZEILEN = (1020, 1090, 1240, 1250, 1260, 1310, 1312, 1322, 1323, 1351, 1352)
+NETTO, BRUTTO = "netto", "brutto"
+
+
+def _netto(ausdruck: str) -> str:
+    return f'IF(zuo_Verkauf="{BRUTTO}",0,{ausdruck})'
+
+
+def _brutto(ausdruck: str) -> str:
+    return f'IF(zuo_Verkauf="{BRUTTO}",{ausdruck},0)'
+
+
+def _posten() -> list:
+    """(Schlüssel, Bezeichnung, Standard-Nr., Erläuterung, Formel(jahr, vk, rl, prg, summe)).
+
+    vk, rl, prg sind die Filter auf das Objekt des Blatts (leer im Summenblatt);
+    summe ist True im Summenblatt. Ergebnis: ergebniswirksamer Betrag ohne „=“.
+    """
+    def x(*b):
+        return tuple(f for f in b if f)
+
+    def prg(name, jahr, f, vz=""):
+        return f"{vz}SUMIFS({name},prg_Jahr,{jahr},prg_Neu,1{f})"
+
+    zins = "SUMIFS(liq_Zins,liq_Jahr,{j})"
+    return [
+        ("gewinn", "Veräußerungsgewinn (netto)", 1323,
+         "Gewinn gültiger Verkäufe im Verkaufsjahr; nur bei Ausweis netto",
+         lambda j, vk, rl, pf, s: _netto(_gewinne(j, ">0", *x(vk)))),
+        ("verlust", "Veräußerungsverlust (netto)", 1312,
+         "Verlust gültiger Verkäufe im Verkaufsjahr; nur bei Ausweis netto",
+         lambda j, vk, rl, pf, s: _netto(_gewinne(j, "<0", *x(vk)))),
+        ("erloes", "Veräußerungspreis (brutto)", 1323,
+         "Verkaufspreis gültiger Verkäufe; nur bei Ausweis brutto",
+         lambda j, vk, rl, pf, s: _brutto(_verkauf("vk_Preis", j, *x(vk)))),
+        ("kosten", "Veräußerungskosten (brutto)", 1312,
+         "Kosten des Verkaufs; nur bei Ausweis brutto",
+         lambda j, vk, rl, pf, s: _brutto("-" + _verkauf("vk_Kosten", j, *x(vk)))),
+        ("abgang", "Buchwertabgang Gebäude und G+B (brutto)", 1312,
+         "Buchwert Gebäude Ende Verkaufsjahr + AK G+B; nur bei Ausweis brutto",
+         lambda j, vk, rl, pf, s: _brutto(f"-{_verkauf('vk_BuchwertGeb', j, *x(vk))}"
+                                          f"-{_verkauf('vk_AKGuB', j, *x(vk))}")),
+        ("bildung", "Einstellung § 6b-Rücklage", 1312, "im Verkaufsjahr",
+         lambda j, vk, rl, pf, s: f"-SUMIFS(rl_Betrag,rl_Jahr,{j}{rl})"),
+        ("aufloesung", "Auflösung § 6b-Rücklage", 1323,
+         "nicht übertragener Rest im Fristjahr",
+         lambda j, vk, rl, pf, s: f"SUMIFS(rl_Aufloesung,rl_Fristjahr,{j}{rl})"),
+        ("zuschlag", "Gewinnzuschlag § 6b Abs. 7", 1323, "im Fristjahr",
+         lambda j, vk, rl, pf, s: f"SUMIFS(rl_Zuschlag,rl_Fristjahr,{j}{rl})"),
+        ("neu_miete", "Neuobjekte: Mieten", 1020, "ab dem Jahr nach dem Kauf",
+         lambda j, vk, rl, pf, s: prg("prg_Miete", j, pf)),
+        ("neu_einnahmen", "Neuobjekte: weitere Einnahmen", 1090, "",
+         lambda j, vk, rl, pf, s: prg("prg_Einnahmen", j, pf)),
+        ("neu_erhaltung", "Neuobjekte: Erhaltung", 1250, "",
+         lambda j, vk, rl, pf, s: prg("prg_Erhaltung", j, pf, "-")),
+        ("neu_ausgaben", "Neuobjekte: weitere Ausgaben", 1260, "",
+         lambda j, vk, rl, pf, s: prg("prg_Ausgaben", j, pf, "-")),
+        ("neu_afa", "Neuobjekte: Abschreibungen", 1240, "AfA nach Übertragung § 6b",
+         lambda j, vk, rl, pf, s: prg("prg_AfA", j, pf, "-")),
+        ("zinsertrag", "Zinsertrag Alternativanlage", 1322, "nur im Blatt Alle Objekte",
+         lambda j, vk, rl, pf, s: f"MAX({zins.format(j=j)},0)" if s else "0"),
+        ("zinsaufwand", "Zinsaufwand bei negativer Liquidität", 1310,
+         "nur im Blatt Alle Objekte",
+         lambda j, vk, rl, pf, s: f"MIN({zins.format(j=j)},0)" if s else "0"),
+    ]
+
+
+POSTEN = _posten()
+# Herleitungsblock unter der BWA: Titel, dann je Posten eine Zeile, dann die Summe
+HERLEITUNG_TITEL = ERSTE_ZEILE + len(BWA_ZEILEN) + 1
+HERLEITUNG_ERSTE = HERLEITUNG_TITEL + 1
+HERLEITUNG_LETZTE = HERLEITUNG_ERSTE + len(POSTEN) - 1
+SPALTE_ZIEL = 4   # D: BWA-Nr. des Postens (Spalte B bleibt den BWA-Zeilen vorbehalten)
+
+
+def _zugeordnet(sp: str, nr: int) -> str:
+    """Summe der Posten, die auf BWA-Zeile nr gebucht werden, mit deren Vorzeichen."""
+    d = get_column_letter(SPALTE_ZIEL)
+    vz = "+" if nr in ERTRAGSZEILEN else "-"
+    return (f"{vz}SUMIFS({sp}${HERLEITUNG_ERSTE}:{sp}${HERLEITUNG_LETZTE},"
+            f"${d}${HERLEITUNG_ERSTE}:${d}${HERLEITUNG_LETZTE},{nr})")
+
+
+def _mit_zuordnung(z: dict, sp: str, basis: dict) -> dict:
+    """Planformeln: Basiswerte plus zugeordnete Posten in den Zielzeilen, dann Summenzeilen."""
+    formeln = {nr: f"={f}" for nr, f in basis.items()}
+    for nr in ZIELZEILEN:
+        formeln[nr] = f"={basis.get(nr, '0')}{_zugeordnet(sp, nr)}"
     formeln.update(_summenformeln(z, sp))
     return formeln
 
 
-def _planformeln_summe(z: dict, sp: str, blaetter: list) -> dict:
+def _herleitung(ws, planjahre: int, objekt: bool) -> None:
+    """Herleitungsblock unter der BWA: je Posten Ziel-Nr. und ergebniswirksamer Betrag."""
+    c = ws.cell(row=HERLEITUNG_TITEL, column=3,
+                value="Herleitung Sonderposten (+ Ertrag, − Aufwand); Zuordnung im Blatt "
+                      f"{ZUORDNUNG}")
+    c.font = Font(bold=True)
+    ws.cell(row=HERLEITUNG_TITEL, column=SPALTE_ZIEL, value="→ Nr.").font = Font(bold=True)
+    vk = "vk_ID,$B$2" if objekt else ""
+    rl = ",rl_ObjektID,$B$2" if objekt else ""
+    pf = ",prg_ID,$B$2" if objekt else ""
+    for zeile, (key, text, _, _, formel) in zip(range(HERLEITUNG_ERSTE, HERLEITUNG_LETZTE + 1),
+                                                POSTEN):
+        ws.cell(row=zeile, column=3, value=text).font = FONT_HILFE_GROSS
+        ziel = ws.cell(row=zeile, column=SPALTE_ZIEL, value=f"=zuo_{key}")
+        ziel.font, ziel.fill = FONT_HILFE_GROSS, FILL_BERECHNET
+        for i in range(planjahre):
+            jahr = f"{get_column_letter(SPALTE_PLAN + i)}${ZEILE_JAHR}"
+            zelle = ws.cell(row=zeile, column=SPALTE_PLAN + i,
+                            value="=" + formel(jahr, vk, rl, pf, not objekt))
+            zelle.number_format, zelle.font = FMT_BWA, FONT_HILFE_GROSS
+
+
+def _planformeln_objekt(z: dict, sp: str) -> dict:
+    """Planspalte eines Kostenstellenblatts; ObjektID in $B$2, Planjahr in Zeile 5.
+
+    Bestandswerte (prg_Neu = 0) direkt, Neuobjekt, Verkauf und Rücklage über die Zuordnung.
+    """
+    jahr = f"{sp}${ZEILE_JAHR}"
+
+    def p(name):
+        return f"SUMIFS({name},prg_ID,$B$2,prg_Jahr,{jahr},prg_Neu,0)"
+
+    basis = {
+        1020: p("prg_Miete"),
+        1090: p("prg_Einnahmen"),
+        1240: p("prg_AfA"),
+        1250: p("prg_Erhaltung"),
+    }
+    # Aufteilung der weiteren Ausgaben nach dem Anteil der Kostenart im Basisjahr
+    ausg = "IFERROR(INDEX(obj_AusgBasis,MATCH($B$2,obj_ID,0)),0)"
+    for nr in AUSGABEN_ZEILEN:
+        basis[nr] = (f"IF(N({ausg})=0,0,{p('prg_Ausgaben')}"
+                     f"*N(${get_column_letter(SPALTE_JAHR)}${z[nr]})/{ausg})")
+    andere = "+".join(f"{sp}{z[nr]}" for nr in AUSGABEN_ZEILEN)
+    basis[1260] = f"{p('prg_Ausgaben')}-({andere})"
+    return _mit_zuordnung(z, sp, basis)
+
+
+def _planformeln_summe(z: dict, sp: str, bestand: list) -> dict:
     """Planspalte des Summenblatts: Szenario A über alle Objekte, auch ohne eigenes Blatt."""
     jahr = f"{sp}${ZEILE_JAHR}"
 
     def p(name):
-        return f"SUMIFS({name},prg_Jahr,{jahr})"
+        return f"SUMIFS({name},prg_Jahr,{jahr},prg_Neu,0)"
 
-    zins = f"SUMIFS(liq_Zins,liq_Jahr,{jahr})"
-    formeln = {
-        1020: f"={p('prg_Miete')}",
-        1090: f"={p('prg_Einnahmen')}",
-        1240: f"={p('prg_AfA')}",
-        1250: f"={p('prg_Erhaltung')}",
-        # Zins der Alternativanlage; negative Liquidität kostet Zins
-        1310: f"=MAX(-{zins},0)",
-        1322: f"=MAX({zins},0)",
-        1323: (f"={_gewinne(jahr, '>0')}+SUMIFS(rls_Aufloesung,rls_Jahr,{jahr})"
-               f"+SUMIFS(rls_Zuschlag,rls_Jahr,{jahr})"),
-        1312: f"=-({_gewinne(jahr, '<0')})+SUMIFS(rls_Bildung,rls_Jahr,{jahr})",
-        1355: f"=SUMIFS(liq_Steuer,liq_Jahr,{jahr})",
+    basis = {
+        1020: p("prg_Miete"),
+        1090: p("prg_Einnahmen"),
+        1240: p("prg_AfA"),
+        1250: p("prg_Erhaltung"),
+        1355: f"SUMIFS(liq_Steuer,liq_Jahr,{jahr})",
     }
     for nr in AUSGABEN_ZEILEN:
-        formeln[nr] = "=" + ("+".join(f"'{b}'!{sp}{z[nr]}" for b in blaetter) or "0")
+        basis[nr] = "+".join(f"'{b}'!{sp}{z[nr]}" for b in bestand) or "0"
     andere = "+".join(f"{sp}{z[nr]}" for nr in AUSGABEN_ZEILEN)
-    formeln[1260] = f"={p('prg_Ausgaben')}-({andere})"
-    formeln.update(_summenformeln(z, sp))
-    return formeln
+    basis[1260] = f"{p('prg_Ausgaben')}-({andere})"
+    return _mit_zuordnung(z, sp, basis)
 
 
 def _jahreszeile(ws, planjahre: int) -> None:
@@ -186,7 +305,8 @@ def _blatt_objekt(wb, titel: str, objekt_id: str, name, ist, basisjahr: int,
                     value=f"=IFERROR(N(INDEX({feld},MATCH($B$2,obj_ID,0))),0)")
         for nr, formel in _summenformeln(z, t).items():
             ws.cell(row=z[nr], column=SPALTE_JAHR, value=formel)
-    _planspalten(ws, z, planjahre, lambda sp: _planformeln_objekt(z, sp, neu))
+    _planspalten(ws, z, planjahre, lambda sp: _planformeln_objekt(z, sp))
+    _herleitung(ws, planjahre, objekt=True)
     hinweis = ("Neuobjekt: Werte ab dem Jahr nach dem Kauf. " if neu else "") + (
         "Planspalten = Szenario A, vor Finanzierung; Zins und Steuer nur im Blatt "
         f"„{SUMMENBLATT}“.")
@@ -226,10 +346,11 @@ def blaetter_bwa(wb, modell: Modell) -> list:
             if bez and bestand:
                 summe.cell(row=z[nr], column=spalte,
                            value="=" + "+".join(f"N('{b}'!{sp}{z[nr]})" for b in bestand))
-    _planspalten(summe, z, planjahre, lambda sp: _planformeln_summe(z, sp, titel))
+    _planspalten(summe, z, planjahre, lambda sp: _planformeln_summe(z, sp, bestand))
+    _herleitung(summe, planjahre, objekt=False)
     summe["E2"] = ("Planspalten = Szenario A über alle Objekte und Neuobjekte, vor "
-                   "Finanzierung. Ergebnis vor Steuern = Ergebnis vor Verlustvortrag im Blatt "
-                   "Liquidität, Steuer mit Verlustvortrag.")
+                   "Finanzierung. Nr. 1353 = Ergebnis vor Verlustvortrag im Blatt "
+                   f"Liquidität (Kontrolle im Blatt {ZUORDNUNG}), Steuer mit Verlustvortrag.")
     summe["E2"].font = Font(italic=True)
     ende = get_column_letter(SPALTE_PLAN + planjahre - 1)
     anfang = get_column_letter(SPALTE_PLAN)
@@ -237,7 +358,124 @@ def blaetter_bwa(wb, modell: Modell) -> list:
         if bez:
             _name(wb, f"bwa_{nr}", f"'{summe.title}'!${anfang}${z[nr]}:${ende}${z[nr]}")
     _name(wb, "bwa_Jahr", f"'{summe.title}'!${anfang}${ZEILE_JAHR}:${ende}${ZEILE_JAHR}")
-    return [summe.title] + titel
+    for zeile, posten in zip(range(HERLEITUNG_ERSTE, HERLEITUNG_LETZTE + 1), POSTEN):
+        _name(wb, f"bwah_{posten[0]}", f"'{summe.title}'!${anfang}${zeile}:${ende}${zeile}")
+    zuordnung = blatt_zuordnung(wb, summe, z, planjahre, modell.bwa_zuordnung)
+    return [zuordnung, summe.title] + titel
+
+
+def blatt_zuordnung(wb, summe, z: dict, planjahre: int, vorgabe: dict) -> str:
+    """Steuerblatt: BWA-Zeile je Sonderposten, Ausweis des Verkaufs, Kontrolle.
+
+    Steht vor dem Summenblatt. Die Kontrolle vergleicht je Planjahr das Ergebnis des
+    Summenblatts (Nr. 1353) mit dem Ergebnis vor Verlustvortrag im Blatt Liquidität.
+    """
+    from openpyxl.formatting.rule import FormulaRule
+    from openpyxl.worksheet.datavalidation import DataValidation
+
+    ws = wb.create_sheet(ZUORDNUNG, wb.sheetnames.index(summe.title))
+    ws["A1"] = "BWA-Zuordnung: auf welche BWA-Zeile Verkauf, Rücklage, Kauf und Zins gehen"
+    ws["A1"].font = FONT_TITEL
+    ws["A2"] = ("Gelbe Zellen ändern. Jede BWA-Zeile nimmt den Posten mit dem Vorzeichen "
+                "ihrer Art auf (Ertrag +, Aufwand −); das Ergebnis bleibt bei jeder Zuordnung "
+                "gleich. Die Beträge je Jahr stehen unter jeder BWA im Block "
+                "„Herleitung Sonderposten“.")
+    ws["A2"].alignment = Alignment(wrap_text=True)
+    ws.merge_cells("A2:G2")
+    ws.row_dimensions[2].height = 45
+
+    ws["A4"] = "Verkauf ausweisen"
+    ws["A4"].font = Font(bold=True)
+    ws["B4"] = vorgabe.get("verkauf", NETTO)
+    ws["B4"].fill = FILL_EINGABE
+    ws["C4"] = ("netto: nur der Veräußerungsgewinn bzw. -verlust; brutto: Verkaufspreis als "
+                "Ertrag, Verkaufskosten und Buchwertabgang als Aufwand")
+    dv = DataValidation(type="list", formula1=f'"{NETTO},{BRUTTO}"', allow_blank=False)
+    ws.add_data_validation(dv)
+    dv.add("B4")
+    _name(wb, "zuo_Verkauf", f"'{ZUORDNUNG}'!$B$4")
+
+    kopf = ["Posten", "BWA-Nr.", "BWA-Zeile", "Ertrag/Aufwand", "Standard",
+            "Summe Planjahre (Alle Objekte)", "Erläuterung"]
+    for spalte, text in enumerate(kopf, start=1):
+        c = ws.cell(row=6, column=spalte, value=text)
+        c.font, c.fill = Font(bold=True), FILL_KOPF
+        c.alignment = Alignment(wrap_text=True)
+    # Liste der zulässigen Zielzeilen rechts daneben
+    for spalte, text in enumerate(["zulässige Nr.", "Bezeichnung", "Art"], start=9):
+        c = ws.cell(row=6, column=spalte, value=text)
+        c.font, c.fill = Font(bold=True), FILL_KOPF
+    bezeichnung = dict(BWA_ZEILEN)
+    for zeile, nr in enumerate(ZIELZEILEN, start=7):
+        ws.cell(row=zeile, column=9, value=nr)
+        ws.cell(row=zeile, column=10, value=bezeichnung[nr])
+        ws.cell(row=zeile, column=11, value="Ertrag" if nr in ERTRAGSZEILEN else "Aufwand")
+    liste_ende = 6 + len(ZIELZEILEN)
+    _name(wb, "zuo_Nummern", f"'{ZUORDNUNG}'!$I$7:$I${liste_ende}")
+    _name(wb, "zuo_Liste", f"'{ZUORDNUNG}'!$I$7:$K${liste_ende}")
+
+    erste = 7
+    letzte = erste + len(POSTEN) - 1
+    dv_nr = DataValidation(type="list", formula1="zuo_Nummern", allow_blank=False,
+                           showErrorMessage=True, errorTitle="BWA-Nr.",
+                           error="Nur die Nummern der Liste rechts (Spalte I).")
+    ws.add_data_validation(dv_nr)
+    for zeile, (key, text, standard, erlaeuterung, _) in zip(range(erste, letzte + 1), POSTEN):
+        ws.cell(row=zeile, column=1, value=text)
+        nr = ws.cell(row=zeile, column=2, value=vorgabe.get(key, standard))
+        nr.fill = FILL_EINGABE
+        dv_nr.add(nr.coordinate)
+        _name(wb, f"zuo_{key}", f"'{ZUORDNUNG}'!$B${zeile}")
+        for spalte, formel, fmt in (
+                (3, f'=IFERROR(VLOOKUP($B{zeile},zuo_Liste,2,0),"ungültige Nr.")', "@"),
+                (4, f'=IFERROR(VLOOKUP($B{zeile},zuo_Liste,3,0),"")', "@"),
+                (5, standard, "0"),
+                (6, f"=SUM(bwah_{key})", FMT_EURO)):
+            c = ws.cell(row=zeile, column=spalte, value=formel)
+            c.number_format = fmt
+            if spalte != 5:
+                c.fill = FILL_BERECHNET
+        ws.cell(row=zeile, column=7, value=erlaeuterung)
+    _name(wb, "zuo_Nr", f"'{ZUORDNUNG}'!$B${erste}:$B${letzte}")
+    ws.conditional_formatting.add(
+        f"B{erste}:C{letzte}",
+        FormulaRule(formula=[f"COUNTIF(zuo_Nummern,$B{erste})=0"], fill=FILL_FEHLER))
+    ws.conditional_formatting.add(
+        f"B{erste}:B{letzte}",
+        FormulaRule(formula=[f"$B{erste}<>$E{erste}"], fill=FILL_GEAENDERT))
+
+    # Kontrolle gegen die Liquidität, je Planjahr eine Spalte ab B
+    zeile = letzte + 3
+    ws.cell(row=zeile, column=1, value="Kontrolle: BWA Alle Objekte gegen Blatt Liquidität "
+                                       "(Szenario A)").font = FONT_ABSCHNITT
+    zeile += 1
+    jahr_z, bwa_z, liq_z, diff_z = zeile, zeile + 1, zeile + 2, zeile + 3
+    for text, z_ in (("Jahr", jahr_z), ("Ergebnis lt. BWA Alle Objekte (Nr. 1353)", bwa_z),
+                     ("Ergebnis vor Verlustvortrag lt. Liquidität", liq_z),
+                     ("Differenz (muss 0 sein)", diff_z)):
+        ws.cell(row=z_, column=1, value=text).font = Font(bold=z_ in (jahr_z, diff_z))
+    for i in range(planjahre):
+        sp = get_column_letter(2 + i)
+        quelle = get_column_letter(SPALTE_PLAN + i)
+        for z_, formel, fmt in (
+                (jahr_z, f"=par_Startjahr+{i}", FMT_JAHR),
+                (bwa_z, f"='{summe.title}'!{quelle}{z[1353]}", FMT_EURO),
+                (liq_z, f"=INDEX(liq_ZvE,{i + 1})", FMT_EURO),
+                (diff_z, f"=ROUND({sp}{bwa_z}-{sp}{liq_z},2)", FMT_EURO)):
+            c = ws.cell(row=z_, column=2 + i, value=formel)
+            c.number_format, c.fill = fmt, FILL_BERECHNET
+    ende = get_column_letter(1 + planjahre)
+    _name(wb, "zuo_Differenz", f"'{ZUORDNUNG}'!$B${diff_z}:${ende}${diff_z}")
+    ws.conditional_formatting.add(
+        f"B{diff_z}:{ende}{diff_z}", FormulaRule(formula=[f"B{diff_z}<>0"], fill=FILL_FEHLER))
+
+    ws.column_dimensions["A"].width = 44
+    ws.column_dimensions["C"].width = 22
+    ws.column_dimensions["F"].width = 18
+    ws.column_dimensions["G"].width = 50
+    ws.column_dimensions["J"].width = 26
+    ws.freeze_panes = "B7"
+    return ws.title
 
 
 def _name(wb, name: str, ref: str) -> None:
@@ -401,7 +639,8 @@ def _vorgang(b: _Block, n: int) -> None:
         ("p_einn", "weitere Einnahmen", halten("obj_EinnBasis", "par_Mietsteig"),
          alt("prg_Einnahmen")),
         ("p_zins", "Zinsertrag Kapitalanlage", "0", "{anlage}*par_Alternativrendite"),
-        ("p_erh", "./. Erhaltung", "-" + halten("obj_ErhBasis", "par_Erhaltsteig"),
+        ("p_erh", "./. Erhaltung (mit Alterung und Großmaßnahme)",
+         "-SUMIFS(prg_ErhaltungHalten,prg_ID,{id},prg_Jahr,{x})",
          "-" + alt("prg_Erhaltung")),
         ("p_ausg", "./. weitere Ausgaben", "-" + halten("obj_AusgBasis", "par_Kostensteig"),
          "-" + alt("prg_Ausgaben")),

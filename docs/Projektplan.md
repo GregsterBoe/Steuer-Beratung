@@ -823,7 +823,20 @@ Die Mappe enthält hinter den Kontrollblättern:
 | 1355 | nur im Summenblatt: Steuer aus dem Blatt Liquidität, mit Verlustvortrag (die Steuer entsteht bei der GmbH, nicht je Kostenstelle) |
 | 1051–1092, 1280–1380 | Summenformeln |
 
-Verkauf und Rücklage stehen im neutralen Ergebnis (1312, 1323), wie in der Planungsreferenz. Die außerordentlichen Zeilen 1351 und 1352 bleiben leer.
+Die Tabelle zeigt die Standardzuordnung. Bestandswerte (1020–1260 der Bestandsobjekte) gehen fest auf ihre Zeile. Verkauf, Rücklage, Neuobjekte und Zins sind **Sonderposten**, ihre Zeile steuert das Blatt BWA-Zuordnung (unten). Standard wie in der Planungsreferenz: Verkauf und Rücklage im neutralen Ergebnis (1312, 1323), die außerordentlichen Zeilen 1351 und 1352 leer.
+
+**Blatt BWA-Zuordnung (Steuerung und Kontrolle)**
+
+- Je Sonderposten eine BWA-Nr. (gelb, Auswahlliste), daneben Bezeichnung der Zeile, Ertrag/Aufwand, Standard und die Summe über die Planjahre. Abweichung vom Standard ist dunkelgelb, eine ungültige Nr. rot.
+- Zulässig sind die Einzelzeilen 1020, 1090, 1240, 1250, 1260, 1310, 1312, 1322, 1323, 1351, 1352. Die Kostenarten 1100–1220 bleiben den eingelesenen Kosten vorbehalten, Summenzeilen und Steuern sind ausgeschlossen.
+- Jeder Posten ist ergebniswirksam gerechnet (Ertrag +, Aufwand −). Eine Aufwandszeile nimmt ihn mit umgekehrtem Vorzeichen auf. So bleibt das Ergebnis bei jeder Zuordnung gleich, nur der Ausweis ändert sich.
+- „Verkauf ausweisen“: netto bucht nur Veräußerungsgewinn bzw. -verlust. Brutto bucht den Verkaufspreis als Ertrag sowie Verkaufskosten und Buchwertabgang (Gebäude + G+B) als Aufwand; die Summe ist derselbe Gewinn.
+- Posten: Veräußerungsgewinn, -verlust (netto); Veräußerungspreis, -kosten, Buchwertabgang (brutto); Einstellung, Auflösung, Gewinnzuschlag § 6b; Neuobjekte Mieten, weitere Einnahmen, Erhaltung, weitere Ausgaben, Abschreibungen; Zinsertrag und Zinsaufwand (nur Summenblatt).
+- Unter jeder BWA steht der Block „Herleitung Sonderposten“: je Posten die Ziel-Nr. (Spalte D) und der Betrag je Planjahr für diese Kostenstelle. Die Ziel-Nr. steht bewusst nicht in Spalte B, damit ein erneutes Einlesen die BWA-Zeilen nicht verwechselt.
+- Kontrolle je Planjahr: Ergebnis lt. BWA Alle Objekte (1353) gegen Ergebnis vor Verlustvortrag im Blatt Liquidität, Differenz muss 0 sein. Die Prüfung „bwa\_zuordnung“ (Warnung) zählt ungültige Nummern und Jahre mit Differenz.
+- Generator: Modell.bwa\_zuordnung, z. B. {"verkauf": "brutto", "erloes": 1351}.
+
+Benannte Bereiche: zuo\_Verkauf, zuo\_<Posten> (BWA-Nr.), zuo\_Nr, zuo\_Nummern, zuo\_Liste, zuo\_Differenz; bwah\_<Posten> (Herleitung im Summenblatt über die Planjahre).
 
 **Summenblatt „Alle Objekte“**
 
@@ -831,7 +844,7 @@ Verkauf und Rücklage stehen im neutralen Ergebnis (1312, 1323), wie in der Plan
 - Die Kostenarten 1100–1220 sind die Summe der Kostenstellenblätter, 1260 nimmt den Rest der weiteren Ausgaben auf.
 - Die Ist-Spalten sind die Summe der Kostenstellenblätter.
 - Abgleich, im Prüfskript je Jahr geprüft:
-  - Ergebnis vor Steuern (1345) = Ergebnis vor Verlustvortrag im Blatt Liquidität
+  - Ergebnis vor Steuern (1345, bei Standardzuordnung) bzw. 1353 (bei jeder Zuordnung) = Ergebnis vor Verlustvortrag im Blatt Liquidität
   - Vorläufiges Ergebnis (1380) = Ergebnis nach Steuern im Blatt Auswertung
   - Abschreibungen (1240) = AfA im Blatt Liquidität
 
@@ -975,16 +988,20 @@ Die Annahme steht als Formel direkt in der leeren Eingabezelle (blau). Wer einen
 | Feld | Annahme | Parameter |
 | --- | --- | --- |
 | Erhaltung | Miete × Quote | par\_AnnErhQuote (10 %) |
+| Baujahr, Großmaßnahme | siehe „Erhaltung nach Gebäudealter“ unten | |
 | Verkehrswert | (Miete + weitere Einnahmen) × Vervielfältiger | par\_AnnVervielfaeltiger (20) |
 | Verkehrswertanteil Gebäude | Gebäudeanteil | par\_AnnGebaeudeanteil (75 %) |
 | AfA-Satz | AfA-Satz Bestand | par\_AnnAfASatz (2 %) |
 | Kaufjahr | Basisjahr − Jahre seit Kauf | par\_AnnHaltedauer (15) |
 | AK Gebäude | AfA lt. Buchhaltung / AfA-Satz; ohne AfA: Verkehrswert × Gebäudeanteil / (1 + Wertsteigerung)^(Basisjahr − Kaufjahr) | |
 | AK G+B | AK Gebäude × (1 − Gebäudeanteil) / Gebäudeanteil | |
-| Restbuchwert | AK Gebäude × (1 − (Basisjahr − Kaufjahr + 1) × AfA-Satz), mindestens 0 | |
+| Restbuchwert | AK Gebäude × (1 − (Basisjahr − Kaufjahr + 1) × AfA-Satz), mindestens 0; 0, wenn die AfA lt. Buchhaltung 0 ist (abgeschrieben) | |
+| AfA je Jahr (Prognose) | AfA lt. Buchhaltung, auch 0; ohne sie AK Gebäude × AfA-Satz | |
 | Verkaufspreis | Verkehrswert × (1 + Wertsteigerung)^(Verkaufsjahr − Basisjahr) | |
 
-Neues Eingabefeld „AfA Basisjahr lt. Buchhaltung“ (BWA 1240, obj\_AfABWA): Mit ihm trifft die AfA der Prognose die Buchhaltung, auch wenn AK und Kaufjahr fehlen. Weitere Einnahmen und Ausgaben bleiben leer = 0. Pflicht sind nur ObjektID und Miete.
+Neues Eingabefeld „AfA Basisjahr lt. Buchhaltung“ (BWA 1240, obj\_AfABWA): Mit ihm trifft die AfA der Prognose die Buchhaltung, auch wenn AK und Kaufjahr fehlen.
+
+**AfA der Buchhaltung steuert die Prognose** (Feld „AfA je Jahr (Prognose)“, obj\_AfAJahr): Die Prognose schreibt die AfA des Basisjahrs fort, bis der Restbuchwert verbraucht ist; danach 0. Zeigt die Buchhaltung keine AfA (BWA 1240 leer oder 0 im eingelesenen Blatt), gilt das Gebäude als abgeschrieben: AfA 0 und Restbuchwert 0, der ganze Gebäudeerlös ist dann Gewinn. Ohne eingelesene AfA bleibt es bei AK Gebäude × AfA-Satz. Ein eingetippter Wert ersetzt die Annahme, etwa wenn die AfA des Basisjahrs eine Sonder- oder Teil-AfA enthält. Das Feld ist blau, zählt aber nicht als eigene Annahme: es leitet nur aus AfA lt. Buchhaltung bzw. AK und Satz ab, deren Annahmen schon zählen. Vorher wirkte die AfA lt. Buchhaltung nur über die geschätzten AK Gebäude und ging verloren, sobald AK Gebäude eingetragen oder die AfA 0 war. Weitere Einnahmen und Ausgaben bleiben leer = 0. Pflicht sind nur ObjektID und Miete.
 
 Wird eine Annahme gelöscht, ohne einen Wert einzutragen, meldet der Status „Wert fehlt: Annahme gelöscht“. Das Makro „Annahmen wiederherstellen“ füllt leere Felder aus der ausgeblendeten Vorlagezeile (obj\_Vorlage). „Objekt entfernen“ stellt die Annahmen der Zeile selbst wieder her, „Objekt duplizieren“ kopiert Formeln als Formeln.
 
@@ -1001,6 +1018,33 @@ Wird eine Annahme gelöscht, ohne einen Wert einzutragen, meldet der Status „W
 Je Objekt zählen die Spalten „Annahmen (blau)“ und „kritische Annahmen (orange)“ mit (obj\_Annahmen, obj\_Kritisch), je Verkauf „Preis angenommen“ (vk\_PreisAnnahme). Das Blatt Prüfung meldet:
 - **Warnung:** Verkauf mit kritischen Annahmen.
 - **Hinweis:** Objekte mit Annahmen. Er ersetzt den früheren Hinweis „ohne Verkehrswert“.
+
+**Erhaltung nach Gebäudealter und Großmaßnahmen**
+
+Anlass: Halten lag im Abnahmefall vorn, unter anderem weil das Neuobjekt mehr Erhaltung trug (1 % des Kaufpreises, 20 % der Miete) als das 20 Jahre alte Objekt (13 % der Miete). Alte Gebäude werden mit den Jahren teurer, Neubauten sind anfangs fast wartungsfrei, und große Einzelmaßnahmen fallen nur beim Halten an.
+
+| Baustein | Rechnung | Parameter (Standard) |
+| --- | --- | --- |
+| Alterung Bestand | Erhaltung × (1 + Alterung)^(Jahre über dem Schwellenalter seit dem Basisjahr), zusätzlich zur Erhaltungssteigerung | par\_ErhAlterungAb (30), par\_ErhAlterung (1,5 %) |
+| Baujahr | Eingabe; leer: Basisjahr − Gebäudealter | par\_AnnGebaeudealter (40) |
+| Großmaßnahme Jahr | Eingabe (0 = keine); leer: Baujahr + Alter, bei schon älteren Gebäuden erstes Prognosejahr + Vorlauf; jenseits des Rasters 0 | par\_SanAlter (50), par\_SanVorlauf (2) |
+| Großmaßnahme Betrag | Eingabe in heutigen Preisen; leer: Verkehrswert × Gebäudeanteil × Quote; wächst mit der Erhaltungssteigerung | par\_SanQuote (15 %, 0 % schaltet die Annahme ab) |
+| Neuobjekt Anlauf | Erhaltung in den ersten Jahren nach dem Kauf × Faktor | par\_NeuErhAnlaufJahre (10), par\_NeuErhAnlaufFaktor (50 %) |
+| Erhaltung Neuobjekt | Standard der Annahme gesenkt | par\_AnnNeuErhQuote 0,5 % statt 1 % |
+
+- **Großmaßnahme als Erhaltungsaufwand:** Sie zählt als sofort abziehbarer Erhaltungsaufwand im Jahr der Maßnahme (BWA 1250).
+  - Ob sie Herstellungskosten sind (Standardhebung) oder anschaffungsnaher Aufwand, ist fachlich zu prüfen. Aktivierung mit AfA ist nicht abgebildet.
+  - Höhere Miete oder ein höherer Wert nach der Maßnahme sind nicht abgebildet.
+- **Neue Prognosespalte prg\_ErhaltungHalten:** die Erhaltung, als würde nie verkauft. Die Baseline und der Ausgangsfall im Sonderbereich rechnen mit ihr, der Plan nur bis zum Verkaufsjahr. Ein Verkauf vor der Großmaßnahme erspart sie also dem Plan, nicht dem Halten.
+- **Prüfskript:** Fälle vor dieser Logik rechnen ohne Alterung, Anlaufminderung und Großmaßnahmen (OHNE\_ALTERUNG), damit ihre Handrechnungen gelten. Das Testobjekt hat Baujahr 2007 und keine Großmaßnahme.
+
+Wirkung im Abnahmefall (Endvermögen 2046, § 6b-Kette minus Halten):
+
+| Variante | vorher | mit Alterslogik |
+| --- | --- | --- |
+| wie erfasst (Erhaltung neu 1 %) | −154.246 | −85.479 |
+| Erhaltung neu 0,5 % | −40.167 | −2.592 |
+| Altobjekt Baujahr 1975, Großmaßnahme 2029, Erhaltung neu 0,5 % | | +135.586 |
 
 **Reinvestition aus dem Verkauf**
 
@@ -1051,6 +1095,8 @@ Alle Liniendiagramme haben dieselbe Achsenformatierung, damit sich in Excel nich
 
 **Prüfung im Prüfskript:**
 - ein Objekt nur mit Miete, mit und ohne AfA lt. Buchhaltung, gegen die Handrechnung;
+- AfA lt. Buchhaltung abweichend von AK × Satz und 0 (abgeschrieben), Auslaufen am Restbuchwert;
+- BWA-Zuordnung brutto mit außerordentlichen Zeilen und mit ungültiger Nr.;
 - ein Verkauf ohne Preis mit automatischer Reinvestition;
 - die Annahmen des Schnellchecks;
 - das Wiederherstellen per Makro;

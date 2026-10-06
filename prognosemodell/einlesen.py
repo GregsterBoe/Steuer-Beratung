@@ -212,7 +212,7 @@ def zusammenfuehren(stammdaten: list, laufende: list) -> list:
     for lw in laufende:
         felder = dict(miete=lw.miete, weitere_einnahmen=lw.weitere_einnahmen,
                       erhaltung=lw.erhaltung, weitere_ausgaben=lw.weitere_ausgaben,
-                      afa_bwa=lw.abschreibung or None)
+                      afa_bwa=lw.abschreibung)   # 0 = keine AfA mehr
         if lw.objekt_id in nach_id:
             alt = nach_id[lw.objekt_id]
             neu = dataclasses.replace(alt, name=alt.name or lw.name, **felder)

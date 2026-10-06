@@ -838,7 +838,8 @@ SCHRITTE = [
 # Blattreiter: gelb Eingabe, grau Rechnung, blau Ausgabe, grün Kontrolle
 REITER = {"Start": "305496", "Parameter": "FFC000", "Objekte": "FFC000", "Verkäufe": "FFC000",
           "Neuobjekte": "FFC000", "Prognose": "A5A5A5", "Rücklagen": "A5A5A5",
-          "Liquidität": "A5A5A5", "Prüfung": "70AD47", "Varianten": "70AD47"}
+          "Liquidität": "A5A5A5", "Prüfung": "70AD47", "Varianten": "70AD47",
+          "BWA-Zuordnung": "FFC000"}
 FARBE_AUSGABE = "5B9BD5"
 # im Schnellcheck ausgeblendet; über Rechtsklick auf einen Reiter wieder einblendbar
 SCHNELL_AUSGEBLENDET = ("Prognose", "Rücklagen", "Liquidität", "Auswertung")
@@ -959,7 +960,8 @@ def _blatt_start(wb, modell: Modell) -> None:
     _link(ws.cell(row=zeile, column=2, value="ändern im Blatt Parameter"), "Parameter")
     zeile += 1
     for p in PARAMETER:
-        if p.name.startswith("par_Ann") or p.name in ("par_Steuersatz", "par_Mietsteig",
+        if p.name.startswith(("par_Ann", "par_ErhAlterung", "par_NeuErh", "par_San")) \
+                or p.name in ("par_Steuersatz", "par_Mietsteig", "par_Erhaltsteig",
                                                       "par_Wertsteig", "par_Alternativrendite"):
             ws.cell(row=zeile, column=1, value=p.bezeichnung)
             c = ws.cell(row=zeile, column=4, value=f"={p.name}")
