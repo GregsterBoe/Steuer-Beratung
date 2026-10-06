@@ -14,7 +14,7 @@
 
 | Eingabe | Rechnung | Ausgabe | Kontrolle | BWA |
 | --- | --- | --- | --- | --- |
-| Parameter, Objekte, Verkäufe, Neuobjekte | Prognose, Rücklagen, Liquidität | Übersicht, Vergleich, Auswertung | Prüfung, Varianten | Alle Objekte, je Kostenstelle ein Blatt, Verkauf und Kauf |
+| Parameter, Objekte, Verkäufe, Neuobjekte | Prognose, Rücklagen, Liquidität | Start, Übersicht, Vergleich, Auswertung | Prüfung, Varianten | Alle Objekte, je Kostenstelle ein Blatt, Verkauf und Kauf |
 
 ## Etappen
 
@@ -41,6 +41,7 @@ Stand: Etappen 1 bis 9 sind umgesetzt.
 - Einleseschicht und Vorlage für die Kostenstellenblätter (DATEV-BWA)
 - Prüfungsblatt mit allen Plausibilitätsprüfungen als Formeln, VBA-Steuerung als .xlsm
 - Ausgabe im DATEV-BWA-Format je Kostenstelle mit Summenblatt, Sonderbereich Verkauf und Kauf
+- Startblatt mit Handlungsempfehlung, Auffülllogik für fehlende Daten mit Farblogik, Schnellcheck-Mappe
 
 ## Nutzung
 
@@ -49,6 +50,7 @@ pip install -r requirements.txt
 python -m prognosemodell             # erzeugt ausgabe/Prognosemodell_VV.xlsx (mit Testobjekt)
 python -m prognosemodell --ohne-testdaten
 python -m prognosemodell --makros    # .xlsm mit VBA-Steuerung (braucht LibreOffice beim Bauen)
+python -m prognosemodell --schnellcheck --kostenstellen Kostenstellen.xlsx   # schlanke Mappe ausgabe/Schnellcheck_VV.xlsx
 python -m prognosemodell --kostenstellen Kostenstellen.xlsx --ausgabe Ordner/Prognose.xlsx   # laufende Werte je Blatt einlesen; nur Ordner = Standardname darin
 python -m pruefung.pruefen           # rechnet per LibreOffice headless und prüft gegen Sollwerte
 python -m pruefung.pruefen "Etappe 9"  # nur Fälle, deren Name den Text enthält
@@ -60,7 +62,7 @@ Das Prüfskript und `--makros` brauchen LibreOffice mit Calc und der Python-UNO-
 
 Zielformat der Eingabe ist die DATEV-BWA-Kostenstellenblattsammlung; `vorlagen/Kostenstellen_BWA_Vorlage.xlsx` zeigt das Layout mit erfundenen Werten. Als Jahresspalte gilt ein Kopf wie 2026, „Jahr 2026“ oder „Plan 2027“; ein Summenblatt „Alle Objekte“ wird übersprungen. Die Ergebnisse stehen wieder in dieser Struktur, siehe unten.
 
-`--kostenstellen` überspringt jedes Blatt, das nicht im Kostenstellenformat ist (kein „Nr.“ in B4, keine Kostenstelle in B2 oder keine Spalte des Basisjahrs in Zeile 4), etwa Annahmen oder Übersichten. Jedes übersprungene Blatt nennt es mit Grund in der Ausgabe. Je Kostenstellenblatt liest es B2 (Kostenstelle = ObjektID), C2 (Objektname) und aus der Spalte des Basisjahrs die BWA-Zeilen 1020 (Miete), 1090 (weitere Einnahmen), 1250 (Erhaltung) sowie 1100–1220 und 1260 (weitere Ausgaben). Die Datei muss in Excel gespeichert sein, damit berechnete Werte vorliegen. Steuerliche Stammdaten (AK, Kaufjahr, AfA, Restbuchwert) kommen nicht aus diesen Blättern; solange sie fehlen, meldet die Statusspalte „Pflichtfeld fehlt“.
+`--kostenstellen` überspringt jedes Blatt, das nicht im Kostenstellenformat ist (kein „Nr.“ in B4, keine Kostenstelle in B2 oder keine Spalte des Basisjahrs in Zeile 4), etwa Annahmen oder Übersichten. Jedes übersprungene Blatt nennt es mit Grund in der Ausgabe. Je Kostenstellenblatt liest es B2 (Kostenstelle = ObjektID), C2 (Objektname) und aus der Spalte des Basisjahrs die BWA-Zeilen 1020 (Miete), 1090 (weitere Einnahmen), 1250 (Erhaltung) sowie 1100–1220 und 1260 (weitere Ausgaben). Die Datei muss in Excel gespeichert sein, damit berechnete Werte vorliegen. Dazu liest es 1240 als „AfA Basisjahr lt. Buchhaltung“. Steuerliche Stammdaten (AK, Kaufjahr, AfA-Satz, Restbuchwert) kommen nicht aus diesen Blättern; solange sie fehlen, rechnet die Mappe mit Annahmen (siehe unten).
 
 Das Prognoseblatt hat je Objektzeile einen Block mit 20 Jahreszeilen: Miete, weitere Einnahmen, Erhaltung und weitere Ausgaben wachsen mit ihren Steigerungsraten. Die AfA beträgt AK Gebäude × Satz, höchstens aber den Restbuchwert. Danach sind AfA und Buchwert null.
 
@@ -69,7 +71,7 @@ Das Blatt **Übersicht** öffnet als erstes. Es zeigt von 2026 bis 2046 den Wert
 - **Baseline:** alles halten, nichts verkaufen.
 - **Plan:** mit den Verkäufen und Neuobjekten aus den Blättern Verkäufe und Neuobjekte.
 
-Der Wert ist der Verkehrswert aus dem Objektblatt, fortgeschrieben mit der Wertsteigerung vom Parameterblatt. Objekte ohne Verkehrswert zählen mit 0, die Übersicht zeigt ihre Anzahl rot an. Ein Verkauf gilt zum Jahresende. Miete und AfA laufen im Verkaufsjahr noch, ab dem Folgejahr ist das Objekt inaktiv. Der Plan enthält auch die Neuobjekte. Das Gesamtvermögen ist der Verkehrswert plus die kumulierte Liquidität nach Steuern, abzüglich der latenten Steuer auf stille Reserven und Rücklage. So stehen Halten und Verkaufen vergleichbar nebeneinander.
+Der Wert ist der Verkehrswert aus dem Objektblatt, fortgeschrieben mit der Wertsteigerung vom Parameterblatt. Fehlt der Verkehrswert, gilt die Annahme Jahresmiete × Vervielfältiger; die Übersicht zählt die Objekte mit Annahmen. Ein Verkauf gilt zum Jahresende. Miete und AfA laufen im Verkaufsjahr noch, ab dem Folgejahr ist das Objekt inaktiv. Der Plan enthält auch die Neuobjekte. Das Gesamtvermögen ist der Verkehrswert plus die kumulierte Liquidität nach Steuern, abzüglich der latenten Steuer auf stille Reserven und Rücklage. So stehen Halten und Verkaufen vergleichbar nebeneinander.
 
 Im Blatt **Verkäufe** stehen je Verkauf ObjektID, Jahr, Preis, Kosten, optional der Anteil G+B laut Kaufvertrag und § 6b ja/nein. Daraus rechnet das Blatt:
 - den Gebäudebuchwert am Ende des Verkaufsjahrs aus der Prognose
@@ -127,7 +129,38 @@ Die Ergebnisse stehen auch im **DATEV-BWA-Format** (Projektplan, Abschnitt 18):
 - **Summenblatt „Alle Objekte“:** Es trägt dazu Zinsertrag und Steuer und stimmt mit Liquidität und Auswertung überein.
 - **Blatt Verkauf und Kauf:** je Verkauf eine Ergebnissicht für die Berichterstattung und eine Detailsicht. Die Ergebnissicht zeigt Erlös, Reinvestition, Kapitalanlage, Übertrag § 6b und den Vergleich Halten gegen Alternative im ersten vollen Jahr. Die Detailsicht zeigt die Einzelauflistung nach G+B und Gebäude und die Planung. Dazu kommt je Neuobjekt die Detailsicht des Kaufs.
 
-Gelb = Eingabe, grau = Formel. Die Statusspalte im Objektblatt meldet fehlende Pflichtfelder, doppelte IDs, ein Kaufjahr nach dem Basisjahr und einen Restbuchwert über den AK.
+**Startblatt und Datenlage**
+
+Das Blatt **Start** öffnet als erstes. Es zeigt:
+- die Handlungsempfehlung: die Option mit dem höchsten Endvermögen nach latenter Steuer (halten, § 6b-Kette, sofort versteuern und reinvestieren, sofort versteuern und anlegen), mit dem Vorsprung gegenüber Halten;
+- den Wert der § 6b-Kette und den tiefsten Liquiditätsstand;
+- die Belastbarkeit des Ergebnisses;
+- eine Anleitung mit Links, die Farblegende und die zentralen Annahmen.
+
+Fehlende Daten füllt eine **Auffülllogik**: Die Annahme steht als Formel in der leeren Eingabezelle, ihre Sätze stehen zentral auf dem Parameterblatt. Ein eingetippter Wert ersetzt sie.
+
+| Feld | Annahme |
+| --- | --- |
+| Verkehrswert | Miete × 20 |
+| Gebäudeanteil | 75 % |
+| AfA-Satz | 2 % |
+| Kaufjahr | vor 15 Jahren |
+| AK Gebäude | AfA lt. Buchhaltung / Satz |
+| Restbuchwert | aus AK und Kaufjahr |
+| Erhaltung | 10 % der Miete |
+| Verkaufspreis | Verkehrswert fortgeschrieben |
+
+„reinvestieren = ja“ im Blatt Verkäufe legt ein Neuobjekt aus den Annahmen an. Pflicht sind nur ObjektID und Miete.
+
+Farben der Eingabezellen:
+- **rot:** Pflicht fehlt oder Annahme gelöscht
+- **orange:** Annahme bei einem verkauften Objekt; bestimmt Gewinn und Rücklage, daher Warnung
+- **blau:** Annahme
+- **grün:** aus der Buchhaltung eingelesen
+- **gelb:** händisch eingetragen
+- **grau:** Formel
+
+Der **Schnellcheck** (`--schnellcheck`) ist dieselbe Rechnung mit schlanker Ansicht: § 6b und Reinvestition stehen als Annahme auf ja, die steuerlichen Stammdaten sind zugeklappt, die Rechenblätter ausgeblendet. Mit ObjektID und Miete je Objekt und einem geplanten Verkauf liefert er eine erste Empfehlung. Die Statusspalte im Objektblatt meldet fehlende Pflichtfelder, doppelte IDs, ein Kaufjahr nach dem Basisjahr und einen Restbuchwert über den AK.
 
 Details, Formeln und Testfälle stehen in [docs/Projektplan.md](docs/Projektplan.md).
 

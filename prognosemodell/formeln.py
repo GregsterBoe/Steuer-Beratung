@@ -6,7 +6,7 @@ Excel zeigt sie in der deutschen Oberfläche automatisch als WENN, ZÄHLENWENN u
 
 from openpyxl.utils import get_column_letter
 
-from .modelle import (AFA_DEGRESSIV, FEHLER, NEU_FELDER, NEU_SPALTEN, OBJEKT_FELDER, PROGNOSE_SPALTEN,
+from .modelle import (AFA_DEGRESSIV, FEHLER, NEU_FELDER, STATUS_ANNAHME_GELOESCHT, NEU_SPALTEN, OBJEKT_FELDER, PROGNOSE_SPALTEN,
                       RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN, STATUS_6B_UNZULAESSIG,
                       STATUS_OK, SZ_A, SZ_B, SZ_BASELINE, SZENARIEN, VERKAUF_FELDER,
                       VERKAUF_SPALTEN, WARNUNG, Szenario, aus_spalten, liq_spalten)
@@ -20,21 +20,74 @@ def spalte(key: str) -> str:
     raise KeyError(key)
 
 
+ISFORMEL = "_xlfn.ISFORMULA"   # Excel 2013+, in der Datei mit Präfix
+
+
+def _gefuellt(zellen: list) -> str:
+    """Anzahl nicht leerer Zellen; zählt Formeln mit Ergebnis "" anders als COUNTA nicht mit."""
+    return "+".join(f'({z}<>"")' for z in zellen)
+
+
+def annahme_objekt(key: str, zeile: int):
+    """Annahmeformel für ein leeres Eingabefeld des Objektblatts; None = keine Annahme.
+
+    Die Formel steht in der Eingabezelle selbst (blau) und wird durch Eintippen ersetzt.
+    """
+    def c(k):
+        return f"${spalte(k)}{zeile}"
+
+    def n(k):
+        return f"N({c(k)})"
+
+    ausdruck = {
+        "erhaltung": f"{n('miete')}*par_AnnErhQuote",
+        "verkehrswert": f"({n('miete')}+{n('weitere_einnahmen')})*par_AnnVervielfaeltiger",
+        "vk_quote_gebaeude": "par_AnnGebaeudeanteil",
+        "afa_satz": "par_AnnAfASatz",
+        "kaufjahr": "par_Basisjahr-par_AnnHaltedauer",
+        # aus der AfA der Buchhaltung, sonst aus dem Verkehrswert, abgezinst bis zum Kauf
+        "ak_gebaeude": (f"IF(AND({n('afa_bwa')}>0,{n('afa_satz')}>0),"
+                        f"{n('afa_bwa')}/{n('afa_satz')},"
+                        f"{n('verkehrswert')}*{n('vk_quote_gebaeude')}"
+                        f"/(1+par_Wertsteig)^(par_Basisjahr-{n('kaufjahr')}))"),
+        "ak_gub": (f"IF({n('vk_quote_gebaeude')}>0,{n('ak_gebaeude')}"
+                   f"*(1-{n('vk_quote_gebaeude')})/{n('vk_quote_gebaeude')},0)"),
+        # volle Jahres-AfA vom Kaufjahr bis zum Ende des Basisjahrs
+        "restbuchwert": (f"MAX({n('ak_gebaeude')}*(1-(par_Basisjahr-{n('kaufjahr')}+1)"
+                         f"*{n('afa_satz')}),0)"),
+    }.get(key)
+    if ausdruck is None:
+        return None
+    return f'=IF({c("objekt_id")}="","",{ausdruck})'
+
+
 def status_objekt(zeile: int) -> str:
     """Plausibilitätsstatus je Objektzeile; leer, solange keine ObjektID steht."""
     id_ = f"${spalte('objekt_id')}{zeile}"
     pflicht = [f"${spalte(f.key)}{zeile}" for f in OBJEKT_FELDER if f.pflicht]
+    annahmen = [f"${spalte(f.key)}{zeile}" for f in OBJEKT_FELDER if f.annahme]
     kaufjahr = f"${spalte('kaufjahr')}{zeile}"
     restbw = f"${spalte('restbuchwert')}{zeile}"
     ak_geb = f"${spalte('ak_gebaeude')}{zeile}"
     return (
         f'=IF({id_}="","",'
-        f'IF(COUNTA({",".join(pflicht)})<{len(pflicht)},"Pflichtfeld fehlt",'
+        f'IF({_gefuellt(pflicht)}<{len(pflicht)},"Pflichtfeld fehlt",'
+        f'IF({_gefuellt(annahmen)}<{len(annahmen)},"{STATUS_ANNAHME_GELOESCHT}",'
         f'IF(COUNTIF(obj_ID,{id_})>1,"ObjektID doppelt",'
         f'IF({kaufjahr}>par_Basisjahr,"Kaufjahr nach Basisjahr",'
         f'IF({restbw}>{ak_geb},"Restbuchwert > AK Gebäude",'
-        f'"OK")))))'
+        f'"OK"))))))'
     )
+
+
+def annahmen_objekt(zeile: int, nur_kritisch: bool = False) -> str:
+    """Anzahl der Felder mit Annahme (Formel in der Eingabezelle); kritisch nur bei Verkauf."""
+    id_ = f"${spalte('objekt_id')}{zeile}"
+    felder = [f for f in OBJEKT_FELDER if f.annahme and (f.kritisch or not nur_kritisch)]
+    summe = "+".join(f"{ISFORMEL}(${spalte(f.key)}{zeile})" for f in felder)
+    if nur_kritisch:
+        summe = f"IF(COUNTIF(vk_ID,{id_})>0,{summe},0)"
+    return f'=IF({id_}="","",{summe})'
 
 
 # --- Prognosematrix (Etappe 2, Projektplan Abschnitt 8) ---
@@ -228,7 +281,7 @@ def verkauf_zeile(zeile: int) -> dict:
         "vorbesitz": wenn(f"{_v('jahr', zeile)}-{obj('obj_Kaufjahr')}"),
         "buchwert_geb": wenn(f"SUMIFS(prg_Buchwert,prg_ID,{id_},prg_Jahr,{_v('jahr', zeile)})"),
         "ak_gub": wenn(obj("obj_AKGuB")),
-        "nettoerloes": wenn(f"{_v('preis', zeile)}-{_v('kosten', zeile)}"),
+        "nettoerloes": wenn(f"N({_v('preis', zeile)})-N({_v('kosten', zeile)})"),
         # Kaufvertrag vor Verkehrswert; ohne beides leer, der Status meldet es
         "quote_gub": wenn(f'IF({quote_vertrag}<>"",{quote_vertrag},'
                           f'IF({obj("obj_VKQuoteGeb")}="","",1-{obj("obj_VKQuoteGeb")}))'),
@@ -393,15 +446,15 @@ def neu_zeile(zeile: int) -> dict:
         return f"SUMIFS({darueber(key)},{darueber('quelle')},{q})"
 
     moeglich = _uebertragung_moeglich(zeile)
-    ak = f"({_n('kaufpreis', zeile)}+{_n('nebenkosten', zeile)})"
+    ak = f"(N({_n('kaufpreis', zeile)})+N({_n('nebenkosten', zeile)}))"
     ue1, ue2 = _n("ue1", zeile), _n("ue2", zeile)
     return {
-        "gueltig": wenn(f"IF(AND(COUNTA({','.join(pflicht)})={len(pflicht)},"
+        "gueltig": wenn(f"IF(AND({_gefuellt(pflicht)}={len(pflicht)},"
                         f"COUNTIF(ne_ID,{id_})=1,COUNTIF(obj_ID,{id_})=0,"
                         f"{kj}>=par_Startjahr,{kj}<=par_Endjahr),1,0)"),
         # Nebenkosten im Verhältnis des Kaufpreises aufgeteilt und aktiviert
-        "ak_gub_neu": wenn(f"{ak}*{_n('anteil_gub', zeile)}"),
-        "ak_geb_neu": wenn(f"{ak}*(1-{_n('anteil_gub', zeile)})"),
+        "ak_gub_neu": wenn(f"{ak}*N({_n('anteil_gub', zeile)})"),
+        "ak_geb_neu": wenn(f"{ak}*(1-N({_n('anteil_gub', zeile)}))"),
         "rl_geb": wenn(f"IF({moeglich},INDEX(rl_Geb,MATCH({q},rl_ID,0))-{verbraucht('ue1')},0)"),
         "rl_gub": wenn(f"IF({moeglich},INDEX(rl_GuB,MATCH({q},rl_ID,0))"
                        f"-{verbraucht('ue2')}-{verbraucht('ue3')},0)"),
@@ -422,7 +475,7 @@ def status_neu(zeile: int) -> str:
     rl = f"MATCH({q},rl_ID,0)"
     return (
         f'=IF({id_}="","",'
-        f'IF(COUNTA({",".join(pflicht)})<{len(pflicht)},"Pflichtfeld fehlt",'
+        f'IF({_gefuellt(pflicht)}<{len(pflicht)},"Pflichtfeld fehlt",'
         f'IF(COUNTIF(ne_ID,{id_})>1,"NeuID doppelt",'
         f'IF(COUNTIF(obj_ID,{id_})>0,"NeuID wie Bestandsobjekt",'
         f'IF(OR({kj}<par_Startjahr,{kj}>par_Endjahr),"Kaufjahr außerhalb Raster",'
@@ -642,7 +695,8 @@ def pruefung_anzahl() -> dict:
         "grundstueckshandel": f"=SUMPRODUCT({gueltig}*(({im_fenster})>par_DOGrenze))",
         "frist_ende": '=SUMPRODUCT(--(rl_Hinweis<>""))',
         "liquiditaet": "=SUMPRODUCT(--(liq_Kum<-0.005))",
-        "verkehrswert": f'=SUMPRODUCT((obj_Status="{STATUS_OK}")*(obj_Verkehrswert=""))',
+        "kritisch": '=COUNTIF(obj_Kritisch,">0")+SUM(vk_PreisAnnahme)',
+        "annahmen": '=COUNTIF(obj_Annahmen,">0")',
     }
 
 
@@ -658,3 +712,60 @@ def pruefung_summen() -> dict:
         "pr_Gesamt": (f'=IF(pr_Fehler>0,pr_Fehler&" {FEHLER}",'
                       f'IF(pr_Warnungen>0,pr_Warnungen&" Warnung(en)","{STATUS_OK}"))'),
     }
+
+
+def annahme_verkauf(key: str, zeile: int, schnellcheck: bool):
+    """Annahmeformel einer Verkaufszeile; § 6b und Reinvestition nur im Schnellcheck."""
+    id_, jahr = _v("objekt_id", zeile), _v("jahr", zeile)
+    if key == "preis":
+        wert = f"INDEX(obj_Verkehrswert,MATCH({id_},obj_ID,0))*(1+par_Wertsteig)^({jahr}-par_Basisjahr)"
+        return f'=IF(OR({id_}="",{jahr}=""),"",IFERROR({wert},""))'
+    if schnellcheck and key in ("nutzung_6b", "reinvest"):
+        return f'=IF({id_}="","","ja")'
+    return None
+
+
+def preis_annahme(zeile: int) -> str:
+    """1, solange der Verkaufspreis eine Annahme ist (Formel statt Eingabe)."""
+    id_ = _v("objekt_id", zeile)
+    return f'=IF({id_}="","",IF({ISFORMEL}({_v("preis", zeile)}),1,0))'
+
+
+def annahme_neu(key: str, zeile: int):
+    """Reinvestition aus der Verkaufszeile gleicher Nummer, wenn dort reinvestieren = ja.
+
+    Kaufjahr, Kaufpreis und Quelle kommen aus dem Verkauf, die übrigen Felder aus den
+    Annahmen des Parameterblatts. Eine Eingabe in der Zelle ersetzt die Formel.
+    """
+    n = zeile - 1
+
+    def vk(name):
+        return f"INDEX({name},{n})"
+
+    status = vk("vk_Status")
+    an = (f'IFERROR(AND({vk("vk_Reinvest")}="ja",OR({status}="{STATUS_OK}",'
+          f'{status}="{STATUS_6B_UNZULAESSIG}"),'
+          f'{vk("vk_Jahr")}+par_AnnReinvestJahre<=par_Endjahr),FALSE)')
+    eigen = f'{_n("neu_id", zeile)}=""'
+    aus_verkauf = {
+        "neu_id": f'"NEU-"&{vk("vk_ID")}',
+        "name": f'"Reinvestition aus "&{vk("vk_ID")}',
+        "kaufjahr": f'{vk("vk_Jahr")}+par_AnnReinvestJahre',
+        "kaufpreis": (f'N({vk("vk_Nettoerloes")})*par_AnnReinvestQuote'
+                      f'/(1+par_AnnNeuNebenkosten)'),
+    }
+    annahmen = {
+        "anteil_gub": "par_AnnNeuAnteilGuB",
+        "nebenkosten": f'N({_n("kaufpreis", zeile)})*par_AnnNeuNebenkosten',
+        "afa_satz": "par_AnnNeuAfASatz",
+        "afa_methode": "par_AnnNeuAfAMethode",
+        "mietrendite": "par_AnnNeuMietrendite",
+        "erhaltungsquote": "par_AnnNeuErhQuote",
+    }
+    if key in aus_verkauf:
+        return f'=IF({an},{aus_verkauf[key]},"")'
+    if key == "quelle":
+        return f'=IF(AND({an},{vk("vk_6b")}="ja"),"RL-"&{vk("vk_ID")},"")'
+    if key in annahmen:
+        return f'=IF({eigen},"",{annahmen[key]})'
+    return None

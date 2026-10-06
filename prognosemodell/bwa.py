@@ -333,8 +333,10 @@ def _vorgang(b: _Block, n: int) -> None:
              f'=IF(OR({{status}}="{GUELTIG[0]}",{{status}}="{GUELTIG[1]}"),1,0)', fmt="0")
     b.zeile_("jahr", "Verkaufsjahr (Verkauf zum Jahresende)", ok(vk("vk_Jahr")), fmt=FMT_JAHR)
     b.zeile_("rl", "RücklageID (§ 6b)", ok(f'IF({vk("rl_ID")}="","",{vk("rl_ID")})'), fmt="@")
+    # Kaufjahr&"0" / 10: leere Annahmeformeln ("") zählen als 0 statt #WERT; geht in
+    # jeder Excel-Version ohne Matrixformel (MAXIFS erst ab Excel 2019)
     letzter_kauf = (f'IF({{rl}}="",0,SUMPRODUCT(MAX((ne_Quelle={{rl}})'
-                    f'*(ne_Status="{STATUS_OK}")*ne_Kaufjahr)))')
+                    f'*(ne_Status="{STATUS_OK}")*(ne_Kaufjahr&"0")/10)))')
     b.zeile_("x", "Vergleichsjahr: erstes volles Jahr nach Verkauf und Kauf",
              ok(f"MIN(MAX({{jahr}},{letzter_kauf})+1,par_Endjahr)"), fmt=FMT_JAHR)
     b.leer()

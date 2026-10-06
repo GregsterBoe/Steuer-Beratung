@@ -5,6 +5,8 @@ Option Explicit
 ' Jede Objektzeile hat in der Prognose einen festen Block mit Formeln. Die Makros
 ' schreiben nur in die Eingabezellen (obj_Eingabe) und fuegen nie Zeilen ein oder
 ' loeschen sie; so bleiben alle Formeln und benannten Bereiche intakt.
+' Leere Eingabezellen tragen Annahmeformeln (blau); die Vorlage obj_Vorlage stellt
+' sie wieder her, wenn sie geloescht wurden.
 
 ' Position der ObjektID (1 = erste Objektzeile), 0 = nicht vorhanden
 Public Function ObjektPosition(ByVal objektId As String) As Long
@@ -61,7 +63,8 @@ Public Function ObjektDuplizieren(ByVal quelleId As String, ByVal neueId As Stri
     End If
     ziel = ObjektAnlegen(neueId)
     Set eingabe = Bereich("obj_Eingabe")
-    eingabe.Rows(ziel).Value = eingabe.Rows(quelle).Value
+    ' FormulaR1C1: Annahmeformeln bleiben Formeln und beziehen sich auf die neue Zeile
+    eingabe.Rows(ziel).FormulaR1C1 = eingabe.Rows(quelle).FormulaR1C1
     eingabe.Cells(ziel, 1).Value = Trim$(neueId)
     ObjektDuplizieren = ziel
 End Function
@@ -74,6 +77,34 @@ Public Sub ObjektEntfernen(ByVal objektId As String)
         Err.Raise vbObjectError + 516, "modObjekte", "ObjektID " & objektId & " nicht gefunden."
     End If
     Bereich("obj_Eingabe").Rows(pos).ClearContents
+    AnnahmenWiederherstellen pos
+End Sub
+
+' Leere Eingabezellen mit Annahmeformel aus der Vorlagezeile fuellen; pos = 0: alle
+' Objektzeilen. Liefert die Anzahl wiederhergestellter Zellen.
+Public Function AnnahmenWiederherstellen(Optional ByVal pos As Long = 0) As Long
+    Dim eingabe As Range, vorlage As Range, i As Long, j As Long, von As Long, bis As Long
+    Set eingabe = Bereich("obj_Eingabe")
+    Set vorlage = Bereich("obj_Vorlage")
+    von = 1: bis = eingabe.Rows.Count
+    If pos > 0 Then von = pos: bis = pos
+    For i = von To bis
+        For j = 1 To vorlage.Columns.Count
+            If vorlage.Cells(1, j).HasFormula And Not eingabe.Cells(i, j).HasFormula Then
+                If CStr(eingabe.Cells(i, j).Value) = "" Then
+                    eingabe.Cells(i, j).FormulaR1C1 = vorlage.Cells(1, j).FormulaR1C1
+                    AnnahmenWiederherstellen = AnnahmenWiederherstellen + 1
+                End If
+            End If
+        Next j
+    Next i
+End Function
+
+Public Sub AnnahmenWiederherstellenStarten()
+    Dim n As Long
+    n = AnnahmenWiederherstellen()
+    MsgBox n & Txt(" leere Felder wieder mit Annahmen gef{ue}llt (blau)."), vbInformation, _
+        "Prognosemodell"
 End Sub
 
 ' Prognosezeilen ohne ObjektID (leere Objekt- und Neuobjektzeilen) aus- oder einblenden
