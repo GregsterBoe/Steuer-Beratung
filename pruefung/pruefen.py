@@ -27,6 +27,9 @@ from prognosemodell.testdaten import testobjekt
 from prognosemodell.vorlagen import erstelle_vorlage
 
 TOLERANZ = 0.01  # ein Cent
+# Fälle vor der Alterslogik: Sollwerte ohne Alterung, Anlaufminderung und Großmaßnahmen.
+# Gilt für jeden Fall, dessen Name nicht mit „Erhaltung“ beginnt.
+OHNE_ALTERUNG = {"par_ErhAlterung": 0, "par_NeuErhAnlaufFaktor": 1, "par_SanQuote": 0}
 FEHLT = object()        # Makro ohne Rückgabewert: nur prüfen, dass es fehlerfrei läuft
 AUSGEBLENDET = "Zeile ausgeblendet"  # statt Bereichsname: Zeilennummer im Blatt Prognose
 
@@ -868,8 +871,8 @@ def faelle():
             ("SB1:Mieten", 1, 63_672.48),
             ("SB1:Mieten", 2, 61_200),
             ("SB1:Zinsertrag Kapitalanlage", 2, 6_000),
-            ("SB1:./. Erhaltung", 1, -8_615.125),
-            ("SB1:./. Erhaltung", 2, -12_300),
+            ("SB1:./. Erhaltung (mit Alterung und Großmaßnahme)", 1, -8_615.125),
+            ("SB1:./. Erhaltung (mit Alterung und Großmaßnahme)", 2, -12_300),
             ("SB1:./. Abschreibungen (Steuerbilanz)", 1, -16_000),
             ("SB1:./. Abschreibungen (Steuerbilanz)", 2, -14_400),
             ("SB1:= vorläufiges Ergebnis", 1, 39_057.355),
@@ -948,7 +951,7 @@ def faelle():
             ("obj_AKGuB", 1, 266_666.67),
             ("obj_Restbuchwert", 1, 544_000),
             ("obj_Status", 0, "OK"),
-            ("obj_Annahmen", 0, 8),
+            ("obj_Annahmen", 0, 11),   # 8 Stammdaten, Baujahr, Großmaßnahme Jahr und Betrag
             ("obj_Kritisch", 1, 0),
             ("prg_AfA", prg(2, 2027), 16_000),
             ("ueb_MitAnnahmen", 0, 2),
@@ -995,6 +998,54 @@ def faelle():
             ("ne_AfAMethode", 0, "linear"),
             ("ne_Mietrendite", 0, 0.045),
             ("prg_Miete", prg_neu(1, 2030), 1_166_803.74 * 0.045 * 1.02),
+        ]),
+        # Erhaltung nach Gebäudealter: Baujahr 2000, Alterung ab 30 Jahren (2030) mit 1,5 %
+        # zusätzlich; Großmaßnahme erst mit 50 Jahren, also nach dem Raster
+        ("Erhaltung: Alterung ab 30 Jahren",
+         Modell(objekte=[dataclasses.replace(obj, baujahr=2000)]), [
+            ("obj_SanJahr", 0, 0),
+            ("obj_SanBetrag", 0, 0),
+            ("prg_Erhaltung", prg(1, 2030), 8_830.50),     # 8.000 × 1,025⁴
+            ("prg_Erhaltung", prg(1, 2031), 9_187.03),     # × 1,025 × 1,015
+            ("prg_Erhaltung", prg(1, 2046), 16_635.04),    # 8.000 × 1,025²⁰ × 1,015¹⁶
+            ("lqb_Ausgaben", lj(2031), 9_187.03),
+            ("liq_Ausgaben", lj(2031), 9_187.03),
+        ]),
+        # Baujahr 1980: im Basisjahr 46 Jahre, Großmaßnahme mit 50 im Jahr 2030 über
+        # 1,4 Mio × 50 % × 15 % = 105.000; Verkauf 2028 erspart sie dem Plan, nicht dem Halten
+        ("Erhaltung: Großmaßnahme bei Halten, nicht nach Verkauf",
+         Modell(objekte=[dataclasses.replace(obj, baujahr=1980)],
+                verkaeufe=[Verkauf("OBJ-001", 2028, preis=1_400_000)]), [
+            ("obj_SanJahr", 0, 2030),
+            ("obj_SanBetrag", 0, 105_000),
+            ("obj_Annahmen", 0, 2),
+            ("prg_ErhaltungHalten", prg(1, 2029), 9_008.65),  # 8.000 × 1,015³ × 1,025³
+            ("prg_ErhaltungHalten", prg(1, 2030), 125_272.73),
+            ("prg_Erhaltung", prg(1, 2030), 0),
+            ("lqb_Ausgaben", lj(2030), 125_272.73),
+            ("liq_Ausgaben", lj(2030), 0),
+        ]),
+        # Baujahr 1975 ist im Basisjahr schon über 50: fällig nach 2 Jahren Vorlauf, also 2029
+        ("Erhaltung: überfällige Großmaßnahme nach Vorlauf",
+         Modell(objekte=[dataclasses.replace(obj, baujahr=1975, san_jahr=None,
+                                             san_betrag=None)]), [
+            ("obj_SanJahr", 0, 2029),
+            ("obj_SanBetrag", 0, 105_000),
+        ]),
+        ("Erhaltung: keine Großmaßnahme mit Jahr 0",
+         Modell(objekte=[dataclasses.replace(obj, baujahr=1980, san_jahr=0)]), [
+            ("obj_SanBetrag", 0, 0),
+            ("prg_Erhaltung", prg(1, 2030), 8_000 * 1.015 ** 4 * 1.025 ** 4),
+        ]),
+        # Neuobjekt: Erhaltung 1 % von 1,2 Mio, in den ersten 10 Jahren nach dem Kauf zur Hälfte
+        ("Erhaltung: Neuobjekt mit Anlaufjahren",
+         Modell(objekte=[obj], neuobjekte=[
+             Neuobjekt("NEU-001", 2028, kaufpreis=1_200_000, anteil_gub=0.3, afa_satz=0.03,
+                       mietrendite=0.05, erhaltungsquote=0.01)]), [
+            ("prg_Erhaltung", prg_neu(1, 2029), 6_150),
+            ("prg_Erhaltung", prg_neu(1, 2038), 7_680.51),
+            ("prg_Erhaltung", prg_neu(1, 2039), 15_745.04),
+            ("prg_ErhaltungHalten", prg_neu(1, 2039), 0),
         ]),
         # Etappe 9: Plausibilitätsprüfungen melden jeden eingebauten Fehler
         ("Etappe 9: Testobjekt ohne Befund", [obj], befund() + [
@@ -1190,6 +1241,8 @@ def main() -> int:
             if filter_ not in fall:
                 continue
             modell = objekte if isinstance(objekte, Modell) else Modell(objekte=objekte)
+            if not fall.startswith("Erhaltung"):
+                modell.parameter = {**OHNE_ALTERUNG, **modell.parameter}
             if aufrufe:
                 if lo is None:                   # eine LibreOffice-Sitzung für alle Makrofälle
                     lo = stapel.enter_context(LibreOffice(Path(tmp) / "makros"))

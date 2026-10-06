@@ -975,6 +975,7 @@ Die Annahme steht als Formel direkt in der leeren Eingabezelle (blau). Wer einen
 | Feld | Annahme | Parameter |
 | --- | --- | --- |
 | Erhaltung | Miete × Quote | par\_AnnErhQuote (10 %) |
+| Baujahr, Großmaßnahme | siehe „Erhaltung nach Gebäudealter“ unten | |
 | Verkehrswert | (Miete + weitere Einnahmen) × Vervielfältiger | par\_AnnVervielfaeltiger (20) |
 | Verkehrswertanteil Gebäude | Gebäudeanteil | par\_AnnGebaeudeanteil (75 %) |
 | AfA-Satz | AfA-Satz Bestand | par\_AnnAfASatz (2 %) |
@@ -1001,6 +1002,33 @@ Wird eine Annahme gelöscht, ohne einen Wert einzutragen, meldet der Status „W
 Je Objekt zählen die Spalten „Annahmen (blau)“ und „kritische Annahmen (orange)“ mit (obj\_Annahmen, obj\_Kritisch), je Verkauf „Preis angenommen“ (vk\_PreisAnnahme). Das Blatt Prüfung meldet:
 - **Warnung:** Verkauf mit kritischen Annahmen.
 - **Hinweis:** Objekte mit Annahmen. Er ersetzt den früheren Hinweis „ohne Verkehrswert“.
+
+**Erhaltung nach Gebäudealter und Großmaßnahmen**
+
+Anlass: Halten lag im Abnahmefall vorn, unter anderem weil das Neuobjekt mehr Erhaltung trug (1 % des Kaufpreises, 20 % der Miete) als das 20 Jahre alte Objekt (13 % der Miete). Alte Gebäude werden mit den Jahren teurer, Neubauten sind anfangs fast wartungsfrei, und große Einzelmaßnahmen fallen nur beim Halten an.
+
+| Baustein | Rechnung | Parameter (Standard) |
+| --- | --- | --- |
+| Alterung Bestand | Erhaltung × (1 + Alterung)^(Jahre über dem Schwellenalter seit dem Basisjahr), zusätzlich zur Erhaltungssteigerung | par\_ErhAlterungAb (30), par\_ErhAlterung (1,5 %) |
+| Baujahr | Eingabe; leer: Basisjahr − Gebäudealter | par\_AnnGebaeudealter (40) |
+| Großmaßnahme Jahr | Eingabe (0 = keine); leer: Baujahr + Alter, bei schon älteren Gebäuden erstes Prognosejahr + Vorlauf; jenseits des Rasters 0 | par\_SanAlter (50), par\_SanVorlauf (2) |
+| Großmaßnahme Betrag | Eingabe in heutigen Preisen; leer: Verkehrswert × Gebäudeanteil × Quote; wächst mit der Erhaltungssteigerung | par\_SanQuote (15 %, 0 % schaltet die Annahme ab) |
+| Neuobjekt Anlauf | Erhaltung in den ersten Jahren nach dem Kauf × Faktor | par\_NeuErhAnlaufJahre (10), par\_NeuErhAnlaufFaktor (50 %) |
+| Erhaltung Neuobjekt | Standard der Annahme gesenkt | par\_AnnNeuErhQuote 0,5 % statt 1 % |
+
+- **Großmaßnahme als Erhaltungsaufwand:** Sie zählt als sofort abziehbarer Erhaltungsaufwand im Jahr der Maßnahme (BWA 1250).
+  - Ob sie Herstellungskosten sind (Standardhebung) oder anschaffungsnaher Aufwand, ist fachlich zu prüfen. Aktivierung mit AfA ist nicht abgebildet.
+  - Höhere Miete oder ein höherer Wert nach der Maßnahme sind nicht abgebildet.
+- **Neue Prognosespalte prg\_ErhaltungHalten:** die Erhaltung, als würde nie verkauft. Die Baseline und der Ausgangsfall im Sonderbereich rechnen mit ihr, der Plan nur bis zum Verkaufsjahr. Ein Verkauf vor der Großmaßnahme erspart sie also dem Plan, nicht dem Halten.
+- **Prüfskript:** Fälle vor dieser Logik rechnen ohne Alterung, Anlaufminderung und Großmaßnahmen (OHNE\_ALTERUNG), damit ihre Handrechnungen gelten. Das Testobjekt hat Baujahr 2007 und keine Großmaßnahme.
+
+Wirkung im Abnahmefall (Endvermögen 2046, § 6b-Kette minus Halten):
+
+| Variante | vorher | mit Alterslogik |
+| --- | --- | --- |
+| wie erfasst (Erhaltung neu 1 %) | −154.246 | −85.479 |
+| Erhaltung neu 0,5 % | −40.167 | −2.592 |
+| Altobjekt Baujahr 1975, Großmaßnahme 2029, Erhaltung neu 0,5 % | | +135.586 |
 
 **Reinvestition aus dem Verkauf**
 

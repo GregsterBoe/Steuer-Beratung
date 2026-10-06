@@ -17,6 +17,9 @@ def testobjekt() -> Objekt:
         vk_quote_gebaeude=0.5,
         miete=60_000,
         erhaltung=8_000,
+        baujahr=2007,      # als Neubau gekauft
+        san_jahr=0,        # keine Großmaßnahme geplant
+        san_betrag=0,
     )
 
 

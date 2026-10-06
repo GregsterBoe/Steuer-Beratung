@@ -81,6 +81,8 @@ PARAMETER = [
               "Kaufjahr = Basisjahr − Jahre seit Kauf"),
     Parameter("par_AnnErhQuote", "Erhaltung in % der Miete", 0.10, FMT_PROZENT,
               "nur ohne Erhaltung aus der Buchhaltung"),
+    Parameter("par_AnnGebaeudealter", "Gebäudealter im Basisjahr (Jahre)", 40, FMT_ZAHL,
+              "Baujahr = Basisjahr − Gebäudealter, solange kein Baujahr erfasst ist"),
     Parameter("par_AnnReinvestJahre", "Kauf nach Verkauf (Jahre)", 1, FMT_ZAHL,
               "Kaufjahr = Verkaufsjahr + Jahre; innerhalb der § 6b-Frist halten",
               abschnitt="Annahmen Reinvestition (Verkauf mit „reinvestieren = ja“)"),
@@ -96,8 +98,28 @@ PARAMETER = [
               ("linear", "degressiv")),
     Parameter("par_AnnNeuMietrendite", "Mietrendite Neuobjekt", 0.045, FMT_PROZENT,
               "Jahresmiete in % des Kaufpreises; Platzhalter"),
-    Parameter("par_AnnNeuErhQuote", "Erhaltung Neuobjekt in % des Kaufpreises", 0.01,
-              FMT_PROZENT, ""),
+    Parameter("par_AnnNeuErhQuote", "Erhaltung Neuobjekt in % des Kaufpreises", 0.005,
+              FMT_PROZENT, "Neubau etwa 0,3–0,5 %; in den ersten Jahren gilt zusätzlich der "
+              "Anlauffaktor unten"),
+    # Erhaltung nach Gebäudealter: gilt für alle Objekte, auch mit Werten aus der Buchhaltung
+    Parameter("par_ErhAlterungAb", "Alterung ab Gebäudealter (Jahre)", 30, FMT_ZAHL,
+              "ab diesem Alter steigt die Erhaltung zusätzlich zur Erhaltungssteigerung",
+              abschnitt="Erhaltung nach Gebäudealter und Großmaßnahmen"),
+    Parameter("par_ErhAlterung", "zusätzliche Steigerung je Jahr über dem Alter", 0.015,
+              FMT_PROZENT, "0 % = keine Alterung; Platzhalter"),
+    Parameter("par_NeuErhAnlaufJahre", "Neuobjekt: Anlaufjahre nach Kauf", 10, FMT_ZAHL,
+              "so viele Jahre nach dem Kauf ist die Erhaltung gemindert"),
+    Parameter("par_NeuErhAnlaufFaktor", "Neuobjekt: Erhaltung in den Anlaufjahren", 0.5,
+              FMT_PROZENT, "100 % = keine Minderung; unterstellt Neubau oder frisch saniert"),
+    Parameter("par_SanAlter", "Großmaßnahme fällig bei Gebäudealter", 50, FMT_ZAHL,
+              "Dach, Heizung, Fassade, energetische Sanierung; Annahme nur ohne Eingabe "
+              "im Objektblatt"),
+    Parameter("par_SanVorlauf", "Großmaßnahme frühestens nach (Jahren)", 2, FMT_ZAHL,
+              "bei schon älteren Gebäuden: frühestens erstes Prognosejahr + Vorlauf; ein "
+              "Verkauf davor erspart sie"),
+    Parameter("par_SanQuote", "Großmaßnahme in % des Gebäudewerts", 0.15, FMT_PROZENT,
+              "Gebäudewert = Verkehrswert × Gebäudeanteil, in heutigen Preisen; 0 % = keine "
+              "Großmaßnahmen annehmen"),
 ]
 
 # Codenamen für VBA: ASCII, unabhängig vom angezeigten Blattnamen
@@ -163,6 +185,18 @@ OBJEKT_FELDER = [
     Feld("restbuchwert", "Restbuchwert Gebäude Basisjahr", "obj_Restbuchwert", FMT_EURO, False,
          minimum=0, annahme=True, kritisch=True,
          hinweis="leer: AK Gebäude − AfA je Jahr seit Kauf bis Ende Basisjahr"),
+    # Erhaltung nach Alter; die Großmaßnahme zählt als sofort abziehbarer Erhaltungsaufwand
+    Feld("baujahr", "Baujahr", "obj_Baujahr", FMT_JAHR, False, 10, minimum=1800, maximum=2100,
+         ganzzahl=True, annahme=True,
+         hinweis="leer: Basisjahr − Gebäudealter (Parameter); steuert Alterung und Großmaßnahme"),
+    Feld("san_jahr", "Großmaßnahme Jahr", "obj_SanJahr", FMT_JAHR, False, 11, minimum=0,
+         maximum=2100, ganzzahl=True, annahme=True,
+         hinweis="0 = keine; leer: Baujahr + Alter für Großmaßnahme (Parameter), "
+                 "frühestens erstes Prognosejahr + Vorlauf"),
+    Feld("san_betrag", "Großmaßnahme Betrag (heutige Preise)", "obj_SanBetrag", FMT_EURO, False,
+         minimum=0, annahme=True,
+         hinweis="leer: Verkehrswert × Gebäudeanteil × Quote (Parameter); "
+                 "wächst mit der Erhaltungssteigerung bis zum Jahr der Maßnahme"),
 ]
 # Spalten, die beim Einlesen aus der Buchhaltung kommen (grün, solange unverändert)
 OBJEKT_EINGELESEN = ("name", "miete", "erhaltung", "weitere_einnahmen", "weitere_ausgaben",
@@ -211,6 +245,8 @@ PROGNOSE_SPALTEN = [
     Spalte("afa_ohne6b", "AfA ohne § 6b", "prg_AfAOhne6b", FMT_EURO),
     Spalte("buchwert_ohne6b", "Buchwert Gebäude ohne § 6b", "prg_BuchwertOhne6b", FMT_EURO, 16),
     Spalte("buchwert_gub_ohne6b", "Buchwert G+B ohne § 6b", "prg_BuchwertGuBOhne6b", FMT_EURO, 16),
+    # Erhaltung, als würde das Objekt nie verkauft (Baseline, Ausgangsfall im Sonderbereich)
+    Spalte("erhaltung_halten", "Erhaltung bei Halten", "prg_ErhaltungHalten", FMT_EURO),
     # Sonderbereich Verkauf und Kauf: RücklageID, aus der das Neuobjekt gekauft ist
     Spalte("quelle", "Quelle RücklageID", "prg_Quelle", FMT_TEXT, 14),
 ]
@@ -454,6 +490,9 @@ class Objekt:
     weitere_einnahmen: Optional[float] = None
     weitere_ausgaben: Optional[float] = None
     afa_bwa: Optional[float] = None      # AfA im Basisjahr lt. Buchhaltung (BWA 1240)
+    baujahr: Optional[int] = None
+    san_jahr: Optional[int] = None       # Großmaßnahme; 0 = keine
+    san_betrag: Optional[float] = None
 
 
 @dataclass

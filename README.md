@@ -150,6 +150,13 @@ Fehlende Daten füllt eine **Auffülllogik**: Die Annahme steht als Formel in de
 | Erhaltung | 10 % der Miete |
 | Verkaufspreis | Verkehrswert fortgeschrieben |
 
+Die **Erhaltung hängt vom Gebäudealter ab**:
+- Ab 30 Jahren steigt sie um 1,5 % pro Jahr zusätzlich.
+- Neuobjekte tragen in den ersten 10 Jahren nur die Hälfte; Standard 0,5 % des Kaufpreises.
+- Ab einem Gebäudealter von 50 Jahren fällt eine Großmaßnahme an, standardmäßig 15 % des Gebäudewerts.
+
+Sie trifft nur das Halten, ein Verkauf davor erspart sie. Baujahr, Jahr und Betrag lassen sich je Objekt überschreiben (Jahr 0 = keine), alle Sätze stehen auf dem Parameterblatt.
+
 „reinvestieren = ja“ im Blatt Verkäufe legt ein Neuobjekt aus den Annahmen an. Pflicht sind nur ObjektID und Miete.
 
 Farben der Eingabezellen:

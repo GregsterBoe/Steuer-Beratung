@@ -959,7 +959,8 @@ def _blatt_start(wb, modell: Modell) -> None:
     _link(ws.cell(row=zeile, column=2, value="ändern im Blatt Parameter"), "Parameter")
     zeile += 1
     for p in PARAMETER:
-        if p.name.startswith("par_Ann") or p.name in ("par_Steuersatz", "par_Mietsteig",
+        if p.name.startswith(("par_Ann", "par_ErhAlterung", "par_NeuErh", "par_San")) \
+                or p.name in ("par_Steuersatz", "par_Mietsteig", "par_Erhaltsteig",
                                                       "par_Wertsteig", "par_Alternativrendite"):
             ws.cell(row=zeile, column=1, value=p.bezeichnung)
             c = ws.cell(row=zeile, column=4, value=f"={p.name}")
