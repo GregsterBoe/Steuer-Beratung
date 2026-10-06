@@ -1014,7 +1014,8 @@ def faelle():
         # Baujahr 1980: im Basisjahr 46 Jahre, Großmaßnahme mit 50 im Jahr 2030 über
         # 1,4 Mio × 50 % × 15 % = 105.000; Verkauf 2028 erspart sie dem Plan, nicht dem Halten
         ("Erhaltung: Großmaßnahme bei Halten, nicht nach Verkauf",
-         Modell(objekte=[dataclasses.replace(obj, baujahr=1980)],
+         Modell(objekte=[dataclasses.replace(obj, baujahr=1980, san_jahr=None,
+                                             san_betrag=None)],
                 verkaeufe=[Verkauf("OBJ-001", 2028, preis=1_400_000)]), [
             ("obj_SanJahr", 0, 2030),
             ("obj_SanBetrag", 0, 105_000),
