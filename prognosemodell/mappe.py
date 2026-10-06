@@ -1,7 +1,12 @@
 """Schreibt die Arbeitsmappe: Blätter, Kopfzeilen, benannte Bereiche, Validierung."""
 
+import dataclasses
+
 from openpyxl import Workbook
 from openpyxl.chart import LineChart, Reference
+from openpyxl.chart.text import RichText
+from openpyxl.drawing.text import (CharacterProperties, Paragraph, ParagraphProperties,
+                                   RichTextProperties)
 from openpyxl.formatting.rule import FormulaRule
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
@@ -9,7 +14,7 @@ from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from . import bwa, formeln
-from .modelle import (CODENAME_MAPPE, CODENAMEN, FEHLER, FMT_EURO, FMT_JAHR, FMT_PROZENT,
+from .modelle import (CODENAME_MAPPE, CODENAMEN, FEHLER, OBJEKT_EINGELESEN, FMT_EURO, FMT_JAHR, FMT_PROZENT,
                       FMT_TEXT, FMT_ZAHL, HINWEIS, MAX_NEUOBJEKTE, MAX_VARIANTEN, PRUEFUNGEN,
                       VARIANTEN_KOPF, WARNUNG,
                       MAX_OBJEKTE, MAX_VERKAEUFE, NEU_FELDER, NEU_SPALTEN, NEU_STATUS_NAME, OBJEKT_FELDER,
@@ -27,6 +32,21 @@ FILL_EINGABE = PatternFill("solid", fgColor="FFF2CC")   # gelb = hier wird getip
 FILL_BERECHNET = PatternFill("solid", fgColor="E7E6E6")  # grau = Formel
 FILL_FEHLER = PatternFill("solid", fgColor="F8CBAD")
 FILL_WARNUNG = PatternFill("solid", fgColor="FFE699")
+# Farblogik der Eingabezellen (Legende auf dem Startblatt)
+FILL_PFLICHT = PatternFill("solid", fgColor="FF7C80")    # rot: Pflichtwert fehlt
+FILL_KRITISCH = PatternFill("solid", fgColor="F4B183")   # orange: Annahme bei Verkauf
+FILL_ANNAHME = PatternFill("solid", fgColor="BDD7EE")    # blau: Annahme (Formel)
+FILL_EINGELESEN = PatternFill("solid", fgColor="C6E0B4")  # grün: aus der Buchhaltung
+FARBEN = [
+    (FILL_PFLICHT, "rot", "Pflichtwert fehlt oder Annahme gelöscht: bitte eintragen"),
+    (FILL_KRITISCH, "orange", "Annahme bei einem verkauften Objekt: bestimmt Gewinn und "
+     "§ 6b-Rücklage, möglichst durch echten Wert ersetzen"),
+    (FILL_ANNAHME, "blau", "Annahme aus den zentralen Annahmen (Parameterblatt); "
+     "Eintippen ersetzt sie"),
+    (FILL_EINGELESEN, "grün", "aus der Buchhaltung eingelesen, unverändert"),
+    (FILL_EINGABE, "gelb", "händisch eingetragen bzw. Eingabefeld"),
+]
+ISF = formeln.ISFORMEL
 
 
 def _name(wb, name: str, ref: str) -> None:
@@ -42,20 +62,53 @@ def _kopf(ws, zeile: int, werte: list) -> None:
 
 
 def _validierung(ws, f, bereich: str) -> None:
-    """Zahlenbereich eines Eingabefelds absichern."""
-    if f.minimum is None and f.maximum is None:
+    """Genau eine Datenüberprüfung je Eingabespalte: Auswahlliste oder Zahlenbereich,
+    dazu die Eingabehilfe des Felds beim Anklicken."""
+    if f.auswahl:
+        dv = DataValidation(type="list", formula1='"' + ",".join(f.auswahl) + '"',
+                            allow_blank=True)
+    elif f.minimum is not None or f.maximum is not None:
+        dv = DataValidation(
+            type="whole" if f.ganzzahl else "decimal",
+            operator="between",
+            formula1=str(f.minimum if f.minimum is not None else -1e15),
+            formula2=str(f.maximum if f.maximum is not None else 1e15),
+            allow_blank=True,
+        )
+    elif f.hinweis:
+        dv = DataValidation(allow_blank=True)
+    else:
         return
-    dv = DataValidation(
-        type="whole" if f.ganzzahl else "decimal",
-        operator="between",
-        formula1=str(f.minimum if f.minimum is not None else -1e15),
-        formula2=str(f.maximum if f.maximum is not None else 1e15),
-        showErrorMessage=True,
-        errorTitle="Ungültiger Wert",
-        error=f"{f.ueberschrift}: Wert außerhalb des zulässigen Bereichs.",
-    )
+    dv.showErrorMessage = bool(f.auswahl or f.minimum is not None or f.maximum is not None)
+    dv.errorTitle = "Ungültiger Wert"
+    dv.error = f"{f.ueberschrift}: Wert außerhalb des zulässigen Bereichs."
+    if f.hinweis:
+        dv.showInputMessage = True
+        dv.promptTitle = f.ueberschrift[:32]
+        dv.prompt = f.hinweis[:255]
     ws.add_data_validation(dv)
     dv.add(bereich)
+
+
+def _farblogik(ws, spalte: str, erste: int, letzte: int, f, id_spalte: str = "A",
+               verkauft: str = None, eingelesen: str = None) -> None:
+    """Bedingte Formate einer Eingabespalte, in dieser Reihenfolge (erste Regel gewinnt):
+    rot Pflicht/Annahme fehlt, orange kritische Annahme, blau Annahme, grün eingelesen."""
+    bereich = f"{spalte}{erste}:{spalte}{letzte}"
+    z, id_ = f"{spalte}{erste}", f"${id_spalte}{erste}"
+    regeln = []
+    if f.pflicht or f.annahme:
+        regeln.append((f'AND({id_}<>"",{z}="")', FILL_PFLICHT))
+    if f.annahme and f.kritisch:
+        bedingung = f",{verkauft}" if verkauft else ""
+        regeln.append((f'AND({id_}<>"",{ISF}({z}){bedingung})', FILL_KRITISCH))
+    if f.annahme:
+        regeln.append((f'AND({id_}<>"",{ISF}({z}))', FILL_ANNAHME))
+    if eingelesen:
+        regeln.append((f'AND({id_}<>"",{z}<>"",{z}={eingelesen})', FILL_EINGELESEN))
+    for formel, fill in regeln:
+        ws.conditional_formatting.add(
+            bereich, FormulaRule(formula=[formel], fill=fill, stopIfTrue=True))
 
 
 def _status_rot(ws, bereich: str, erste_zelle: str) -> None:
@@ -77,7 +130,14 @@ def _blatt_parameter(wb, modell: Modell) -> None:
     unbekannt = set(modell.parameter) - {p.name for p in PARAMETER}
     if unbekannt:
         raise ValueError(f"unbekannte Parameter: {sorted(unbekannt)}")
-    for zeile, p in enumerate(PARAMETER, start=5):
+    zeile = 4
+    zeile_pruefung = None
+    for p in PARAMETER:
+        zeile += 1
+        if p.abschnitt:
+            zeile += 1
+            ws.cell(row=zeile, column=1, value=p.abschnitt).font = Font(bold=True)
+            zeile += 1
         ws.cell(row=zeile, column=1, value=p.bezeichnung)
         c = ws.cell(row=zeile, column=2, value=modell.parameter.get(p.name, p.wert))
         c.number_format = p.format
@@ -91,8 +151,9 @@ def _blatt_parameter(wb, modell: Modell) -> None:
                                 allow_blank=False)
             ws.add_data_validation(dv)
             dv.add(c.coordinate)
+        if p.name == "par_StatusPruefung":
+            zeile_pruefung = zeile
 
-    zeile_pruefung = 5 + [p.name for p in PARAMETER].index("par_StatusPruefung")
     ws.conditional_formatting.add(
         f"B{zeile_pruefung}",
         FormulaRule(formula=[f'B{zeile_pruefung}<>"OK"'], fill=FILL_FEHLER))
@@ -109,41 +170,86 @@ def _blatt_objekte(wb, modell: Modell) -> None:
     ws = wb.create_sheet("Objekte")
     erste, letzte = 2, MAX_OBJEKTE + 1
     status_spalte = len(OBJEKT_FELDER) + 1
-    _kopf(ws, 1, [f.ueberschrift for f in OBJEKT_FELDER] + [STATUS_UEBERSCHRIFT])
-    ws.row_dimensions[1].height = 32
+    hilfe = [(STATUS_UEBERSCHRIFT, STATUS_NAME, 26, formeln.status_objekt),
+             ("Annahmen (blau)", "obj_Annahmen", 11, formeln.annahmen_objekt),
+             ("kritische Annahmen (orange)", "obj_Kritisch", 11,
+              lambda z: formeln.annahmen_objekt(z, nur_kritisch=True))]
+    # eingelesene Werte, ausgeblendet: grün, solange die Eingabe ihnen gleicht
+    import_start = status_spalte + len(hilfe) + 1
+    eingelesen = [f for f in OBJEKT_FELDER if f.key in OBJEKT_EINGELESEN]
+    import_spalte = {f.key: get_column_letter(import_start + i) for i, f in enumerate(eingelesen)}
+    _kopf(ws, 1, [f.ueberschrift for f in OBJEKT_FELDER] + [h[0] for h in hilfe])
+    for i, f in enumerate(eingelesen):
+        c = ws.cell(row=1, column=import_start + i, value=f"eingelesen: {f.ueberschrift}")
+        c.font = Font(italic=True)
+    ws.row_dimensions[1].height = 45
 
     for i, f in enumerate(OBJEKT_FELDER, start=1):
         bst = get_column_letter(i)
         ws.column_dimensions[bst].width = f.breite
         _name(wb, f.name, f"Objekte!${bst}${erste}:${bst}${letzte}")
         _validierung(ws, f, f"{bst}{erste}:{bst}{letzte}")
+        _farblogik(ws, bst, erste, letzte, f, verkauft=f"COUNTIF(vk_ID,$A{erste})>0",
+                   eingelesen=f"${import_spalte[f.key]}{erste}" if f.key in import_spalte
+                   else None)
 
-    st = get_column_letter(status_spalte)
-    ws.column_dimensions[st].width = 26
-    _name(wb, STATUS_NAME, f"Objekte!${st}${erste}:${st}${letzte}")
+    for j, (_, name, breite, _) in enumerate(hilfe):
+        bst = get_column_letter(status_spalte + j)
+        ws.column_dimensions[bst].width = breite
+        _name(wb, name, f"Objekte!${bst}${erste}:${bst}${letzte}")
     letzte_spalte = get_column_letter(status_spalte)
     _name(wb, "obj_Basis", f"Objekte!$A${erste}:${letzte_spalte}${letzte}")
     # nur die gelben Eingabefelder; die Makros in modObjekte schreiben nur hierhin
-    _name(wb, "obj_Eingabe",
-          f"Objekte!$A${erste}:${get_column_letter(len(OBJEKT_FELDER))}${letzte}")
+    eingabe_ende = get_column_letter(len(OBJEKT_FELDER))
+    _name(wb, "obj_Eingabe", f"Objekte!$A${erste}:${eingabe_ende}${letzte}")
 
-    for zeile in range(erste, letzte + 1):
+    def annahmen(zeile):
         for i, f in enumerate(OBJEKT_FELDER, start=1):
-            c = ws.cell(row=zeile, column=i)
+            c = ws.cell(row=zeile, column=i, value=formeln.annahme_objekt(f.key, zeile))
             c.number_format = f.format
             c.fill = FILL_EINGABE
-        c = ws.cell(row=zeile, column=status_spalte, value=formeln.status_objekt(zeile))
-        c.fill = FILL_BERECHNET
 
+    for zeile in range(erste, letzte + 1):
+        annahmen(zeile)
+        for j, (_, _, _, formel) in enumerate(hilfe):
+            c = ws.cell(row=zeile, column=status_spalte + j, value=formel(zeile))
+            c.fill = FILL_BERECHNET
+    st = get_column_letter(status_spalte)
     _status_rot(ws, f"{st}{erste}:{st}{letzte}", f"{st}{erste}")
+
+    # Vorlagezeile mit den Annahmeformeln: „Annahmen wiederherstellen“ kopiert sie
+    vorlage = letzte + 2
+    annahmen(vorlage)
+    ws.cell(row=vorlage, column=status_spalte, value="Vorlage der Annahmeformeln (Makro)")
+    ws.row_dimensions[vorlage].hidden = True
+    _name(wb, "obj_Vorlage", f"Objekte!$A${vorlage}:${eingabe_ende}${vorlage}")
 
     for zeile, obj in enumerate(modell.objekte, start=erste):
         for i, f in enumerate(OBJEKT_FELDER, start=1):
             wert = getattr(obj, f.key)
-            if wert is not None:
+            if wert is not None:      # leer = Annahmeformel bleibt stehen
                 ws.cell(row=zeile, column=i, value=wert)
+        ist = modell.kostenstellen.get(obj.objekt_id)
+        if ist is not None:
+            quelle = {"name": ist.name, "miete": ist.miete, "erhaltung": ist.erhaltung,
+                      "weitere_einnahmen": ist.weitere_einnahmen,
+                      "weitere_ausgaben": ist.weitere_ausgaben, "afa_bwa": ist.abschreibung}
+            for key, bst in import_spalte.items():
+                ws[f"{bst}{zeile}"] = quelle[key]
 
+    for i, f in enumerate(eingelesen):
+        bst = get_column_letter(import_start + i)
+        ws.column_dimensions[bst].hidden = True
+    # Steuerliche Stammdaten als Gruppe; im Schnellcheck zugeklappt
+    details = [i for i, f in enumerate(OBJEKT_FELDER, start=1)
+               if f.key not in ("objekt_id", "name", "miete", "erhaltung", "verkehrswert")
+               and f.key not in OBJEKT_EINGELESEN]
+    ws.column_dimensions.group(get_column_letter(details[0]), get_column_letter(details[-1]),
+                               hidden=modell.schnellcheck, outline_level=1)
     ws.freeze_panes = "B2"
+    ws["A" + str(vorlage + 2)] = ("Farben: rot = Pflicht fehlt, orange = Annahme bei verkauftem "
+                                  "Objekt, blau = Annahme, grün = eingelesen, gelb = händisch. "
+                                  "Annahmen stellt das Parameterblatt ein.")
 
 
 def _blatt_prognose(wb) -> None:
@@ -191,11 +297,11 @@ def _blatt_verkaeufe(wb, modell: Modell) -> None:
     for i, f in enumerate(VERKAUF_FELDER, start=1):
         bst = get_column_letter(i)
         _validierung(ws, f, f"{bst}{erste}:{bst}{letzte}")
-        if f.auswahl:
-            dv = DataValidation(type="list", formula1='"' + ",".join(f.auswahl) + '"',
-                                allow_blank=True)
-            ws.add_data_validation(dv)
-            dv.add(f"{bst}{erste}:{bst}{letzte}")
+        # Verkaufspreis als Annahme ist immer kritisch; § 6b und Reinvestition nur blau
+        if f.annahme:
+            _farblogik(ws, bst, erste, letzte, f)
+        elif modell.schnellcheck and f.key in ("nutzung_6b", "reinvest"):
+            _farblogik(ws, bst, erste, letzte, dataclasses.replace(f, annahme=True))
     # ObjektID als Auswahl aus dem Objektblatt
     dv = DataValidation(type="list", formula1="obj_ID", allow_blank=True)
     ws.add_data_validation(dv)
@@ -203,11 +309,18 @@ def _blatt_verkaeufe(wb, modell: Modell) -> None:
 
     ws.column_dimensions[st].width = 34
     _name(wb, VERKAUF_STATUS_NAME, f"'Verkäufe'!${st}${erste}:${st}${letzte}")
+    pa = get_column_letter(status_spalte + 1)
+    ws.cell(row=1, column=status_spalte + 1, value="Preis angenommen").font = FONT_KOPF
+    ws.cell(row=1, column=status_spalte + 1).fill = FILL_KOPF
+    _name(wb, "vk_PreisAnnahme", f"'Verkäufe'!${pa}${erste}:${pa}${letzte}")
     for zeile in range(erste, letzte + 1):
         for i, f in enumerate(VERKAUF_FELDER, start=1):
-            c = ws.cell(row=zeile, column=i)
+            c = ws.cell(row=zeile, column=i,
+                        value=formeln.annahme_verkauf(f.key, zeile, modell.schnellcheck))
             c.number_format = f.format
             c.fill = FILL_EINGABE
+        c = ws.cell(row=zeile, column=status_spalte + 1, value=formeln.preis_annahme(zeile))
+        c.fill = FILL_BERECHNET
         rechnung = formeln.verkauf_zeile(zeile)
         for i, s in enumerate(VERKAUF_SPALTEN, start=len(VERKAUF_FELDER) + 1):
             c = ws.cell(row=zeile, column=i, value=rechnung[s.key])
@@ -248,7 +361,11 @@ def _blatt_neuobjekte(wb, modell: Modell) -> None:
         ws.column_dimensions[bst].width = s.breite
         _name(wb, s.name, f"'Neuobjekte'!${bst}${erste}:${bst}${letzte}")
     for i, f in enumerate(NEU_FELDER, start=1):
-        _validierung(ws, f, f"{get_column_letter(i)}{erste}:{get_column_letter(i)}{letzte}")
+        bst = get_column_letter(i)
+        if f.key != "quelle":
+            _validierung(ws, f, f"{bst}{erste}:{bst}{letzte}")
+        # Formeln aus „reinvestieren = ja“ im Blatt Verkäufe sind Annahmen (blau)
+        _farblogik(ws, bst, erste, letzte, dataclasses.replace(f, pflicht=False, annahme=True))
     # Quelle als Auswahl aus den gebildeten Rücklagen
     q = formeln.nspalte("quelle")
     dv = DataValidation(type="list", formula1="rl_ID", allow_blank=True)
@@ -259,7 +376,7 @@ def _blatt_neuobjekte(wb, modell: Modell) -> None:
     _name(wb, NEU_STATUS_NAME, f"'Neuobjekte'!${st}${erste}:${st}${letzte}")
     for zeile in range(erste, letzte + 1):
         for i, f in enumerate(NEU_FELDER, start=1):
-            c = ws.cell(row=zeile, column=i)
+            c = ws.cell(row=zeile, column=i, value=formeln.annahme_neu(f.key, zeile))
             c.number_format = f.format
             c.fill = FILL_EINGABE
         rechnung = formeln.neu_zeile(zeile)
@@ -272,10 +389,9 @@ def _blatt_neuobjekte(wb, modell: Modell) -> None:
     _status_rot(ws, f"{st}{erste}:{st}{letzte}", f"{st}{erste}")
 
     for zeile, neu in enumerate(modell.neuobjekte, start=erste):
+        # erfasstes Neuobjekt ersetzt die ganze Annahmezeile, leere Felder bleiben leer
         for i, f in enumerate(NEU_FELDER, start=1):
-            wert = getattr(neu, f.key)
-            if wert is not None:
-                ws.cell(row=zeile, column=i, value=wert)
+            ws.cell(row=zeile, column=i).value = getattr(neu, f.key)  # None leert die Zelle
 
     hinweis = get_column_letter(status_spalte + 2)
     ws[f"{hinweis}1"] = ("Kauf zum Jahresende: Übertragung und Bestand im Kaufjahr, "
@@ -285,6 +401,9 @@ def _blatt_neuobjekte(wb, modell: Modell) -> None:
     ws[f"{hinweis}3"] = ("Nutzen mehrere Neuobjekte dieselbe Rücklage, gilt die Zeilenreihenfolge: "
                          "jede Zeile erhält, was die Zeilen darüber übrig lassen.")
     ws[f"{hinweis}4"] = "Kaufnebenkosten werden im Verhältnis G+B zu Gebäude aktiviert; leer = 0."
+    ws[f"{hinweis}6"] = ("Blau: Neuobjekt aus „reinvestieren = ja“ in derselben Zeile des Blatts "
+                         "Verkäufe, Werte aus den Annahmen des Parameterblatts. Eintippen ersetzt "
+                         "die Annahme.")
     ws[f"{hinweis}5"] = ("AfA-Methode degressiv: par_AfADegressiv vom Restbuchwert, Wechsel zur "
                          "linearen AfA über die Restnutzungsdauer (1 / AfA-Satz), sobald höher.")
     ws.freeze_panes = "B2"
@@ -474,11 +593,7 @@ def _blatt_vergleich(wb) -> None:
         bst = get_column_letter(i)
         _name(wb, f"vgj_{sz.key}", f"'Vergleich'!${bst}${jerste}:${bst}${jletzte}")
 
-    chart = LineChart()
-    chart.title = "Endvermögen nach latenter Steuer"
-    chart.y_axis.title = "€"
-    chart.y_axis.number_format = '#,##0'
-    chart.x_axis.title = "Jahr"
+    chart = _linien("Endvermögen nach latenter Steuer")
     chart.add_data(Reference(ws, min_col=2, max_col=1 + len(SZENARIEN), min_row=jkopf,
                              max_row=jletzte), titles_from_data=True)
     chart.set_categories(Reference(ws, min_col=1, min_row=jerste, max_row=jletzte))
@@ -489,10 +604,6 @@ def _blatt_vergleich(wb) -> None:
         serie.graphicalProperties.line.width = 28000
         if sz == SZ_BASELINE:
             serie.graphicalProperties.line.dashStyle = "dash"
-    chart.x_axis.delete = False
-    chart.y_axis.delete = False
-    chart.legend.position = "b"
-    chart.height, chart.width = 12, 22
     ws.add_chart(chart, f"H{titel}")
     ws.freeze_panes = f"B{erste}"
 
@@ -510,8 +621,8 @@ def _blatt_uebersicht(wb) -> None:
 
     kennzahlen = [
         ("Objekte im Modell", "ueb_Objekte", '=SUMPRODUCT(--(obj_ID<>""))', FMT_ZAHL),
-        ("davon ohne Verkehrswert (zählen mit 0)", "ueb_OhneWert",
-         '=SUMPRODUCT((obj_ID<>"")*(obj_Verkehrswert=""))', FMT_ZAHL),
+        ("davon mit Annahmen (blau)", "ueb_MitAnnahmen", '=COUNTIF(obj_Annahmen,">0")',
+         FMT_ZAHL),
         ("geplante Verkäufe", "ueb_Verkaeufe", '=SUMPRODUCT(--(vk_ID<>""))', FMT_ZAHL),
         ("Neuobjekte im Modell", "ueb_Neuobjekte", "=SUM(ne_Gueltig)", FMT_ZAHL),
         ("Wertsteigerung p. a.", None, "=par_Wertsteig", FMT_PROZENT),
@@ -524,9 +635,8 @@ def _blatt_uebersicht(wb) -> None:
         c.number_format = fmt
         if name:
             _name(wb, name, f"'Übersicht'!$D${zeile}")
-    # Hinweis, solange Verkehrswerte fehlen
     ws.conditional_formatting.add(
-        "D5", FormulaRule(formula=["D5>0"], fill=FILL_FEHLER))
+        "D5", FormulaRule(formula=["D5>0"], fill=FILL_ANNAHME))
     ws.conditional_formatting.add(
         "D9", FormulaRule(formula=['D9<>"OK"'], fill=FILL_FEHLER))
 
@@ -577,12 +687,7 @@ def _blatt_uebersicht(wb) -> None:
 
 def _diagramm(ws, titel: str, spalte_baseline: int, kopf: int, erste: int, letzte: int):
     """Liniendiagramm Baseline (gestrichelt) gegen Plan aus zwei benachbarten Spalten."""
-    chart = LineChart()
-    chart.title = titel
-    chart.y_axis.title = "€"
-    chart.y_axis.number_format = '#,##0'
-    chart.y_axis.majorGridlines = None
-    chart.x_axis.title = "Jahr"
+    chart = _linien(titel)
     chart.add_data(Reference(ws, min_col=spalte_baseline, max_col=spalte_baseline + 1,
                              min_row=kopf, max_row=letzte), titles_from_data=True)
     chart.set_categories(Reference(ws, min_col=1, min_row=erste, max_row=letzte))
@@ -593,10 +698,37 @@ def _diagramm(ws, titel: str, spalte_baseline: int, kopf: int, erste: int, letzt
     for serie in chart.series:
         serie.smooth = False
         serie.graphicalProperties.line.width = 28000
+    return chart
+
+
+def _schrift(groesse: int, drehung: int = None) -> RichText:
+    """Achsenschrift in Punkt × 100, optional gedreht (Grad × 60.000, negativ = schräg)."""
+    zeichen = CharacterProperties(sz=groesse)
+    return RichText(bodyPr=RichTextProperties(rot=drehung, vert="horz"),
+                    p=[Paragraph(pPr=ParagraphProperties(defRPr=zeichen),
+                                 endParaRPr=zeichen)])
+
+
+def _linien(titel: str) -> LineChart:
+    """Liniendiagramm mit Achsen, die sich in Excel und LibreOffice nicht überlagern.
+
+    Beträge in Tsd. € (Einheit im Titel statt Achsentitel), Jahre schräg und immer am
+    unteren Rand, auch bei negativen Werten; Titel und Legende außerhalb der Zeichenfläche.
+    """
+    chart = LineChart()
+    chart.title = f"{titel} (Tsd. €)"
+    chart.title.overlay = False
+    chart.y_axis.number_format = '#,##0,'
+    chart.y_axis.majorGridlines = None
+    chart.y_axis.txPr = _schrift(900)
+    chart.x_axis.number_format = "0"
+    chart.x_axis.tickLblPos = "low"
+    chart.x_axis.txPr = _schrift(800, -2700000)
     # openpyxl blendet die Achsen sonst in neueren Excel-Versionen aus
     chart.x_axis.delete = False
     chart.y_axis.delete = False
     chart.legend.position = "b"
+    chart.legend.overlay = False
     chart.height, chart.width = 12, 22
     return chart
 
@@ -684,6 +816,160 @@ def _blatt_varianten(wb) -> None:
     ws.freeze_panes = f"B{erste}"
 
 
+# Optionen des Startblatts: Text und Szenario (Kennzahlen im Blatt Vergleich)
+OPTIONEN = [
+    ("Halten (nichts verkaufen)", "vg_Baseline"),
+    ("Verkaufen und mit § 6b-Rücklage reinvestieren (Plan wie erfasst)", "vg_A"),
+    ("Verkaufen, sofort versteuern, trotzdem reinvestieren", "vg_C"),
+    ("Verkaufen, sofort versteuern, Erlös anlegen", "vg_B"),
+]
+SCHRITTE = [
+    ("Parameter", "Zentrale Annahmen prüfen: Steuersatz, Steigerungen und die Annahmen bei "
+     "fehlenden Daten (blau)."),
+    ("Objekte", "Je Objekt mindestens ObjektID und Miete (Pflicht, rot wenn leer). Alles "
+     "Weitere füllen die Annahmen; echte Werte einfach darübertippen."),
+    ("Verkäufe", "Geplanten Verkauf erfassen: Objekt, Verkaufsjahr; Preis leer = Verkehrswert; "
+     "§ 6b nutzen und reinvestieren mit ja/nein."),
+    ("Neuobjekte", "Reinvestitionen: entstehen bei „reinvestieren = ja“ automatisch (blau), "
+     "oder hier händisch erfassen."),
+    ("Prüfung", "Plausibilitätsprüfung: Fehler beheben, Warnungen (orange Annahmen) prüfen."),
+    ("Vergleich", "Ergebnis: Szenarien über 20 Jahre; Details in Verkauf und Kauf."),
+]
+# Blattreiter: gelb Eingabe, grau Rechnung, blau Ausgabe, grün Kontrolle
+REITER = {"Start": "305496", "Parameter": "FFC000", "Objekte": "FFC000", "Verkäufe": "FFC000",
+          "Neuobjekte": "FFC000", "Prognose": "A5A5A5", "Rücklagen": "A5A5A5",
+          "Liquidität": "A5A5A5", "Prüfung": "70AD47", "Varianten": "70AD47"}
+FARBE_AUSGABE = "5B9BD5"
+# im Schnellcheck ausgeblendet; über Rechtsklick auf einen Reiter wieder einblendbar
+SCHNELL_AUSGEBLENDET = ("Prognose", "Rücklagen", "Liquidität", "Auswertung")
+
+
+def _link(zelle, blatt: str) -> None:
+    from openpyxl.worksheet.hyperlink import Hyperlink
+    zelle.hyperlink = Hyperlink(ref=zelle.coordinate, location=f"'{blatt}'!A1",
+                                display=str(zelle.value))
+    zelle.font = Font(color="0563C1", underline="single")
+
+
+def _blatt_start(wb, modell: Modell) -> None:
+    """Startblatt: Handlungsempfehlung, Datenlage, Anleitung und Farblegende."""
+    ws = wb.create_sheet("Start", 0)
+    ws["A1"] = "Prognosemodell V+V" + (" – Schnellcheck" if modell.schnellcheck else "")
+    ws["A1"].font = Font(bold=True, size=16)
+    ws["A2"] = (HINWEIS_FINANZIERUNG + " Steuersätze und Fristen vor dem Echteinsatz mit dem "
+                "zuständigen Berufsträger prüfen.")
+    ws["A2"].font = Font(italic=True)
+
+    ws["A4"] = "Handlungsempfehlung"
+    ws["A4"].font = Font(bold=True, size=13)
+    erste = 10
+    letzte = erste + len(OPTIONEN) - 1
+    werte, namen = f"$B${erste}:$B${letzte}", f"$A${erste}:$A${letzte}"
+    beste = f"INDEX({namen},MATCH(MAX({werte}),{werte},0))"
+    ws["A5"] = (f'=IF(ueb_Verkaeufe=0,"Noch kein Verkauf erfasst: im Blatt Verkäufe Objekt und '
+                f'Verkaufsjahr eintragen, dann zeigt dieses Blatt die beste Option.",'
+                f'IF(MAX($B${erste + 1}:$B${letzte})<=$B${erste}+1,"Halten: kein '
+                f'Verkaufsszenario erreicht ein höheres Endvermögen.","Empfehlung: "&{beste}))')
+    ws["A5"].font = Font(bold=True, size=12, color="305496")
+    _name(wb, "start_Empfehlung", "Start!$A$5")
+    ws["A6"] = "Vorsprung der besten Option gegenüber Halten"
+    ws["D6"] = f"=MAX({werte})-$B${erste}"
+    ws["D6"].number_format = FMT_EURO
+    _name(wb, "start_Vorsprung", "Start!$D$6")
+    kritisch = 'COUNTIF(obj_Kritisch,">0")+SUM(vk_PreisAnnahme)'
+    ws["A7"] = (f'=IF(pr_Fehler>0,"Nicht belastbar: "&pr_Fehler&" Fehler, siehe Blatt Prüfung.",'
+                f'IF({kritisch}>0,"Vorläufig: "&({kritisch})&" kritische Annahme(n) bei '
+                f'Verkäufen (orange) durch echte Werte ersetzen.",'
+                f'"Belastbar im Rahmen der zentralen Annahmen."))')
+    _name(wb, "start_Belastbarkeit", "Start!$A$7")
+
+    _kopf_start = ["Option", "Endvermögen nach latenter Steuer", "Differenz zu Halten", "Rang"]
+    for spalte, text in enumerate(_kopf_start, start=1):
+        c = ws.cell(row=erste - 1, column=spalte, value=text)
+        c.font, c.fill = FONT_KOPF, FILL_KOPF
+        c.alignment = Alignment(wrap_text=True)
+    ws.cell(row=erste - 2, column=1, value="=\"Endvermögen am Ende \"&par_Endjahr&\" je Option\"")
+    for zeile, (text, name) in zip(range(erste, letzte + 1), OPTIONEN):
+        ws.cell(row=zeile, column=1, value=text)
+        for spalte, formel, fmt in ((2, f"=INDEX({name},1)", FMT_EURO),
+                                    (3, f"=B{zeile}-$B${erste}", FMT_EURO),
+                                    (4, f'=COUNTIF({werte},">"&B{zeile})+1', FMT_ZAHL)):
+            c = ws.cell(row=zeile, column=spalte, value=formel)
+            c.number_format, c.fill = fmt, FILL_BERECHNET
+    ws.conditional_formatting.add(
+        f"A{erste}:D{letzte}", FormulaRule(formula=[f"$D{erste}=1"], fill=FILL_EINGELESEN))
+    _name(wb, "start_Optionen", f"Start!{namen}")
+    _name(wb, "start_Werte", f"Start!{werte}")
+
+    zeile = letzte + 2
+    kennzahlen = [
+        ("Wert der § 6b-Kette (A − C): Zins auf die gestundete Steuer", "=INDEX(vg_DiffC,1)",
+         FMT_EURO),
+        ("Steuer gesamt im Plan über alle Jahre", "=SUM(liq_Steuer)", FMT_EURO),
+        ("tiefster Liquiditätsstand im Plan (negativ = Finanzierungsbedarf)", "=MIN(liq_Kum)",
+         FMT_EURO),
+        ("im Jahr", "=INDEX(liq_Jahr,MATCH(MIN(liq_Kum),liq_Kum,0))", FMT_JAHR),
+    ]
+    for text, formel, fmt in kennzahlen:
+        ws.cell(row=zeile, column=1, value=text)
+        c = ws.cell(row=zeile, column=4, value=formel)
+        c.number_format, c.fill = fmt, FILL_BERECHNET
+        zeile += 1
+
+    zeile += 1
+    ws.cell(row=zeile, column=1, value="Datenlage").font = Font(bold=True, size=13)
+    zeile += 1
+    for text, formel, fmt, name in [
+        ("Objekte im Modell", "=ueb_Objekte", FMT_ZAHL, None),
+        ("davon mit Annahmen (blau)", '=COUNTIF(obj_Annahmen,">0")', FMT_ZAHL, None),
+        ("kritische Annahmen bei Verkäufen (orange)", f"={kritisch}", FMT_ZAHL,
+         "start_Kritisch"),
+        ("Plausibilitätsprüfung", "=pr_Gesamt", FMT_TEXT, None),
+    ]:
+        ws.cell(row=zeile, column=1, value=text)
+        c = ws.cell(row=zeile, column=4, value=formel)
+        c.number_format, c.fill = fmt, FILL_BERECHNET
+        if name:
+            _name(wb, name, f"Start!$D${zeile}")
+        zeile += 1
+
+    zeile += 1
+    ws.cell(row=zeile, column=1, value="So geht's").font = Font(bold=True, size=13)
+    zeile += 1
+    for nr, (blatt, text) in enumerate(SCHRITTE, start=1):
+        _link(ws.cell(row=zeile, column=1, value=f"{nr}. {blatt}"), blatt)
+        ws.cell(row=zeile, column=2, value=text)
+        zeile += 1
+
+    zeile += 1
+    ws.cell(row=zeile, column=1, value="Farben der Eingabezellen").font = Font(bold=True, size=13)
+    zeile += 1
+    for fill, farbe, text in FARBEN:
+        c = ws.cell(row=zeile, column=1, value=farbe)
+        c.fill = fill
+        ws.cell(row=zeile, column=2, value=text)
+        zeile += 1
+    for fill, farbe, text in ((FILL_BERECHNET, "grau", "Formel, nicht überschreiben"),):
+        ws.cell(row=zeile, column=1, value=farbe).fill = fill
+        ws.cell(row=zeile, column=2, value=text)
+        zeile += 1
+
+    zeile += 1
+    ws.cell(row=zeile, column=1, value="Zentrale Annahmen").font = Font(bold=True, size=13)
+    _link(ws.cell(row=zeile, column=2, value="ändern im Blatt Parameter"), "Parameter")
+    zeile += 1
+    for p in PARAMETER:
+        if p.name.startswith("par_Ann") or p.name in ("par_Steuersatz", "par_Mietsteig",
+                                                      "par_Wertsteig", "par_Alternativrendite"):
+            ws.cell(row=zeile, column=1, value=p.bezeichnung)
+            c = ws.cell(row=zeile, column=4, value=f"={p.name}")
+            c.number_format, c.fill = p.format, FILL_BERECHNET
+            zeile += 1
+
+    for spalte, breite in zip("ABCD", (62, 22, 20, 16)):
+        ws.column_dimensions[spalte].width = breite
+
+
 def erstelle_mappe(modell: Modell) -> Workbook:
     wb = Workbook()
     _blatt_parameter(wb, modell)
@@ -698,8 +984,14 @@ def erstelle_mappe(modell: Modell) -> Workbook:
     _blatt_vergleich(wb)
     _blatt_pruefung(wb)
     _blatt_varianten(wb)
-    bwa.blaetter_bwa(wb, modell)
+    bwa_blaetter = bwa.blaetter_bwa(wb, modell)
     bwa.blatt_sonderbereich(wb, modell)
+    _blatt_start(wb, modell)
+    wb.active = 0
+    for ws in wb.worksheets:
+        ws.sheet_properties.tabColor = REITER.get(ws.title, FARBE_AUSGABE)
+        if modell.schnellcheck and (ws.title in SCHNELL_AUSGEBLENDET or ws.title in bwa_blaetter):
+            ws.sheet_state = "hidden"
     wb.code_name = CODENAME_MAPPE
     for i, ws in enumerate(wb.worksheets, start=1):
         # BWA-Blätter heißen nach der Kostenstelle; Codename für VBA dann wsBWA<n>

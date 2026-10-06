@@ -26,6 +26,7 @@ class Parameter:
     format: str
     erlaeuterung: str
     auswahl: Optional[tuple] = None  # Dropdown-Werte
+    abschnitt: Optional[str] = None  # Zwischenüberschrift vor diesem Parameter
 
 
 # Reihenfolge = Reihenfolge auf dem Parameterblatt.
@@ -68,12 +69,41 @@ PARAMETER = [
               "vereinfacht: Verkäufe innerhalb dieses Zeitraums; fachlich prüfen"),
     Parameter("par_StatusPruefung", "Plausibilitätsprüfung", "=pr_Gesamt", FMT_TEXT,
               "berechnet; Einzelheiten im Blatt Prüfung"),
+    # Auffülllogik: stehen als Formel (blau) in leeren Eingabezellen, überschreibbar
+    Parameter("par_AnnVervielfaeltiger", "Verkehrswert = Jahresmiete ×", 20, "0.0",
+              "Vervielfältiger, 20 = Bruttomietrendite 5 %; Platzhalter",
+              abschnitt="Annahmen bei fehlenden Daten (blau in den Eingabeblättern)"),
+    Parameter("par_AnnGebaeudeanteil", "Gebäudeanteil am Wert", 0.75, FMT_PROZENT,
+              "Anteil Gebäude an AK und Verkehrswert, Rest G+B"),
+    Parameter("par_AnnAfASatz", "AfA-Satz Bestand", 0.02, FMT_PROZENT,
+              "Wohngebäude, Fertigstellung ab 1925 bis 2022: 2 %"),
+    Parameter("par_AnnHaltedauer", "Jahre seit Kauf", 15, FMT_ZAHL,
+              "Kaufjahr = Basisjahr − Jahre seit Kauf"),
+    Parameter("par_AnnErhQuote", "Erhaltung in % der Miete", 0.10, FMT_PROZENT,
+              "nur ohne Erhaltung aus der Buchhaltung"),
+    Parameter("par_AnnReinvestJahre", "Kauf nach Verkauf (Jahre)", 1, FMT_ZAHL,
+              "Kaufjahr = Verkaufsjahr + Jahre; innerhalb der § 6b-Frist halten",
+              abschnitt="Annahmen Reinvestition (Verkauf mit „reinvestieren = ja“)"),
+    Parameter("par_AnnReinvestQuote", "reinvestiert in % des Nettoerlöses", 1.0, FMT_PROZENT,
+              "inklusive Kaufnebenkosten"),
+    Parameter("par_AnnNeuNebenkosten", "Kaufnebenkosten in % des Kaufpreises", 0.07,
+              FMT_PROZENT, "Grunderwerbsteuer, Notar, Grundbuch; Platzhalter"),
+    Parameter("par_AnnNeuAnteilGuB", "Anteil G+B Neuobjekt", 0.25, FMT_PROZENT, ""),
+    Parameter("par_AnnNeuAfASatz", "AfA-Satz Neuobjekt", 0.03, FMT_PROZENT,
+              "Wohngebäude, Fertigstellung ab 2023: 3 %"),
+    Parameter("par_AnnNeuAfAMethode", "AfA-Methode Neuobjekt", "linear", FMT_TEXT,
+              "degressiv nur für Neubau mit Baubeginn 10/2023 bis 9/2029",
+              ("linear", "degressiv")),
+    Parameter("par_AnnNeuMietrendite", "Mietrendite Neuobjekt", 0.045, FMT_PROZENT,
+              "Jahresmiete in % des Kaufpreises; Platzhalter"),
+    Parameter("par_AnnNeuErhQuote", "Erhaltung Neuobjekt in % des Kaufpreises", 0.01,
+              FMT_PROZENT, ""),
 ]
 
 # Codenamen für VBA: ASCII, unabhängig vom angezeigten Blattnamen
 CODENAME_MAPPE = "ThisWorkbook"
 CODENAMEN = {
-    "Übersicht": "wsUebersicht", "Vergleich": "wsVergleich", "Parameter": "wsParameter",
+    "Start": "wsStart", "Übersicht": "wsUebersicht", "Vergleich": "wsVergleich", "Parameter": "wsParameter",
     "Objekte": "wsObjekte", "Verkäufe": "wsVerkaeufe", "Neuobjekte": "wsNeuobjekte",
     "Prognose": "wsPrognose", "Rücklagen": "wsRuecklagen", "Liquidität": "wsLiquiditaet",
     "Auswertung": "wsAuswertung", "Prüfung": "wsPruefung", "Varianten": "wsVarianten",
@@ -93,28 +123,50 @@ class Feld:
     maximum: Optional[float] = None
     ganzzahl: bool = False
     auswahl: Optional[tuple] = None  # Dropdown-Werte
+    annahme: bool = False   # leer gelassen steht eine Annahmeformel in der Zelle (blau)
+    kritisch: bool = False  # Annahme ist kritisch, sobald das Objekt verkauft wird (orange)
+    hinweis: str = ""       # Eingabehilfe beim Anklicken der Zelle
 
 
 OBJEKT_FELDER = [
-    Feld("objekt_id", "ObjektID", "obj_ID", FMT_TEXT, True, 12),
+    # laufende Werte, meist aus der Buchhaltung (BWA)
+    Feld("objekt_id", "ObjektID", "obj_ID", FMT_TEXT, True, 12,
+         hinweis="Kostenstelle bzw. eindeutige Kennung, z. B. KSt 1"),
     Feld("name", "Objektname", "obj_Name", FMT_TEXT, False, 28),
-    Feld("ak_gebaeude", "AK Gebäude", "obj_AKGebaeude", FMT_EURO, True, minimum=0),
-    Feld("ak_gub", "AK G+B", "obj_AKGuB", FMT_EURO, True, minimum=0),
-    Feld("kaufjahr", "Kaufjahr", "obj_Kaufjahr", FMT_JAHR, True, 10,
-         minimum=1900, maximum=2100, ganzzahl=True),
-    Feld("afa_satz", "AfA-Satz", "obj_AfASatz", FMT_PROZENT, True, 10, minimum=0, maximum=0.2),
-    Feld("restbuchwert", "Restbuchwert Gebäude Basisjahr", "obj_Restbuchwert", FMT_EURO, True,
-         minimum=0),
-    Feld("verkehrswert", "Verkehrswert aktuell", "obj_Verkehrswert", FMT_EURO, False, minimum=0),
-    Feld("vk_quote_gebaeude", "Verkehrswertanteil Gebäude", "obj_VKQuoteGeb", FMT_PROZENT, False,
-         minimum=0, maximum=1),
-    Feld("miete", "Miete Basisjahr", "obj_MieteBasis", FMT_EURO, True, minimum=0),
-    Feld("erhaltung", "Erhaltung Basisjahr", "obj_ErhBasis", FMT_EURO, True, minimum=0),
+    Feld("miete", "Miete Basisjahr", "obj_MieteBasis", FMT_EURO, True, minimum=0,
+         hinweis="Pflicht: Jahresmiete laut Buchhaltung (BWA 1020)"),
+    Feld("erhaltung", "Erhaltung Basisjahr", "obj_ErhBasis", FMT_EURO, False, minimum=0,
+         annahme=True, hinweis="BWA 1250; leer: Miete × Erhaltungsquote (Parameter)"),
     Feld("weitere_einnahmen", "weitere Einnahmen Basisjahr", "obj_EinnBasis", FMT_EURO, False,
-         minimum=0),
+         minimum=0, hinweis="BWA 1090; leer = 0"),
     Feld("weitere_ausgaben", "weitere Ausgaben Basisjahr", "obj_AusgBasis", FMT_EURO, False,
-         minimum=0),
+         minimum=0, hinweis="BWA 1100–1220, 1260; leer = 0"),
+    Feld("afa_bwa", "AfA Basisjahr lt. Buchhaltung", "obj_AfABWA", FMT_EURO, False, minimum=0,
+         hinweis="BWA 1240; damit schätzt die Annahme die AK Gebäude = AfA / AfA-Satz"),
+    # steuerliche Stammdaten (Anlagenverzeichnis); fehlen sie, greift die Annahme
+    Feld("verkehrswert", "Verkehrswert aktuell", "obj_Verkehrswert", FMT_EURO, False, minimum=0,
+         annahme=True, hinweis="leer: Jahresmiete × Vervielfältiger (Parameter)"),
+    Feld("vk_quote_gebaeude", "Verkehrswertanteil Gebäude", "obj_VKQuoteGeb", FMT_PROZENT, False,
+         minimum=0, maximum=1, annahme=True, kritisch=True,
+         hinweis="leer: Gebäudeanteil (Parameter); teilt den Verkaufserlös auf"),
+    Feld("afa_satz", "AfA-Satz", "obj_AfASatz", FMT_PROZENT, False, 10, minimum=0, maximum=0.2,
+         annahme=True, kritisch=True, hinweis="leer: AfA-Satz Bestand (Parameter)"),
+    Feld("kaufjahr", "Kaufjahr", "obj_Kaufjahr", FMT_JAHR, False, 10,
+         minimum=1900, maximum=2100, ganzzahl=True, annahme=True, kritisch=True,
+         hinweis="leer: Basisjahr − Jahre seit Kauf (Parameter); zählt für die § 6b-Vorbesitzzeit"),
+    Feld("ak_gebaeude", "AK Gebäude", "obj_AKGebaeude", FMT_EURO, False, minimum=0,
+         annahme=True, kritisch=True,
+         hinweis="leer: AfA lt. Buchhaltung / AfA-Satz, sonst Verkehrswert × Gebäudeanteil, "
+                 "abgezinst mit der Wertsteigerung bis zum Kaufjahr"),
+    Feld("ak_gub", "AK G+B", "obj_AKGuB", FMT_EURO, False, minimum=0, annahme=True,
+         kritisch=True, hinweis="leer: AK Gebäude × G+B-Anteil / Gebäudeanteil"),
+    Feld("restbuchwert", "Restbuchwert Gebäude Basisjahr", "obj_Restbuchwert", FMT_EURO, False,
+         minimum=0, annahme=True, kritisch=True,
+         hinweis="leer: AK Gebäude − AfA je Jahr seit Kauf bis Ende Basisjahr"),
 ]
+# Spalten, die beim Einlesen aus der Buchhaltung kommen (grün, solange unverändert)
+OBJEKT_EINGELESEN = ("name", "miete", "erhaltung", "weitere_einnahmen", "weitere_ausgaben",
+                     "afa_bwa")
 
 # Berechnete Statusspalte direkt nach den Eingabefeldern
 STATUS_UEBERSCHRIFT = "Status"
@@ -169,7 +221,8 @@ VERKAUF_FELDER = [
     Feld("objekt_id", "ObjektID", "vk_ID", FMT_TEXT, True, 14),
     Feld("jahr", "Verkaufsjahr", "vk_Jahr", FMT_JAHR, True, 12,
          minimum=1900, maximum=2100, ganzzahl=True),
-    Feld("preis", "Verkaufspreis", "vk_Preis", FMT_EURO, True, minimum=0),
+    Feld("preis", "Verkaufspreis", "vk_Preis", FMT_EURO, True, minimum=0, annahme=True,
+         kritisch=True, hinweis="leer: Verkehrswert, fortgeschrieben bis zum Verkaufsjahr"),
     Feld("kosten", "Verkaufskosten", "vk_Kosten", FMT_EURO, False, minimum=0),
     Feld("anteil_gub", "Anteil G+B lt. Kaufvertrag", "vk_AnteilGuBVertrag", FMT_PROZENT, False,
          minimum=0, maximum=1),
@@ -177,6 +230,10 @@ VERKAUF_FELDER = [
     # verlängert die Reinvestitionsfrist auf par_6bFristNeubau
     Feld("neubau_6b", "§ 6b Neubau begonnen", "vk_6bNeubau", FMT_TEXT, False, 11,
          auswahl=("ja", "nein")),
+    # ja = Neuobjekt in derselben Zeile des Blatts Neuobjekte aus den Annahmen (Reinvestition)
+    Feld("reinvest", "reinvestieren", "vk_Reinvest", FMT_TEXT, False, 12,
+         auswahl=("ja", "nein"),
+         hinweis="ja: Kauf eines Neuobjekts nach den Annahmen auf dem Parameterblatt"),
 ]
 VERKAUF_SPALTEN = [
     Spalte("vorbesitz", "Vorbesitzzeit Jahre", "vk_Vorbesitz", FMT_ZAHL, 11),
@@ -195,6 +252,7 @@ VERKAUF_STATUS_NAME = "vk_Status"
 STATUS_OK = "OK"
 # Gewinn ist gültig berechnet, wird aber sofort versteuert
 STATUS_6B_UNZULAESSIG = "§ 6b unzulässig: Vorbesitzzeit zu kurz"
+STATUS_ANNAHME_GELOESCHT = "Wert fehlt: Annahme gelöscht (Makro „Annahmen wiederherstellen“)"
 
 # Blatt Rücklagen (Etappe 5, Projektplan Abschnitt 12)
 # Teil 1: je Verkaufszeile eine Rücklagenzeile, gefüllt nur bei § 6b ja und Status OK
@@ -395,6 +453,7 @@ class Objekt:
     erhaltung: Optional[float] = None
     weitere_einnahmen: Optional[float] = None
     weitere_ausgaben: Optional[float] = None
+    afa_bwa: Optional[float] = None      # AfA im Basisjahr lt. Buchhaltung (BWA 1240)
 
 
 @dataclass
@@ -407,6 +466,7 @@ class Verkauf:
     anteil_gub: Optional[float] = None   # Kaufvertrag; leer = Verkehrswertanteil aus Objekte
     nutzung_6b: Optional[str] = None
     neubau_6b: Optional[str] = None      # ja = Frist par_6bFristNeubau statt par_6bFrist
+    reinvest: Optional[str] = None       # ja = Neuobjekt aus den Annahmen
 
 
 @dataclass
@@ -464,8 +524,11 @@ PRUEFUNGEN = [
              "Zuschlag liegen außerhalb des Rasters", HINWEIS, "Blatt Rücklagen, Spalte Hinweis"),
     Pruefung("liquiditaet", "Liquidität im Plan (A) in mindestens einem Jahr negativ: "
              "Finanzierungsbedarf (Stufe 2)", HINWEIS, "Blatt Liquidität, Liquidität kumuliert"),
-    Pruefung("verkehrswert", "Objekte ohne Verkehrswert: zählen in Übersicht und latenter "
-             "Steuer mit 0", HINWEIS, "Blatt Objekte, Spalte Verkehrswert"),
+    Pruefung("kritisch", "Verkauf mit Annahmen bei steuerlichen Stammdaten oder Verkaufspreis "
+             "(orange): Veräußerungsgewinn und § 6b-Rücklage sind nur geschätzt", WARNUNG,
+             "Blätter Objekte und Verkäufe, orange Zellen"),
+    Pruefung("annahmen", "Objekte mit Annahmen (blau): Werte aus der Auffülllogik des "
+             "Parameterblatts", HINWEIS, "Blatt Objekte, Spalte Annahmen"),
 ]
 
 # Blatt Varianten: je Makrolauf eine Zeile mit festen Werten (Projektplan Abschnitt 19)
@@ -485,3 +548,5 @@ class Modell:
     # Ist-Werte aus den Kostenstellenblättern je ObjektID (einlesen.LaufendeWerte);
     # ohne Eintrag zeigt das BWA-Blatt im Basisjahr die Werte des Objektblatts
     kostenstellen: dict = field(default_factory=dict)
+    # Schnellcheck: § 6b und Reinvestition je Verkauf als Annahme, Details ausgeblendet
+    schnellcheck: bool = False

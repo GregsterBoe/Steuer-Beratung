@@ -42,6 +42,7 @@ Zwölf feste Blätter, getrennt nach Eingabe, Rechnung, Ausgabe und Kontrolle. D
 
 | Blatt | Typ | Schlüsselfelder | Zweck |
 | --- | --- | --- | --- |
+| Start | Ausgabe | Handlungsempfehlung, Endvermögen je Option, Datenlage, Anleitung, Farblegende, zentrale Annahmen | erstes Blatt, Einstieg und Ergebnis auf einen Blick (Abschnitt 20) |
 | Parameter | Eingabe | Steuerwelt-Schalter, Grenzsteuersatz, Mietsteigerung, Erhaltungssteigerung, Kostensteigerung, Wertsteigerung, GrESt-Satz, degressive AfA, Alternativrendite, § 6b-Fristen | alle globalen Annahmen und Schalter |
 | Objekte | Eingabe | ObjektID, AK Gebäude, AK G+B, AfA-Satz, Kaufjahr, Restbuchwert 2026, Miete 2026, Erhaltung 2026 | Stammdaten je Bestandsobjekt |
 | Verkäufe | Eingabe | ObjektID, Verkaufsjahr, Verkaufspreis oder Faktor, Verkaufskosten, 6b-Nutzung (ja/nein), Neubau begonnen (ja/nein) | ein Datensatz je geplantem Verkauf |
@@ -766,6 +767,8 @@ Vollständige Liste der Felder, die das Modell pro Objekt braucht, mit Quelle. S
 
 Die Trennung AK Gebäude zu Grund und Boden ist das kritischste Feld. Fehlt sie, lassen sich weder AfA noch § 6b sauber rechnen. Falls das Anlageverzeichnis sie nicht ausweist, muss der Kaufpreis nachträglich aufgeteilt werden, etwa nach Bodenrichtwert oder BMF-Arbeitshilfe.
 
+Seit Abschnitt 20 ist nur noch Pflicht, was die Buchhaltung immer liefert: ObjektID und Miete. Alle übrigen Felder füllt eine Annahme, solange kein echter Wert vorliegt. Bei einem verkauften Objekt sind die steuerlichen Stammdaten und der Verkaufspreis kritisch: Sie bestimmen Gewinn und Rücklage, die Mappe markiert sie orange und warnt.
+
 ## 18. Zielstruktur: Ausgabe im DATEV-BWA-Format, Sonderbereich Verkauf und Kauf
 
 Festgehalten nach Rückmeldung der Kanzlei (Oktober 2026), Grundlage ist die Datei „Planungsreferenz.xlsx“. Die Datei enthält Mandantenzahlen und liegt deshalb nicht im Repository. Die Struktur ist hier beschrieben und als Vorlage mit erfundenen Werten nachgebaut.
@@ -960,3 +963,100 @@ Die Makros fügen nie Zeilen ein und löschen nie welche. Sie schreiben nur in d
 - Eine festgehaltene Variante enthält dieselben Werte wie das Blatt Vergleich.
 
 Die Makrofälle laufen im Prüfskript in LibreOffice. Dort bricht `Err.Raise` die Funktion ab und liefert 0, Excel zeigt stattdessen die Meldung. Die Schaltflächen und Eingabedialoge sind nur in Excel bedienbar und werden nicht automatisch geprüft.
+
+## 20. Datenlage: Auffülllogik, Farben, Startblatt und Schnellcheck
+
+Anlass: Zu vielen Bestandsobjekten liegen nur die laufenden Buchungen vor, keine Verkehrswerte und keine Kaufdaten. Das Modell soll trotzdem rechnen und zeigen, wie belastbar das Ergebnis ist. Dazu fährt es zweigleisig: Wo fehlende Daten nur Feinschliff sind, füllt eine plausible Annahme; wo sie das Ergebnis bestimmen, markiert die Mappe sie und warnt.
+
+**Auffülllogik**
+
+Die Annahme steht als Formel direkt in der leeren Eingabezelle (blau). Wer einen echten Wert eintippt, ersetzt sie (gelb). Die Formeln bauen aufeinander auf, die Sätze stehen zentral auf dem Parameterblatt im Abschnitt „Annahmen bei fehlenden Daten“.
+
+| Feld | Annahme | Parameter |
+| --- | --- | --- |
+| Erhaltung | Miete × Quote | par\_AnnErhQuote (10 %) |
+| Verkehrswert | (Miete + weitere Einnahmen) × Vervielfältiger | par\_AnnVervielfaeltiger (20) |
+| Verkehrswertanteil Gebäude | Gebäudeanteil | par\_AnnGebaeudeanteil (75 %) |
+| AfA-Satz | AfA-Satz Bestand | par\_AnnAfASatz (2 %) |
+| Kaufjahr | Basisjahr − Jahre seit Kauf | par\_AnnHaltedauer (15) |
+| AK Gebäude | AfA lt. Buchhaltung / AfA-Satz; ohne AfA: Verkehrswert × Gebäudeanteil / (1 + Wertsteigerung)^(Basisjahr − Kaufjahr) | |
+| AK G+B | AK Gebäude × (1 − Gebäudeanteil) / Gebäudeanteil | |
+| Restbuchwert | AK Gebäude × (1 − (Basisjahr − Kaufjahr + 1) × AfA-Satz), mindestens 0 | |
+| Verkaufspreis | Verkehrswert × (1 + Wertsteigerung)^(Verkaufsjahr − Basisjahr) | |
+
+Neues Eingabefeld „AfA Basisjahr lt. Buchhaltung“ (BWA 1240, obj\_AfABWA): Mit ihm trifft die AfA der Prognose die Buchhaltung, auch wenn AK und Kaufjahr fehlen. Weitere Einnahmen und Ausgaben bleiben leer = 0. Pflicht sind nur ObjektID und Miete.
+
+Wird eine Annahme gelöscht, ohne einen Wert einzutragen, meldet der Status „Wert fehlt: Annahme gelöscht“. Das Makro „Annahmen wiederherstellen“ füllt leere Felder aus der ausgeblendeten Vorlagezeile (obj\_Vorlage). „Objekt entfernen“ stellt die Annahmen der Zeile selbst wieder her, „Objekt duplizieren“ kopiert Formeln als Formeln.
+
+**Farblogik der Eingabezellen** (bedingte Formatierung, erste passende Regel gilt)
+
+| Farbe | Bedeutung | Regel |
+| --- | --- | --- |
+| rot | Pflichtwert fehlt oder Annahme gelöscht | ObjektID gesetzt, Zelle leer |
+| orange | kritische Annahme | Formel in der Zelle, Objekt hat einen Verkauf; Felder Verkehrswertanteil, AfA-Satz, Kaufjahr, AK, Restbuchwert sowie der Verkaufspreis |
+| blau | Annahme | Formel in der Zelle (ISTFORMEL) |
+| grün | aus der Buchhaltung eingelesen | Wert gleich dem eingelesenen Wert in den ausgeblendeten Spalten rechts |
+| gelb | händisch eingetragen | alle übrigen Eingaben |
+
+Je Objekt zählen die Spalten „Annahmen (blau)“ und „kritische Annahmen (orange)“ mit (obj\_Annahmen, obj\_Kritisch), je Verkauf „Preis angenommen“ (vk\_PreisAnnahme). Das Blatt Prüfung meldet:
+- **Warnung:** Verkauf mit kritischen Annahmen.
+- **Hinweis:** Objekte mit Annahmen. Er ersetzt den früheren Hinweis „ohne Verkehrswert“.
+
+**Reinvestition aus dem Verkauf**
+
+Neues Feld im Blatt Verkäufe: „reinvestieren“ (ja/nein). Bei ja entsteht in derselben Zeile des Blatts Neuobjekte ein Neuobjekt aus Formeln (blau):
+
+| Feld | Wert |
+| --- | --- |
+| NeuID | „NEU-“ & ObjektID |
+| Kaufjahr | Verkaufsjahr + par\_AnnReinvestJahre |
+| Kaufpreis | Nettoerlös × par\_AnnReinvestQuote / (1 + par\_AnnNeuNebenkosten) |
+| Nebenkosten | Kaufpreis × par\_AnnNeuNebenkosten |
+| Anteil G+B, AfA-Satz, AfA-Methode, Mietrendite, Erhaltungsquote | Annahmen des Parameterblatts |
+| Quelle | Rücklage des Verkaufs, wenn § 6b = ja |
+
+Ein Neuobjekt aus dem Modell oder von Hand ersetzt die Zeile.
+
+**Startblatt**
+
+Das Startblatt ist das erste Blatt beider Mappen.
+- **Handlungsempfehlung:** die beste Option nach Endvermögen nach latenter Steuer, mit dem Vorsprung gegenüber Halten. Ohne Verkauf erscheint ein Hinweis, was einzutragen ist.
+- **Endvermögen je Option:** Halten, § 6b-Kette (Plan), sofort versteuern und reinvestieren, sofort versteuern und anlegen; mit Differenz zu Halten und Rang.
+- **Kennzahlen:** Wert der § 6b-Kette (A − C), Steuer gesamt, tiefster Liquiditätsstand mit Jahr.
+- **Belastbarkeit:**
+  - „Nicht belastbar“ bei Fehlern.
+  - „Vorläufig“ bei kritischen Annahmen.
+  - Sonst „Belastbar im Rahmen der zentralen Annahmen“.
+- Dazu Datenlage, Anleitung mit Links, Farblegende und die zentralen Annahmen.
+
+Die Blattreiter sind nach Typ gefärbt: gelb Eingabe, grau Rechnung, blau Ausgabe, grün Kontrolle.
+
+Benannte Bereiche: start\_Empfehlung, start\_Vorsprung, start\_Belastbarkeit, start\_Kritisch, start\_Optionen, start\_Werte.
+
+**Schnellcheck**
+
+`python -m prognosemodell --schnellcheck` (mit `--kostenstellen` aus der BWA) erzeugt `ausgabe/Schnellcheck_VV.xlsx`. Die Rechenlogik ist dieselbe, nur Eingabe und Ansicht sind schlanker:
+- Im Blatt Verkäufe stehen „§ 6b nutzen“ und „reinvestieren“ als Annahme auf ja.
+- Im Blatt Objekte sind die steuerlichen Stammdaten zu einer zugeklappten Spaltengruppe zusammengefasst (+ am Spaltenkopf).
+- Prognose, Rücklagen, Liquidität, Auswertung und die BWA-Blätter sind ausgeblendet. Rechtsklick auf einen Reiter, „Einblenden“, holt sie zurück.
+
+Mindesteingabe sind ObjektID und Miete je Objekt, besser auch Erhaltung und AfA aus der BWA, dazu je geplantem Verkauf Objekt und Jahr.
+
+**Diagramme**
+
+Alle Liniendiagramme haben dieselbe Achsenformatierung, damit sich in Excel nichts überlagert:
+- Beträge in Tsd. €, die Einheit im Titel statt eines Achsentitels.
+- Jahre schräg gestellt und immer am unteren Rand, auch bei negativen Werten.
+- Titel und Legende außerhalb der Zeichenfläche.
+
+**Prüfung im Prüfskript:**
+- ein Objekt nur mit Miete, mit und ohne AfA lt. Buchhaltung, gegen die Handrechnung;
+- ein Verkauf ohne Preis mit automatischer Reinvestition;
+- die Annahmen des Schnellchecks;
+- das Wiederherstellen per Makro;
+- die Empfehlung im Abnahmefall.
+
+**Offen:**
+- Die Annahmesätze sind Platzhalter und mit der Kanzlei abzustimmen.
+- Die Schaltflächen und die Farben sind in Excel zu sichten; das Prüfskript sieht nur die Werte.
+

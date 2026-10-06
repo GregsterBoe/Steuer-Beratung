@@ -20,8 +20,9 @@ from openpyxl import load_workbook
 from prognosemodell.einlesen import lese_kostenstellen, zusammenfuehren
 from prognosemodell.makros import LibreOffice, speichere_mit_makros
 from prognosemodell.mappe import erstelle_mappe
-from prognosemodell.modelle import (FEHLER, HINWEIS, MAX_OBJEKTE, PRUEFUNGEN, WARNUNG, Modell,
-                                    Neuobjekt, Verkauf, prognosejahre)
+from prognosemodell.modelle import (FEHLER, HINWEIS, MAX_OBJEKTE, PRUEFUNGEN,
+                                    STATUS_ANNAHME_GELOESCHT, WARNUNG, Modell, Neuobjekt,
+                                    Objekt, Verkauf, prognosejahre)
 from prognosemodell.testdaten import testobjekt
 from prognosemodell.vorlagen import erstelle_vorlage
 
@@ -182,7 +183,8 @@ def faelle():
     # Etappe 7 rechnet ohne Zins auf die Liquidität
     OHNE_ZINS = {"par_Alternativrendite": 0}
     abnahme4 = dataclasses.replace(obj, restbuchwert=496_000)  # Buchwert Ende 2027: 480.000
-    ohne_quote = dataclasses.replace(obj, objekt_id="OBJ-005", vk_quote_gebaeude=None)
+    # "" = Annahme in der Zelle gelöscht, None = Annahme greift
+    ohne_quote = dataclasses.replace(obj, objekt_id="OBJ-005", vk_quote_gebaeude="")
     jung = dataclasses.replace(obj, objekt_id="OBJ-004", kaufjahr=2024)
     return [
         ("Etappe 1: Stammdaten vollständig", [obj], [
@@ -253,7 +255,7 @@ def faelle():
             ("ueb_Plan", ueb(2046), 2_080_326.35),
             ("ueb_Differenz", ueb(2046), 0),
             ("ueb_Objekte", 0, 1),
-            ("ueb_OhneWert", 0, 0),
+            ("ueb_MitAnnahmen", 0, 0),
             ("ueb_Verkaeufe", 0, 0),
         ]),
         ("Verkauf OBJ-001 Ende 2030: Plan verliert den Wert, Baseline hält",
@@ -280,7 +282,8 @@ def faelle():
             ("ueb_Plan", ueb(2046), 2_080_326.35),
             ("ueb_Verkaeufe", 0, 1),
         ]),
-        ("Verkäufe: Statusprüfung, fehlender Verkehrswert",
+        # OBJ-003 ohne Verkehrswert: Annahme 60.000 × 20 = 1,2 Mio
+        ("Verkäufe: Statusprüfung, fehlender Verkehrswert angenommen",
          Modell(objekte=[obj, obj2, obj3],
                 verkaeufe=[Verkauf("OBJ-001", 2030), Verkauf("OBJ-001", 2031),
                            Verkauf("XYZ", 2030), Verkauf("OBJ-002", 2050),
@@ -292,8 +295,10 @@ def faelle():
             ("vk_Status", 4, "Verkaufsjahr fehlt"),
             ("vk_Status", 5, None),
             ("prg_Aktiv", prg(3, 2046), 1),  # ohne Verkaufsjahr kein Verkauf
-            ("ueb_OhneWert", 0, 1),
-            ("ueb_Baseline", ueb(2026), 2_800_000),  # OBJ-003 zählt mit 0
+            ("ueb_MitAnnahmen", 0, 1),
+            ("obj_Verkehrswert", 2, 1_200_000),
+            ("obj_Annahmen", 2, 1),
+            ("ueb_Baseline", ueb(2026), 4_000_000),
         ]),
         ("Etappe 4: Abnahme Preis 1,4 Mio, Buchwert gesamt 680.000, hälftig",
          Modell(objekte=[abnahme4],
@@ -326,11 +331,12 @@ def faelle():
         ]),
         ("Etappe 4: Statusprüfung Preis, Aufteilung, § 6b-Vorbesitzzeit",
          Modell(objekte=[obj, jung, ohne_quote],
-                verkaeufe=[Verkauf("OBJ-001", 2028),
+                verkaeufe=[Verkauf("OBJ-001", 2028, preis=""),
                            Verkauf("OBJ-005", 2028, preis=1_000_000),
                            Verkauf("OBJ-004", 2029, preis=1_000_000, nutzung_6b="ja")]), [
             ("vk_Status", 0, "Verkaufspreis fehlt"),
             ("vk_Status", 1, "Aufteilung fehlt: Anteil G+B oder Verkehrswertanteil"),
+            ("obj_Status", 2, STATUS_ANNAHME_GELOESCHT),
             ("vk_Gewinn", 1, None),
             ("vk_Vorbesitz", 2, 5),
             ("vk_Status", 2, "§ 6b unzulässig: Vorbesitzzeit zu kurz"),
@@ -899,6 +905,11 @@ def faelle():
             ("KAUF:./. Abschreibungen (Steuerbilanz)", 1, -14_400),
             ("KAUF:= vorläufiges Ergebnis", 1, 34_500),
             ("KAUF:= Cash Flow (vor Finanzierung)", 1, 48_900),
+            # Halten liegt nach 20 Jahren vorn: Endvermögen Baseline über A 2.615.589,88
+            ("start_Empfehlung", 0, "Halten: kein Verkaufsszenario erreicht ein höheres "
+             "Endvermögen."),
+            ("start_Vorsprung", 0, 0),
+            ("start_Werte", 1, 2_615_589.88),
         ]),
         # Kostenstellen aus der Vorlage: weitere Ausgaben nach dem Anteil der Kostenart im
         # Basisjahr. KSt 1: 1140 1.200, 1150 1.800, 1260 600, je × 1,02; KSt 2: Basis 9.300
@@ -918,6 +929,72 @@ def faelle():
             ("bwa_1120", lj(2027), 2_448),
             ("bwa_1260", lj(2027), 1_734),
             ("bwa_1020", lj(2027), 183_600),
+        ]),
+        # Auffülllogik: Objekt nur mit Miete. Verkehrswert 60.000 × 20, Gebäudeanteil 75 %,
+        # Kauf 2011, AK Gebäude = 900.000 / 1,02^15, ohne AfA lt. Buchhaltung; mit AfA 16.000
+        # und 2 % sind es 800.000. Restbuchwert = AK × (1 − 16 × 2 %)
+        ("Annahmen: Objekt nur mit Miete und AfA lt. Buchhaltung",
+         Modell(objekte=[Objekt("A1", miete=60_000), Objekt("A2", miete=60_000, afa_bwa=16_000)]),
+         befund(annahmen=2) + [
+            ("obj_Verkehrswert", 0, 1_200_000),
+            ("obj_VKQuoteGeb", 0, 0.75),
+            ("obj_AfASatz", 0, 0.02),
+            ("obj_Kaufjahr", 0, 2011),
+            ("obj_AKGebaeude", 0, 668_713.26),
+            ("obj_AKGuB", 0, 222_904.42),
+            ("obj_Restbuchwert", 0, 454_725.01),
+            ("obj_ErhBasis", 0, 6_000),
+            ("obj_AKGebaeude", 1, 800_000),
+            ("obj_AKGuB", 1, 266_666.67),
+            ("obj_Restbuchwert", 1, 544_000),
+            ("obj_Status", 0, "OK"),
+            ("obj_Annahmen", 0, 8),
+            ("obj_Kritisch", 1, 0),
+            ("prg_AfA", prg(2, 2027), 16_000),
+            ("ueb_MitAnnahmen", 0, 2),
+            ("start_Empfehlung", 0, "Noch kein Verkauf erfasst: im Blatt Verkäufe Objekt und "
+             "Verkaufsjahr eintragen, dann zeigt dieses Blatt die beste Option."),
+            ("start_Belastbarkeit", 0, "Belastbar im Rahmen der zentralen Annahmen."),
+            ("start_Kritisch", 0, 0),
+        ]),
+        # Preis = 1,2 Mio × 1,02²; Gewinn Gebäude 936.360 − 512.000, G+B 312.120 − 266.666,67;
+        # Neuobjekt 2029 für 1.248.480 / 1,07 plus 7 % Nebenkosten, Quelle die Rücklage
+        ("Annahmen: Verkauf ohne Preis, Reinvestition aus dem Verkauf",
+         Modell(objekte=[Objekt("A1", miete=60_000), Objekt("A2", miete=60_000, afa_bwa=16_000)],
+                verkaeufe=[Verkauf("A2", 2028, nutzung_6b="ja", reinvest="ja")]),
+         befund(annahmen=2, kritisch=2) + [
+            ("vk_Preis", 0, 1_248_480),
+            ("vk_PreisAnnahme", 0, 1),
+            ("vk_Gewinn", 0, 469_813.33),
+            ("obj_Kritisch", 1, 6),
+            ("ne_ID", 0, "NEU-A2"),
+            ("ne_Kaufjahr", 0, 2029),
+            ("ne_Kaufpreis", 0, 1_166_803.74),
+            ("ne_Nebenkosten", 0, 81_676.26),
+            ("ne_Quelle", 0, "RL-A2"),
+            ("ne_Status", 0, "OK"),
+            ("ne_AfABasis", 0, 512_000),
+            ("ne_ID", 1, None),
+            ("rls_Bestand", rls(2029), 0),       # voll übertragen
+            ("start_Belastbarkeit", 0, "Vorläufig: 2 kritische Annahme(n) bei Verkäufen "
+             "(orange) durch echte Werte ersetzen."),
+            ("start_Werte", 0, Wie("vg_Baseline")),
+            ("start_Werte", 1, Wie("vg_A")),
+            ("start_Werte", 2, Wie("vg_C")),
+            ("start_Werte", 3, Wie("vg_B")),
+        ]),
+        ("Schnellcheck: § 6b und Reinvestition als Annahme",
+         Modell(objekte=[Objekt("A2", miete=60_000, afa_bwa=16_000)],
+                verkaeufe=[Verkauf("A2", 2028)], schnellcheck=True), [
+            ("vk_6b", 0, "ja"),
+            ("vk_Reinvest", 0, "ja"),
+            ("vk_6b", 1, None),
+            ("rl_ID", 0, "RL-A2"),
+            ("ne_ID", 0, "NEU-A2"),
+            ("ne_Quelle", 0, "RL-A2"),
+            ("ne_AfAMethode", 0, "linear"),
+            ("ne_Mietrendite", 0, 0.045),
+            ("prg_Miete", prg_neu(1, 2030), 1_166_803.74 * 0.045 * 1.02),
         ]),
         # Etappe 9: Plausibilitätsprüfungen melden jeden eingebauten Fehler
         ("Etappe 9: Testobjekt ohne Befund", [obj], befund() + [
@@ -971,7 +1048,7 @@ def faelle():
             ("pr_Ergebnis", pr("liquiditaet"), HINWEIS),
             ("pr_Gesamt", 0, "OK"),  # Hinweise zählen nicht
         ]),
-        ("Etappe 9: ohne Verkehrswert nur Hinweis", [obj3], befund(verkehrswert=1)),
+        ("Etappe 9: ohne Verkehrswert nur Hinweis", [obj3], befund(annahmen=1)),
         # Makrofälle: vierter Eintrag sind die Aufrufe der Reihe nach,
         # (Modul, Prozedur, Argumente, erwarteter Rückgabewert; FEHLT = ohne Rückgabewert)
         ("Etappe 9: Makros Objekt anlegen, duplizieren, entfernen", Modell(objekte=[obj, obj2]), [
@@ -986,6 +1063,8 @@ def faelle():
             ("obj_Status", 1, "Pflichtfeld fehlt"),
             ("obj_Status", 3, "Pflichtfeld fehlt"),
             ("obj_EinnBasis", 1, None),          # Eingaben von OBJ-002 geleert
+            ("obj_Kaufjahr", 1, 2011),           # Annahme nach dem Entfernen wiederhergestellt
+            ("obj_Kaufjahr", 3, 2011),
             ("prg_ID", prg(3, 2027), "OBJ-003"),  # Kopie rechnet im eigenen Block
             ("prg_Miete", prg(3, 2027), 61_200),
             ("prg_Buchwert", prg(3, 2046), 160_000),
@@ -1007,6 +1086,7 @@ def faelle():
             ("modObjekte", "ObjektEntfernen", ("OBJ-002",), FEHLT),
             ("modObjekte", "ObjektAnlegen", ("OBJ-005",), 2),
             ("modObjekte", "ObjektPosition", ("OBJ-003",), 3),
+            ("modObjekte", "AnnahmenWiederherstellen", (), 0),  # Entfernen stellt selbst her
             ("modObjekte", "LeereBloeckeAusblenden", (True,), FEHLT),
             ("modObjekte", "LeereBloeckeAusgeblendet", (), True),
             ("modObjekte", "LeereBloeckeAusblenden", (False,), FEHLT),
