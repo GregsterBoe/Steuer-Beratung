@@ -933,6 +933,63 @@ def faelle():
             ("bwa_1260", lj(2027), 1_734),
             ("bwa_1020", lj(2027), 183_600),
         ]),
+        # AfA lt. Buchhaltung läuft in der Prognose weiter: 12.000 statt AK × Satz 16.000,
+        # bis der Restbuchwert 30.000 verbraucht ist; 0 lt. Buchhaltung = abgeschrieben
+        ("AfA: Buchhaltung steuert die Prognose",
+         Modell(objekte=[dataclasses.replace(obj, objekt_id="B1", afa_bwa=12_000,
+                                             restbuchwert=30_000),
+                         Objekt("B2", miete=60_000, afa_bwa=0)]), [
+            ("obj_AfAJahr", 0, 12_000),
+            ("prg_AfA", prg(1, 2027), 12_000),
+            ("prg_AfA", prg(1, 2028), 12_000),
+            ("prg_AfA", prg(1, 2029), 6_000),
+            ("prg_AfA", prg(1, 2030), 0),
+            ("prg_BuchwertHalten", prg(1, 2028), 6_000),
+            ("obj_AfAJahr", 1, 0),
+            ("obj_Restbuchwert", 1, 0),
+            ("prg_AfA", prg(2, 2027), 0),
+            ("BWA:B1:1240", 2027, 12_000),
+        ]),
+        # Zuordnung brutto, Verkauf und Rücklage außerordentlich, Neuobjekt-Miete auf 1090:
+        # Preis 1,4 Mio als Ertrag 1351; Buchwertabgang 480.000 + 200.000 und Rücklage
+        # 720.000 als Aufwand 1352. Das Ergebnis (1353) bleibt gleich der Liquidität.
+        ("BWA: Zuordnung brutto und eigene Zeilen",
+         Modell(objekte=[abnahme4],
+                verkaeufe=[Verkauf("OBJ-001", 2027, preis=1_400_000, nutzung_6b="ja")],
+                neuobjekte=[Neuobjekt("NEU-001", 2028, kaufpreis=1_200_000, anteil_gub=0.3,
+                                      afa_satz=0.03, mietrendite=0.05, erhaltungsquote=0.01,
+                                      quelle="RL-OBJ-001")],
+                bwa_zuordnung={"verkauf": "brutto", "erloes": 1351, "abgang": 1352,
+                               "bildung": 1352, "neu_miete": 1090}), [
+            *[(f"bwa_{nr}", lj(j), Wie(name, lj(j)))
+              for j in (2027, 2028, 2029)
+              for nr, name in ((1353, "liq_ZvE"), (1240, "liq_AfA"))],
+            ("bwa_1351", lj(2027), 1_400_000),
+            ("bwa_1352", lj(2027), 1_400_000),
+            ("bwa_1323", lj(2027), 0),
+            ("bwa_1312", lj(2027), 0),
+            ("bwa_1020", lj(2029), 0),
+            ("bwa_1090", lj(2029), 61_200),
+            ("BWA:OBJ-001:1351", 2027, 1_400_000),
+            ("BWA:OBJ-001:1352", 2027, 1_400_000),
+            ("BWA:NEU-001:1090", 2029, 61_200),
+            ("BWA:NEU-001:1020", 2029, 0),
+            ("bwah_erloes", lj(2027), 1_400_000),
+            ("bwah_gewinn", lj(2027), 0),
+            ("zuo_Differenz", 0, 0),
+            ("zuo_Differenz", 2, 0),
+            ("pr_Anzahl", pr("bwa_zuordnung"), 0),
+        ]),
+        # ungültige Nr.: der Gewinn 720.000 fehlt in der BWA, die Kontrolle schlägt 2027 an
+        ("BWA: Zuordnung mit ungültiger Nr.",
+         Modell(objekte=[abnahme4],
+                verkaeufe=[Verkauf("OBJ-001", 2027, preis=1_400_000, nutzung_6b="ja")],
+                bwa_zuordnung={"gewinn": 1100}), [
+            ("zuo_Differenz", 0, -720_000),
+            ("zuo_Differenz", 1, 0),
+            ("pr_Anzahl", pr("bwa_zuordnung"), 2),
+            ("pr_Ergebnis", pr("bwa_zuordnung"), "Warnung"),
+        ]),
         # Auffülllogik: Objekt nur mit Miete. Verkehrswert 60.000 × 20, Gebäudeanteil 75 %,
         # Kauf 2011, AK Gebäude = 900.000 / 1,02^15, ohne AfA lt. Buchhaltung; mit AfA 16.000
         # und 2 % sind es 800.000. Restbuchwert = AK × (1 − 16 × 2 %)
@@ -951,7 +1008,7 @@ def faelle():
             ("obj_AKGuB", 1, 266_666.67),
             ("obj_Restbuchwert", 1, 544_000),
             ("obj_Status", 0, "OK"),
-            ("obj_Annahmen", 0, 11),   # 8 Stammdaten, Baujahr, Großmaßnahme Jahr und Betrag
+            ("obj_Annahmen", 0, 12),   # 9 Stammdaten, Baujahr, Großmaßnahme Jahr und Betrag
             ("obj_Kritisch", 1, 0),
             ("prg_AfA", prg(2, 2027), 16_000),
             ("ueb_MitAnnahmen", 0, 2),
@@ -969,7 +1026,7 @@ def faelle():
             ("vk_Preis", 0, 1_248_480),
             ("vk_PreisAnnahme", 0, 1),
             ("vk_Gewinn", 0, 469_813.33),
-            ("obj_Kritisch", 1, 6),
+            ("obj_Kritisch", 1, 7),
             ("ne_ID", 0, "NEU-A2"),
             ("ne_Kaufjahr", 0, 2029),
             ("ne_Kaufpreis", 0, 1_166_803.74),

@@ -41,6 +41,7 @@ Stand: Etappen 1 bis 9 sind umgesetzt.
 - Einleseschicht und Vorlage für die Kostenstellenblätter (DATEV-BWA)
 - Prüfungsblatt mit allen Plausibilitätsprüfungen als Formeln, VBA-Steuerung als .xlsm
 - Ausgabe im DATEV-BWA-Format je Kostenstelle mit Summenblatt, Sonderbereich Verkauf und Kauf
+- Blatt BWA-Zuordnung: BWA-Zeile je Sonderposten (Verkauf netto oder brutto, § 6b-Rücklage, Neuobjekte, Zins) wählbar, Herleitung unter jeder BWA, Kontrolle gegen die Liquidität
 - Startblatt mit Handlungsempfehlung, Auffülllogik für fehlende Daten mit Farblogik, Schnellcheck-Mappe
 
 ## Nutzung
@@ -146,7 +147,8 @@ Fehlende Daten füllt eine **Auffülllogik**: Die Annahme steht als Formel in de
 | AfA-Satz | 2 % |
 | Kaufjahr | vor 15 Jahren |
 | AK Gebäude | AfA lt. Buchhaltung / Satz |
-| Restbuchwert | aus AK und Kaufjahr |
+| Restbuchwert | aus AK und Kaufjahr; 0, wenn die Buchhaltung keine AfA mehr zeigt |
+| AfA je Jahr (Prognose) | AfA lt. Buchhaltung (auch 0), läuft bis der Restbuchwert verbraucht ist |
 | Erhaltung | 10 % der Miete |
 | Verkaufspreis | Verkehrswert fortgeschrieben |
 

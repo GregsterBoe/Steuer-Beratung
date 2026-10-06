@@ -823,7 +823,20 @@ Die Mappe enthält hinter den Kontrollblättern:
 | 1355 | nur im Summenblatt: Steuer aus dem Blatt Liquidität, mit Verlustvortrag (die Steuer entsteht bei der GmbH, nicht je Kostenstelle) |
 | 1051–1092, 1280–1380 | Summenformeln |
 
-Verkauf und Rücklage stehen im neutralen Ergebnis (1312, 1323), wie in der Planungsreferenz. Die außerordentlichen Zeilen 1351 und 1352 bleiben leer.
+Die Tabelle zeigt die Standardzuordnung. Bestandswerte (1020–1260 der Bestandsobjekte) gehen fest auf ihre Zeile. Verkauf, Rücklage, Neuobjekte und Zins sind **Sonderposten**, ihre Zeile steuert das Blatt BWA-Zuordnung (unten). Standard wie in der Planungsreferenz: Verkauf und Rücklage im neutralen Ergebnis (1312, 1323), die außerordentlichen Zeilen 1351 und 1352 leer.
+
+**Blatt BWA-Zuordnung (Steuerung und Kontrolle)**
+
+- Je Sonderposten eine BWA-Nr. (gelb, Auswahlliste), daneben Bezeichnung der Zeile, Ertrag/Aufwand, Standard und die Summe über die Planjahre. Abweichung vom Standard ist dunkelgelb, eine ungültige Nr. rot.
+- Zulässig sind die Einzelzeilen 1020, 1090, 1240, 1250, 1260, 1310, 1312, 1322, 1323, 1351, 1352. Die Kostenarten 1100–1220 bleiben den eingelesenen Kosten vorbehalten, Summenzeilen und Steuern sind ausgeschlossen.
+- Jeder Posten ist ergebniswirksam gerechnet (Ertrag +, Aufwand −). Eine Aufwandszeile nimmt ihn mit umgekehrtem Vorzeichen auf. So bleibt das Ergebnis bei jeder Zuordnung gleich, nur der Ausweis ändert sich.
+- „Verkauf ausweisen“: netto bucht nur Veräußerungsgewinn bzw. -verlust. Brutto bucht den Verkaufspreis als Ertrag sowie Verkaufskosten und Buchwertabgang (Gebäude + G+B) als Aufwand; die Summe ist derselbe Gewinn.
+- Posten: Veräußerungsgewinn, -verlust (netto); Veräußerungspreis, -kosten, Buchwertabgang (brutto); Einstellung, Auflösung, Gewinnzuschlag § 6b; Neuobjekte Mieten, weitere Einnahmen, Erhaltung, weitere Ausgaben, Abschreibungen; Zinsertrag und Zinsaufwand (nur Summenblatt).
+- Unter jeder BWA steht der Block „Herleitung Sonderposten“: je Posten die Ziel-Nr. (Spalte D) und der Betrag je Planjahr für diese Kostenstelle. Die Ziel-Nr. steht bewusst nicht in Spalte B, damit ein erneutes Einlesen die BWA-Zeilen nicht verwechselt.
+- Kontrolle je Planjahr: Ergebnis lt. BWA Alle Objekte (1353) gegen Ergebnis vor Verlustvortrag im Blatt Liquidität, Differenz muss 0 sein. Die Prüfung „bwa\_zuordnung“ (Warnung) zählt ungültige Nummern und Jahre mit Differenz.
+- Generator: Modell.bwa\_zuordnung, z. B. {"verkauf": "brutto", "erloes": 1351}.
+
+Benannte Bereiche: zuo\_Verkauf, zuo\_<Posten> (BWA-Nr.), zuo\_Nr, zuo\_Nummern, zuo\_Liste, zuo\_Differenz; bwah\_<Posten> (Herleitung im Summenblatt über die Planjahre).
 
 **Summenblatt „Alle Objekte“**
 
@@ -831,7 +844,7 @@ Verkauf und Rücklage stehen im neutralen Ergebnis (1312, 1323), wie in der Plan
 - Die Kostenarten 1100–1220 sind die Summe der Kostenstellenblätter, 1260 nimmt den Rest der weiteren Ausgaben auf.
 - Die Ist-Spalten sind die Summe der Kostenstellenblätter.
 - Abgleich, im Prüfskript je Jahr geprüft:
-  - Ergebnis vor Steuern (1345) = Ergebnis vor Verlustvortrag im Blatt Liquidität
+  - Ergebnis vor Steuern (1345, bei Standardzuordnung) bzw. 1353 (bei jeder Zuordnung) = Ergebnis vor Verlustvortrag im Blatt Liquidität
   - Vorläufiges Ergebnis (1380) = Ergebnis nach Steuern im Blatt Auswertung
   - Abschreibungen (1240) = AfA im Blatt Liquidität
 
@@ -982,10 +995,13 @@ Die Annahme steht als Formel direkt in der leeren Eingabezelle (blau). Wer einen
 | Kaufjahr | Basisjahr − Jahre seit Kauf | par\_AnnHaltedauer (15) |
 | AK Gebäude | AfA lt. Buchhaltung / AfA-Satz; ohne AfA: Verkehrswert × Gebäudeanteil / (1 + Wertsteigerung)^(Basisjahr − Kaufjahr) | |
 | AK G+B | AK Gebäude × (1 − Gebäudeanteil) / Gebäudeanteil | |
-| Restbuchwert | AK Gebäude × (1 − (Basisjahr − Kaufjahr + 1) × AfA-Satz), mindestens 0 | |
+| Restbuchwert | AK Gebäude × (1 − (Basisjahr − Kaufjahr + 1) × AfA-Satz), mindestens 0; 0, wenn die AfA lt. Buchhaltung 0 ist (abgeschrieben) | |
+| AfA je Jahr (Prognose) | AfA lt. Buchhaltung, auch 0; ohne sie AK Gebäude × AfA-Satz | |
 | Verkaufspreis | Verkehrswert × (1 + Wertsteigerung)^(Verkaufsjahr − Basisjahr) | |
 
-Neues Eingabefeld „AfA Basisjahr lt. Buchhaltung“ (BWA 1240, obj\_AfABWA): Mit ihm trifft die AfA der Prognose die Buchhaltung, auch wenn AK und Kaufjahr fehlen. Weitere Einnahmen und Ausgaben bleiben leer = 0. Pflicht sind nur ObjektID und Miete.
+Neues Eingabefeld „AfA Basisjahr lt. Buchhaltung“ (BWA 1240, obj\_AfABWA): Mit ihm trifft die AfA der Prognose die Buchhaltung, auch wenn AK und Kaufjahr fehlen.
+
+**AfA der Buchhaltung steuert die Prognose** (Feld „AfA je Jahr (Prognose)“, obj\_AfAJahr): Die Prognose schreibt die AfA des Basisjahrs fort, bis der Restbuchwert verbraucht ist; danach 0. Zeigt die Buchhaltung keine AfA (BWA 1240 leer oder 0 im eingelesenen Blatt), gilt das Gebäude als abgeschrieben: AfA 0 und Restbuchwert 0, der ganze Gebäudeerlös ist dann Gewinn. Ohne eingelesene AfA bleibt es bei AK Gebäude × AfA-Satz. Ein eingetippter Wert ersetzt die Annahme, etwa wenn die AfA des Basisjahrs eine Sonder- oder Teil-AfA enthält. Das Feld ist kritisch (orange beim verkauften Objekt), weil es den Buchwert und damit den Veräußerungsgewinn bestimmt. Vorher wirkte die AfA lt. Buchhaltung nur über die geschätzten AK Gebäude und ging verloren, sobald AK Gebäude eingetragen oder die AfA 0 war. Weitere Einnahmen und Ausgaben bleiben leer = 0. Pflicht sind nur ObjektID und Miete.
 
 Wird eine Annahme gelöscht, ohne einen Wert einzutragen, meldet der Status „Wert fehlt: Annahme gelöscht“. Das Makro „Annahmen wiederherstellen“ füllt leere Felder aus der ausgeblendeten Vorlagezeile (obj\_Vorlage). „Objekt entfernen“ stellt die Annahmen der Zeile selbst wieder her, „Objekt duplizieren“ kopiert Formeln als Formeln.
 
@@ -1079,6 +1095,8 @@ Alle Liniendiagramme haben dieselbe Achsenformatierung, damit sich in Excel nich
 
 **Prüfung im Prüfskript:**
 - ein Objekt nur mit Miete, mit und ohne AfA lt. Buchhaltung, gegen die Handrechnung;
+- AfA lt. Buchhaltung abweichend von AK × Satz und 0 (abgeschrieben), Auslaufen am Restbuchwert;
+- BWA-Zuordnung brutto mit außerordentlichen Zeilen und mit ungültiger Nr.;
 - ein Verkauf ohne Preis mit automatischer Reinvestition;
 - die Annahmen des Schnellchecks;
 - das Wiederherstellen per Makro;

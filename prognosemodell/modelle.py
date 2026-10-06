@@ -129,6 +129,7 @@ CODENAMEN = {
     "Objekte": "wsObjekte", "Verkäufe": "wsVerkaeufe", "Neuobjekte": "wsNeuobjekte",
     "Prognose": "wsPrognose", "Rücklagen": "wsRuecklagen", "Liquidität": "wsLiquiditaet",
     "Auswertung": "wsAuswertung", "Prüfung": "wsPruefung", "Varianten": "wsVarianten",
+    "BWA-Zuordnung": "wsBWAZuordnung",
 }
 
 
@@ -164,7 +165,8 @@ OBJEKT_FELDER = [
     Feld("weitere_ausgaben", "weitere Ausgaben Basisjahr", "obj_AusgBasis", FMT_EURO, False,
          minimum=0, hinweis="BWA 1100–1220, 1260; leer = 0"),
     Feld("afa_bwa", "AfA Basisjahr lt. Buchhaltung", "obj_AfABWA", FMT_EURO, False, minimum=0,
-         hinweis="BWA 1240; damit schätzt die Annahme die AK Gebäude = AfA / AfA-Satz"),
+         hinweis="BWA 1240; 0 = keine AfA mehr. Daraus die Annahmen AfA je Jahr und "
+                 "AK Gebäude = AfA / AfA-Satz"),
     # steuerliche Stammdaten (Anlagenverzeichnis); fehlen sie, greift die Annahme
     Feld("verkehrswert", "Verkehrswert aktuell", "obj_Verkehrswert", FMT_EURO, False, minimum=0,
          annahme=True, hinweis="leer: Jahresmiete × Vervielfältiger (Parameter)"),
@@ -184,7 +186,13 @@ OBJEKT_FELDER = [
          kritisch=True, hinweis="leer: AK Gebäude × G+B-Anteil / Gebäudeanteil"),
     Feld("restbuchwert", "Restbuchwert Gebäude Basisjahr", "obj_Restbuchwert", FMT_EURO, False,
          minimum=0, annahme=True, kritisch=True,
-         hinweis="leer: AK Gebäude − AfA je Jahr seit Kauf bis Ende Basisjahr"),
+         hinweis="leer: AK Gebäude − AfA je Jahr seit Kauf bis Ende Basisjahr; "
+                 "0, wenn die Buchhaltung keine AfA mehr zeigt"),
+    # die AfA der Buchhaltung läuft in der Prognose weiter, bis der Restbuchwert verbraucht ist
+    Feld("afa_jahr", "AfA je Jahr (Prognose)", "obj_AfAJahr", FMT_EURO, False, minimum=0,
+         annahme=True, kritisch=True,
+         hinweis="leer: AfA lt. Buchhaltung (auch 0), ohne Buchhaltung AK Gebäude × AfA-Satz; "
+                 "läuft bis der Restbuchwert verbraucht ist"),
     # Erhaltung nach Alter; die Großmaßnahme zählt als sofort abziehbarer Erhaltungsaufwand
     Feld("baujahr", "Baujahr", "obj_Baujahr", FMT_JAHR, False, 10, minimum=1800, maximum=2100,
          ganzzahl=True, annahme=True,
@@ -490,6 +498,7 @@ class Objekt:
     weitere_einnahmen: Optional[float] = None
     weitere_ausgaben: Optional[float] = None
     afa_bwa: Optional[float] = None      # AfA im Basisjahr lt. Buchhaltung (BWA 1240)
+    afa_jahr: Optional[float] = None     # AfA je Prognosejahr; leer = aus afa_bwa
     baujahr: Optional[int] = None
     san_jahr: Optional[int] = None       # Großmaßnahme; 0 = keine
     san_betrag: Optional[float] = None
@@ -566,6 +575,9 @@ PRUEFUNGEN = [
     Pruefung("kritisch", "Verkauf mit Annahmen bei steuerlichen Stammdaten oder Verkaufspreis "
              "(orange): Veräußerungsgewinn und § 6b-Rücklage sind nur geschätzt", WARNUNG,
              "Blätter Objekte und Verkäufe, orange Zellen"),
+    Pruefung("bwa_zuordnung", "BWA-Zuordnung mit ungültiger BWA-Nr. oder BWA Alle Objekte "
+             "weicht vom Ergebnis der Liquidität ab (Anzahl Posten bzw. Jahre)", WARNUNG,
+             "Blatt BWA-Zuordnung, Spalte BWA-Nr. und Kontrolle"),
     Pruefung("annahmen", "Objekte mit Annahmen (blau): Werte aus der Auffülllogik des "
              "Parameterblatts", HINWEIS, "Blatt Objekte, Spalte Annahmen"),
 ]
@@ -589,3 +601,6 @@ class Modell:
     kostenstellen: dict = field(default_factory=dict)
     # Schnellcheck: § 6b und Reinvestition je Verkauf als Annahme, Details ausgeblendet
     schnellcheck: bool = False
+    # Blatt BWA-Zuordnung: abweichende BWA-Nr. je Posten, z. B. {"gewinn": 1351},
+    # und "verkauf": "brutto"; ohne Eintrag gilt der Standard
+    bwa_zuordnung: dict = field(default_factory=dict)

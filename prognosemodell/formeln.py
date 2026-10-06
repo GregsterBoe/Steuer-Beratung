@@ -52,9 +52,14 @@ def annahme_objekt(key: str, zeile: int):
                         f"/(1+par_Wertsteig)^(par_Basisjahr-{n('kaufjahr')}))"),
         "ak_gub": (f"IF({n('vk_quote_gebaeude')}>0,{n('ak_gebaeude')}"
                    f"*(1-{n('vk_quote_gebaeude')})/{n('vk_quote_gebaeude')},0)"),
-        # volle Jahres-AfA vom Kaufjahr bis zum Ende des Basisjahrs
-        "restbuchwert": (f"MAX({n('ak_gebaeude')}*(1-(par_Basisjahr-{n('kaufjahr')}+1)"
-                         f"*{n('afa_satz')}),0)"),
+        # volle Jahres-AfA vom Kaufjahr bis zum Ende des Basisjahrs; zeigt die Buchhaltung
+        # keine AfA mehr (0), ist das Gebäude abgeschrieben
+        "restbuchwert": (f"IF(AND({c('afa_bwa')}<>\"\",{n('afa_bwa')}=0),0,"
+                         f"MAX({n('ak_gebaeude')}*(1-(par_Basisjahr-{n('kaufjahr')}+1)"
+                         f"*{n('afa_satz')}),0))"),
+        # die AfA der Buchhaltung läuft weiter, auch 0; ohne sie AK Gebäude × AfA-Satz
+        "afa_jahr": (f"IF({c('afa_bwa')}<>\"\",{n('afa_bwa')},"
+                     f"{n('ak_gebaeude')}*{n('afa_satz')})"),
         "baujahr": "par_Basisjahr-par_AnnGebaeudealter",
         # fällig bei Erreichen des Alters, bei schon älteren Gebäuden nach dem Vorlauf;
         # jenseits des Rasters keine (0)
@@ -164,7 +169,7 @@ def prognose_zeile(zeile: int, objekt_nr: int, erstes_jahr: bool) -> dict:
     id_obj = _stamm("obj_ID", objekt_nr)
     bw_vor = (_stamm("obj_Restbuchwert", objekt_nr) if erstes_jahr
               else _p("buchwert", zeile - 1))
-    afa_voll = f"{_stamm('obj_AKGebaeude', objekt_nr)}*{_stamm('obj_AfASatz', objekt_nr)}"
+    afa_voll = f"N({_stamm('obj_AfAJahr', objekt_nr)})"
 
     def indexiert(name, satz, aktiv=True):
         return _leer_oder(zeile, _indexiert(name, satz, zeile, objekt_nr, aktiv))
@@ -727,6 +732,8 @@ def pruefung_anzahl() -> dict:
         "frist_ende": '=SUMPRODUCT(--(rl_Hinweis<>""))',
         "liquiditaet": "=SUMPRODUCT(--(liq_Kum<-0.005))",
         "kritisch": '=COUNTIF(obj_Kritisch,">0")+SUM(vk_PreisAnnahme)',
+        "bwa_zuordnung": ("=SUMPRODUCT(--(COUNTIF(zuo_Nummern,zuo_Nr)=0))"
+                          "+SUMPRODUCT(--(ABS(zuo_Differenz)>0.5))"),
         "annahmen": '=COUNTIF(obj_Annahmen,">0")',
     }
 
