@@ -96,7 +96,8 @@ def status_objekt(zeile: int) -> str:
 def annahmen_objekt(zeile: int, nur_kritisch: bool = False) -> str:
     """Anzahl der Felder mit Annahme (Formel in der Eingabezelle); kritisch nur bei Verkauf."""
     id_ = f"${spalte('objekt_id')}{zeile}"
-    felder = [f for f in OBJEKT_FELDER if f.annahme and (f.kritisch or not nur_kritisch)]
+    felder = [f for f in OBJEKT_FELDER
+              if f.annahme and not f.abgeleitet and (f.kritisch or not nur_kritisch)]
     summe = "+".join(f"{ISFORMEL}(${spalte(f.key)}{zeile})" for f in felder)
     if nur_kritisch:
         summe = f"IF(COUNTIF(vk_ID,{id_})>0,{summe},0)"

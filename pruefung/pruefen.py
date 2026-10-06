@@ -1008,7 +1008,7 @@ def faelle():
             ("obj_AKGuB", 1, 266_666.67),
             ("obj_Restbuchwert", 1, 544_000),
             ("obj_Status", 0, "OK"),
-            ("obj_Annahmen", 0, 12),   # 9 Stammdaten, Baujahr, Großmaßnahme Jahr und Betrag
+            ("obj_Annahmen", 0, 11),   # 8 Stammdaten, Baujahr, Großmaßnahme Jahr und Betrag
             ("obj_Kritisch", 1, 0),
             ("prg_AfA", prg(2, 2027), 16_000),
             ("ueb_MitAnnahmen", 0, 2),
@@ -1026,7 +1026,7 @@ def faelle():
             ("vk_Preis", 0, 1_248_480),
             ("vk_PreisAnnahme", 0, 1),
             ("vk_Gewinn", 0, 469_813.33),
-            ("obj_Kritisch", 1, 7),
+            ("obj_Kritisch", 1, 6),
             ("ne_ID", 0, "NEU-A2"),
             ("ne_Kaufjahr", 0, 2029),
             ("ne_Kaufpreis", 0, 1_166_803.74),

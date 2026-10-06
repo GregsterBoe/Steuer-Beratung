@@ -149,6 +149,8 @@ class Feld:
     annahme: bool = False   # leer gelassen steht eine Annahmeformel in der Zelle (blau)
     kritisch: bool = False  # Annahme ist kritisch, sobald das Objekt verkauft wird (orange)
     hinweis: str = ""       # Eingabehilfe beim Anklicken der Zelle
+    # Formel leitet nur aus anderen Feldern ab: blau, zählt aber nicht als eigene Annahme
+    abgeleitet: bool = False
 
 
 OBJEKT_FELDER = [
@@ -190,7 +192,7 @@ OBJEKT_FELDER = [
                  "0, wenn die Buchhaltung keine AfA mehr zeigt"),
     # die AfA der Buchhaltung läuft in der Prognose weiter, bis der Restbuchwert verbraucht ist
     Feld("afa_jahr", "AfA je Jahr (Prognose)", "obj_AfAJahr", FMT_EURO, False, minimum=0,
-         annahme=True, kritisch=True,
+         annahme=True, abgeleitet=True,
          hinweis="leer: AfA lt. Buchhaltung (auch 0), ohne Buchhaltung AK Gebäude × AfA-Satz; "
                  "läuft bis der Restbuchwert verbraucht ist"),
     # Erhaltung nach Alter; die Großmaßnahme zählt als sofort abziehbarer Erhaltungsaufwand
