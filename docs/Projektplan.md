@@ -23,7 +23,7 @@ Der MVP bildet die volle steuerliche Logik ab: Abschreibungsdynamik, Verkauf, §
 Der Datenfluss läuft in eine Richtung: Eingabeblätter speisen die Rechenblätter, diese die Auswertung. Rückbezüge gibt es nur innerhalb der Rechnung, etwa wenn eine Reinvestition die Prognose eines Neuobjekts anstößt.
 
 ```text
-Eingabe:  Parameter, Objekte, Verkäufe, Neuobjekte
+Eingabe:  Parameter, Objekte, Anlagen, Verkäufe, Neuobjekte
             ↓
 Rechnung: Prognose ⇄ Rücklagen → Liquidität
             ↓
@@ -38,13 +38,14 @@ So bleibt nachvollziehbar, woher jede Zahl kommt: Alle Eingaben links, die Rechn
 
 ## 3. Blätter im Detail
 
-Zwölf feste Blätter, getrennt nach Eingabe, Rechnung, Ausgabe und Kontrolle. Dazu kommen die BWA-Ausgabe (Summenblatt, je Kostenstelle ein Blatt) und der Sonderbereich Verkauf und Kauf (Abschnitt 18). Eingabeblätter sind die einzige Stelle, an der getippt wird.
+Dreizehn feste Blätter, getrennt nach Eingabe, Rechnung, Ausgabe und Kontrolle. Dazu kommen die BWA-Ausgabe (Summenblatt, je Kostenstelle ein Blatt) und der Sonderbereich Verkauf und Kauf (Abschnitt 18). Eingabeblätter sind die einzige Stelle, an der getippt wird.
 
 | Blatt | Typ | Schlüsselfelder | Zweck |
 | --- | --- | --- | --- |
 | Start | Ausgabe | Handlungsempfehlung, Endvermögen je Option, Datenlage, Anleitung, Farblegende, zentrale Annahmen | erstes Blatt, Einstieg und Ergebnis auf einen Blick (Abschnitt 20) |
 | Parameter | Eingabe | Steuerwelt-Schalter, Grenzsteuersatz, Mietsteigerung, Erhaltungssteigerung, Kostensteigerung, Wertsteigerung, GrESt-Satz, degressive AfA, Alternativrendite, § 6b-Fristen | alle globalen Annahmen und Schalter |
 | Objekte | Eingabe | ObjektID, AK Gebäude, AK G+B, AfA-Satz, Kaufjahr, Restbuchwert 2026, Miete 2026, Erhaltung 2026 | Stammdaten je Bestandsobjekt |
+| Anlagen | Eingabe | Inventar-Nr., ObjektID, Art, AHK, Buchwert Stand, AfA-Methode, AfA-Satz, AfA p. a.; AfA je Prognosejahr | Anlagenverzeichnis, liefert AK, Buchwert, Kaufjahr und AfA je Objekt (Abschnitt 21) |
 | Verkäufe | Eingabe | ObjektID, Verkaufsjahr, Verkaufspreis oder Faktor, Verkaufskosten, 6b-Nutzung (ja/nein), Neubau begonnen (ja/nein) | ein Datensatz je geplantem Verkauf |
 | Neuobjekte | Eingabe | NeuID, Kaufjahr, Kaufpreis, Anteil G+B, Nebenkosten, AfA-Satz, AfA-Methode, Mietrendite, Erhaltungsquote, Quelle-Rücklage | Reinvestitionsobjekte |
 | Prognose | Rechnung | ObjektID × Jahr (2027-2046), Miete, Erhaltung, AfA, Buchwert, Ergebnis, aktiv-Flag | Jahresmatrix je Objekt, Herzstück |
@@ -730,10 +731,10 @@ Umgesetzt in `prognosemodell/einlesen.py`: Blätter, die nicht im Kostenstellenf
 
 **Offene Punkte, nächste Woche in der Arbeit zu prüfen**
 
-- [ ] Gibt es ein Anlageverzeichnis mit Anschaffungskosten und Buchwerten je Objekt?
-- [ ] Ist darin die Aufteilung Gebäude zu Grund und Boden schon enthalten?
+- [x] Gibt es ein Anlageverzeichnis mit Anschaffungskosten und Buchwerten je Objekt? Ja, DATEV-Export „Inventarübersicht“, Kostenstelle in KOST1 (Abschnitt 21).
+- [x] Ist darin die Aufteilung Gebäude zu Grund und Boden schon enthalten? Ja, getrennte Anlagen je Konto. Grund und Boden trägt im Muster aber oft keine KOST1 und muss dann im Blatt Anlagen zugeordnet werden.
 - [x] Haben die Kostenstellenblätter ein einheitliches Layout mit fester ObjektID? Muster liegt vor (B2 Kostenstelle, C2 Objekt), Einheitlichkeit über alle Blätter noch bestätigen.
-- [ ] Welcher Kontenrahmen (SKR03 oder SKR04) wird gebucht? Für die BWA-Werte egal, relevant erst beim Abgleich mit Sachkonten.
+- [x] Welcher Kontenrahmen (SKR03 oder SKR04) wird gebucht? Das Anlagenverzeichnis im Muster passt zu SKR04: 0235 Grundstückswerte, 0300–0360 Bauten, 0690 BGA, 0910 Finanzanlagen. Die Art je Konto ist in `einlesen.KONTEN_ART` hinterlegt und im Blatt änderbar.
 
 ## 17. Datenbedarf je Objekt
 
@@ -1105,4 +1106,104 @@ Alle Liniendiagramme haben dieselbe Achsenformatierung, damit sich in Excel nich
 **Offen:**
 - Die Annahmesätze sind Platzhalter und mit der Kanzlei abzustimmen.
 - Die Schaltflächen und die Farben sind in Excel zu sichten; das Prüfskript sieht nur die Werte.
+
+## 21. Anlagenverzeichnis und Aufschlüsselung der Abschreibungen
+
+Anlass: Zwei neue Datenquellen machen AK, Buchwert, Kaufjahr und AfA ohne Annahmen fest.
+- **Anlagenverzeichnis:** DATEV-Export „Inventarübersicht“, eine Zeile je Anlage. Die Spalte KOST1 verweist auf die Kostenstelle, also auf das Objekt.
+- **Kostenstellenblätter:** Die Kanzlei hat sie erweitert. Unter der BWA schlüsseln sie die Abschreibungen je Anlagengruppe auf, mit dem Buchwert zum Jahresende und der Jahres-AfA.
+
+Vorher lief die AfA eines Objekts als ein Betrag (BWA 1240) weiter, bis der Restbuchwert verbraucht war. Laufen Anlagen verschieden lang (Außenanlagen 10 %, Gebäude 2 %), war das zu grob, und AK, Kaufjahr und Restbuchwert blieben Annahmen.
+
+**Einlesen** (`einlesen.py`)
+
+`--inventar PFAD` liest das Anlagenverzeichnis. Die Spalten werden über die Kopfzeile gesucht, Pflicht sind Inventar, Buchw. Wj-Ende und KOST1. Daraus wird:
+
+| Feld im Blatt Anlagen | Quelle |
+| --- | --- |
+| Inventar-Nr., Bezeichnung, Konto, KOST1, AHK-Datum, AHK | gleichnamige Spalten (AHK Wj-Ende) |
+| Buchwert Stand | Buchw. Wj-Ende |
+| AfA-Satz | AfA-% / 100 |
+| AfA im Stand-Jahr | N-AfA und S-Abschr., jeweils Wj-Ende − Wj-Beginn (nur Kontrolle) |
+| Art | AfA-Art Lin.Geb. = Gebäude, Anlag./Bau = im Bau, Finanzanl. = Finanzanlage; sonst nach Konto (SKR04): 200–239 G+B, 240–399 Gebäude, 400–699 BGA, 700–799 im Bau, 800–999 Finanzanlage |
+| Methode | Keine AfA, Anlag./Bau, Finanzanl. oder ohne Satz: keine; Geom.degr.: degressiv; sonst linear |
+| ObjektID | ObjektID im Blatt Objekte mit derselben Endnummer wie KOST1, sonst „KSt <KOST1>“; ohne KOST1 leer |
+
+Abgegangene Anlagen (Datum in Abgang) entfallen. Abbruch mit Meldung bei doppelter Inventar-Nr., fehlender Kopfzeile oder Text statt Zahl.
+
+Das Jahr der Buchwerte (Wj-Ende) steht auf dem Parameterblatt (par\_AnlStand), Standard Basisjahr − 1. `--inventar-stand` setzt es; sonst gilt das Jahr im Dateinamen (Inventar\_2025.xlsx).
+
+`--kostenstellen` liest zusätzlich die Aufschlüsselung unter der BWA. Sie steht in Spalte C ohne BWA-Nr. und hat drei Blöcke:
+- „Buchwert, JE“: eine Zeile je Gruppe;
+- „Abschreibungen JW“: die Jahres-AfA je Gruppe;
+- „Abschreibungen MW“: beendet die Blöcke.
+
+Gelesen wird die Spalte des Jahres par\_AnlStand, im Muster F (2025). Buchwert und AfA einer Gruppe werden über die Beschriftung verbunden: bei gleicher Beschriftung, sonst wenn die eine mit der anderen beginnt („TG“ zu „TG 24“), sonst nach der Reihenfolge. Zeilen ohne Beschriftung (Zwischensummen) und Gruppen ohne Buchwert und AfA entfallen.
+
+Jede Gruppe wird eine Anlage der Art Gebäude mit Buchwert und AfA p. a., aber ohne AHK und Datum. Sie zählt nur für Kostenstellen ohne Anlage im Anlagenverzeichnis. Liegen beide Quellen vor, gibt das Einlesen je Kostenstelle beide Buchwerte aus; im Muster stimmen sie überein (KSt 1: 971.005 €).
+
+**Blatt Anlagen**
+
+Eine Zeile je Anlage. Die Eingaben sind gelb, AfA p. a. steht als Formel darin (blau), und die berechneten Spalten sind grau:
+
+| Spalte | Rechnung |
+| --- | --- |
+| AfA p. a. | linear: AHK × Satz, auf volle Euro aufgerundet (ROUNDUP(ROUND(…;2);0)), trifft die DATEV-AfA im Muster; degressiv: Buchwert Stand × Satz; keine: 0. Eintippen ersetzt die Formel |
+| Gruppe | G+B; Gebäude, BGA, im Bau = abnutzbar; sonst leer (nicht im Modell) |
+| Zugangsjahr | Jahr des AHK-Datums, nur G+B und Gebäude |
+| Buchwert Ende Basisjahr | linear MAX(Buchwert Stand − AfA p. a. × (Basisjahr − Stand); 0), degressiv Buchwert × (1 − Satz)^(Basisjahr − Stand) |
+| AfA Basisjahr, AfA je Prognosejahr t | linear MIN(AfA p. a.; MAX(Buchwert Stand − AfA p. a. × (t − 1 − Stand); 0)), degressiv Buchwert × (1 − Satz)^(t − 1 − Stand) × Satz; 0 bis zum Stand. Ist der Stand das Basisjahr, gilt als AfA Basisjahr die AfA lt. Inventar |
+| Status | Pflichtfeld fehlt (Inventar-Nr., Art, Buchwert, Methode), Inventar-Nr. doppelt, nicht im Modell (Art), ohne ObjektID, ObjektID fehlt im Blatt Objekte, sonst OK |
+
+Jede Zelle rechnet in geschlossener Form für sich, ohne Kette über die Jahre. Benannte Bereiche: anl\_Nr, anl\_ID, anl\_Art, anl\_AHK, anl\_BWStand, anl\_AfA, anl\_Gruppe, anl\_Zugang, anl\_BWBasis, anl\_AfABasis, anl\_Status, dazu anl\_AfAJahre über alle Jahresspalten.
+
+**Objekte**
+
+Neue Hilfsspalten nach den Annahmen zählen je Objekt die Anlagen mit Status OK. Daneben stehen die AfA Basisjahr lt. Anlagen und ihre Abweichung zu BWA 1240 (obj\_AnlAbn, obj\_AnlAK, obj\_AnlGuB, obj\_AnlKauf, obj\_AnlAfA, obj\_AnlDiff). Die Annahmeformeln der Eingabezellen fragen zuerst das Blatt Anlagen:
+
+| Feld | aus dem Blatt Anlagen, wenn | Wert |
+| --- | --- | --- |
+| AK Gebäude, AfA-Satz | abnutzbare Anlagen da, alle mit AHK | Summe AHK; Satz = Summe AfA p. a. / AK |
+| AK G+B | Anlage G+B da | Summe Buchwert G+B Ende Basisjahr |
+| Kaufjahr | Zugangsjahr da | frühestes Zugangsjahr (MINIFS); spätere Zugänge gelten als nachträgliche AK |
+| Restbuchwert | abnutzbare Anlagen da | Summe Buchwert Ende Basisjahr |
+| AfA je Jahr | abnutzbare Anlagen da | AfA im ersten Prognosejahr (Anzeige) |
+
+Kommt ein Wert aus dem Blatt Anlagen, ist die Zelle grün und zählt nicht als Annahme (auch nicht als kritische). Ohne Anlagen bleibt die bisherige Annahme. Gruppen aus dem Kostenstellenblatt haben keine AHK. Dann kommen nur Restbuchwert und AfA aus dem Blatt, AK und Kaufjahr bleiben Annahmen.
+
+Restbuchwert und AfA umfassen auch BGA und Anlagen im Bau der Kostenstelle, so wie BWA 1240 alle Abschreibungen der Kostenstelle zeigt. Beim Verkauf gehen sie mit dem Gebäudebuchwert ab.
+
+**Prognose**
+
+Neue Spalte prg\_AfAHalten („AfA bei Halten“). Mit Anlagen ist sie die Summe der AfA je Anlage im Jahr, sonst AfA je Jahr; höchstens der Buchwert bei Halten des Vorjahrs. Darauf bauen auf:
+- Buchwert bei Halten = Vorjahr − AfA bei Halten;
+- AfA im Plan = AfA bei Halten × aktiv.
+
+Ohne Anlagen ergibt das dieselben Werte wie vorher.
+
+**Ausgabe und Prüfung**
+
+- Jedes BWA-Blatt einer Kostenstelle mit Anlagen zeigt unter der Herleitung die Blöcke „Buchwert, JE“ und „Abschreibungen JW“ je Anlage. Spalten: Vorjahr = Stand, Basisjahr, Planjahre. Die Inventar-Nr. steht in Spalte D. Die Werte gelten bei Halten.
+- Prüfung, Hinweis: Anlagen G+B, Gebäude, BGA oder im Bau ohne Objekt oder unvollständig.
+- Prüfung, Hinweis: AfA lt. Anlagen weicht um mehr als 1 € von BWA 1240 ab.
+- Startblatt: Objekte mit Anlagen und Anlagen ohne Objekt.
+
+**Muster der Kanzlei (Inventar 2025, KSt 1)**
+
+- 204 Anlagen, eine abgegangen. KSt 1 hat sechs abnutzbare Anlagen: TG 305001, Außenanlagen 306001, 310001 und 311001 (abgeschrieben), Wohnbauten 360010 und 360012.
+- Restbuchwert Ende 2026: 928.630 €. AfA 42.375 € je Jahr, gleich BWA 1240. Buchwert Ende 2046: 81.130 €. Das trifft die Fortschreibung im Kostenstellenblatt (S50, AM50).
+- Grund und Boden 200001 (30.12.1998) trägt keine KOST1. AK G+B von KSt 1 bleibt daher eine Annahme, bis die ObjektID im Blatt Anlagen eingetragen ist.
+
+**Prüfung im Prüfskript**
+
+- `pruefen_einlesen`: Inventarvorlage (Art, Methode, Satz, Datum, Abgang, KOST1-Zuordnung, Fehler), Aufschlüsselung (Beschriftungsabgleich, Zwischensumme, leere Gruppe), Vorrang des Anlagenverzeichnisses.
+- `pruefen`, Fälle „Anlagen“: KSt 1 reproduziert die Stammdaten des Testobjekts aus dem Verzeichnis. KSt 2 mit auslaufender Außenanlage (AfA 30.000, 27.000, 24.000), Anlage im Bau, degressiver Anlage und Statusfällen. Dazu ein Verkauf mit Buchwert aus den Anlagen, nur die Aufschlüsselung ohne Verzeichnis und der Stand gleich Basisjahr.
+
+Vorlagen: `vorlagen/Inventar_Vorlage.xlsx` (Format des DATEV-Exports, erfundene Werte), `vorlagen/Kostenstellen_BWA_Vorlage.xlsx` mit Aufschlüsselung unter der BWA.
+
+**Offen**
+
+- [ ] Grund und Boden ohne KOST1 zuordnen (im Muster 22 von 32 G+B-Anlagen), dann ist AK G+B keine Annahme mehr.
+- [ ] Anlagen im Bau: Fertigstellung und AfA-Beginn erfassen (Art Gebäude, Methode linear, Satz).
+- [ ] BGA einer Kostenstelle beim Verkauf: geht sie mit ab oder bleibt sie? Derzeit geht sie mit.
 

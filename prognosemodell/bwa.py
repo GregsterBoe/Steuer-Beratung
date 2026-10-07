@@ -15,8 +15,9 @@ import re
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-from .modelle import (FMT_EURO, FMT_JAHR, FMT_PROZENT, MAX_NEUOBJEKTE, MAX_VERKAEUFE,
-                      PARAMETER, STATUS_6B_UNZULAESSIG, STATUS_OK, Modell, prognosejahre)
+from .modelle import (ARTEN_ABNUTZBAR, FMT_EURO, FMT_JAHR, FMT_PROZENT, MAX_NEUOBJEKTE,
+                      MAX_VERKAEUFE, PARAMETER, STATUS_6B_UNZULAESSIG, STATUS_OK, Modell,
+                      prognosejahre)
 from .vorlagen import (BWA_ZEILEN, ERSTE_ZEILE, SPALTE_JAHR, SPALTE_PLAN, SPALTE_VORJAHRE,
                        bwa_kopf)
 
@@ -287,8 +288,61 @@ def _planspalten(ws, z: dict, planjahre: int, formeln_je_spalte) -> None:
             c.fill = FILL_BERECHNET
 
 
+# Aufschlüsselung der Abschreibungen je Anlage unter der Herleitung, im Layout des
+# Kostenstellenblatts der Kanzlei: Block „Buchwert, JE“, dann „Abschreibungen JW“. Die
+# Inventar-Nr. steht in Spalte D, die Werte kommen per MATCH aus dem Blatt Anlagen.
+# Werte bei Halten, also auch nach einem Verkauf weiter fortgeschrieben.
+SPALTE_ANLAGE = 4   # D
+
+
+def _abschreibungen(ws, anlagen: list, planjahre: int) -> None:
+    erste_zeile = HERLEITUNG_LETZTE + 3
+    vorjahr = get_column_letter(SPALTE_VORJAHRE + 1)   # Basisjahr − 1
+    basis = get_column_letter(SPALTE_JAHR)
+    plan = [get_column_letter(SPALTE_PLAN + i) for i in range(planjahre)]
+    n = len(anlagen)
+    titel = ws.cell(row=erste_zeile, column=3,
+                    value="Aufschlüsselung Abschreibungen je Anlage (Blatt Anlagen, bei Halten)")
+    titel.font = Font(bold=True)
+    bw_kopf = erste_zeile + 1
+    afa_kopf = bw_kopf + n + 2
+
+    def match(zeile):
+        return f"MATCH(${get_column_letter(SPALTE_ANLAGE)}{zeile},anl_Nr,0)"
+
+    def zelle(zeile, sp, formel, fett=False):
+        c = ws[f"{sp}{zeile}"]
+        c.value = formel
+        c.number_format = FMT_BWA
+        c.font = Font(bold=fett)
+        if not fett:
+            c.fill = FILL_BERECHNET
+
+    for kopf, text in ((bw_kopf, "Buchwert, JE"), (afa_kopf, "Abschreibungen JW")):
+        ws.cell(row=kopf, column=3, value=text).font = Font(bold=True)
+        for sp in [vorjahr, basis] + plan:
+            zelle(kopf, sp, f"=SUM({sp}{kopf + 1}:{sp}{kopf + n})", fett=True)
+    for k, anlage in enumerate(anlagen, start=1):
+        for kopf in (bw_kopf, afa_kopf):
+            zeile = kopf + k
+            ws.cell(row=zeile, column=3, value=anlage.bezeichnung or anlage.nr)
+            ws.cell(row=zeile, column=SPALTE_ANLAGE, value=anlage.nr).font = FONT_HILFE
+        bw, afa = bw_kopf + k, afa_kopf + k
+        zelle(bw, vorjahr, f'=IFERROR(IF(par_AnlStand=par_Basisjahr-1,'
+                           f'INDEX(anl_BWStand,{match(bw)}),""),"")')
+        zelle(bw, basis, f'=IFERROR(INDEX(anl_BWBasis,{match(bw)}),"")')
+        zelle(afa, vorjahr, f'=IFERROR(IF(par_AnlStand=par_Basisjahr-1,'
+                            f'INDEX(anl_AfAStand,{match(afa)}),""),"")')
+        zelle(afa, basis, f'=IFERROR(INDEX(anl_AfABasis,{match(afa)}),"")')
+        vor = basis
+        for i, sp in enumerate(plan):
+            zelle(afa, sp, f'=IFERROR(INDEX(anl_AfAJahre,{match(afa)},{i + 1}),"")')
+            zelle(bw, sp, f"=N({vor}{bw})-N({sp}{afa})")
+            vor = sp
+
+
 def _blatt_objekt(wb, titel: str, objekt_id: str, name, ist, basisjahr: int,
-                  planjahre: int, neu: bool):
+                  planjahre: int, neu: bool, anlagen: list = ()):
     ws = wb.create_sheet(titel)
     z = bwa_kopf(ws, objekt_id, name or "", basisjahr, planjahre)
     _jahreszeile(ws, planjahre)
@@ -307,6 +361,8 @@ def _blatt_objekt(wb, titel: str, objekt_id: str, name, ist, basisjahr: int,
             ws.cell(row=z[nr], column=SPALTE_JAHR, value=formel)
     _planspalten(ws, z, planjahre, lambda sp: _planformeln_objekt(z, sp))
     _herleitung(ws, planjahre, objekt=True)
+    if anlagen:
+        _abschreibungen(ws, anlagen, planjahre)
     hinweis = ("Neuobjekt: Werte ab dem Jahr nach dem Kauf. " if neu else "") + (
         "Planspalten = Szenario A, vor Finanzierung; Zins und Steuer nur im Blatt "
         f"„{SUMMENBLATT}“.")
@@ -333,7 +389,9 @@ def blaetter_bwa(wb, modell: Modell) -> list:
     titel = []
     for wunsch, objekt_id, name, ist, neu in eintraege:
         t = blattname(wunsch, wb.sheetnames)
-        _blatt_objekt(wb, t, objekt_id, name, ist, basisjahr, planjahre, neu)
+        anlagen = [a for a in modell.anlagen
+                   if not neu and a.objekt_id == objekt_id and a.art in ARTEN_ABNUTZBAR]
+        _blatt_objekt(wb, t, objekt_id, name, ist, basisjahr, planjahre, neu, anlagen)
         titel.append(t)
 
     z = bwa_kopf(summe, "KSt", SUMMENBLATT, basisjahr, planjahre)

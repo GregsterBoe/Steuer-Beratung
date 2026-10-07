@@ -6,10 +6,15 @@ Excel zeigt sie in der deutschen Oberfläche automatisch als WENN, ZÄHLENWENN u
 
 from openpyxl.utils import get_column_letter
 
-from .modelle import (AFA_DEGRESSIV, FEHLER, NEU_FELDER, STATUS_ANNAHME_GELOESCHT, NEU_SPALTEN, OBJEKT_FELDER, PROGNOSE_SPALTEN,
+from .modelle import (AFA_DEGRESSIV, ANL_NICHT_IM_MODELL, ANLAGE_FELDER, ANLAGE_SPALTEN,
+                      ARTEN_ABNUTZBAR, ART_GEBAEUDE, ART_GUB, GRUPPE_ABNUTZBAR, METHODE_KEINE,
+                      ANL_OBJEKT_FEHLT, ANL_OHNE_OBJEKT, OBJEKT_ANLAGEN_SPALTEN,
+                      OBJEKT_ERSTE_ANLAGEN_SPALTE,
+                      FEHLER, NEU_FELDER, STATUS_ANNAHME_GELOESCHT, NEU_SPALTEN, OBJEKT_FELDER, PROGNOSE_SPALTEN,
                       RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN, STATUS_6B_UNZULAESSIG,
                       STATUS_OK, SZ_A, SZ_B, SZ_BASELINE, SZENARIEN, VERKAUF_FELDER,
-                      VERKAUF_SPALTEN, WARNUNG, Szenario, aus_spalten, liq_spalten)
+                      VERKAUF_SPALTEN, WARNUNG, Szenario, aus_spalten, liq_spalten,
+                      prognosejahre)
 
 
 def spalte(key: str) -> str:
@@ -20,7 +25,16 @@ def spalte(key: str) -> str:
     raise KeyError(key)
 
 
+def hspalte(key: str) -> str:
+    """Spaltenbuchstabe einer Anlagen-Hilfsspalte im Blatt Objekte (nach dem Status)."""
+    for i, s in enumerate(OBJEKT_ANLAGEN_SPALTEN):
+        if s.key == key:
+            return get_column_letter(len(OBJEKT_FELDER) + 1 + OBJEKT_ERSTE_ANLAGEN_SPALTE + i)
+    raise KeyError(key)
+
+
 ISFORMEL = "_xlfn.ISFORMULA"   # Excel 2013+, in der Datei mit Präfix
+MINIFS = "_xlfn.MINIFS"        # Excel 2019+, LibreOffice ab 5.2
 
 
 def _gefuellt(zellen: list) -> str:
@@ -28,16 +42,67 @@ def _gefuellt(zellen: list) -> str:
     return "+".join(f'({z}<>"")' for z in zellen)
 
 
+# --- Anlagen je Objekt (Blatt Anlagen, Projektplan Abschnitt 21) ---
+#
+# Es zählen nur Anlagezeilen mit Status OK. Liefert das Blatt Anlagen einen Wert, ersetzt er
+# die Annahme in der Eingabezelle (grün statt blau, zählt nicht als Annahme).
+
+def _anl(objekt_id: str, *bedingung: str) -> str:
+    """Kriterien für SUMIFS/COUNTIFS über das Blatt Anlagen."""
+    return ",".join((f'anl_ID,{objekt_id},anl_Status,"OK"',) + bedingung)
+
+
+ABNUTZBAR = f'anl_Gruppe,"{GRUPPE_ABNUTZBAR}"'
+GUB = f'anl_Gruppe,"{ART_GUB}"'
+
+
+def deckung_anlagen(key: str, zeile: int):
+    """Bedingung, unter der das Feld aus dem Blatt Anlagen kommt; None = nie."""
+    def h(k):
+        return f"N(${hspalte(k)}{zeile})"
+
+    abnutzbar = f"{h('anl_abn')}>0"
+    mit_ak = f"AND({abnutzbar},{h('anl_ak')}={h('anl_abn')})"
+    return {
+        "ak_gebaeude": mit_ak,
+        "afa_satz": mit_ak,
+        "ak_gub": f"{h('anl_gub')}>0",
+        "kaufjahr": f"{h('anl_kauf')}>0",
+        "restbuchwert": abnutzbar,
+        "afa_jahr": abnutzbar,
+    }.get(key)
+
+
+def objekt_anlagen(key: str, zeile: int) -> str:
+    """Hilfsspalte im Blatt Objekte: Anzahl Anlagen je Art und AfA-Abgleich."""
+    id_ = f"${spalte('objekt_id')}{zeile}"
+    afa = f"${hspalte('anl_afa')}{zeile}"
+    bwa = f"${spalte('afa_bwa')}{zeile}"
+    ausdruck = {
+        "anl_abn": f"COUNTIFS({_anl(id_, ABNUTZBAR)})",
+        "anl_ak": f"COUNTIFS({_anl(id_, ABNUTZBAR, 'anl_AHK,\">0\"')})",
+        "anl_gub": f"COUNTIFS({_anl(id_, GUB)})",
+        "anl_kauf": f"COUNTIFS({_anl(id_, 'anl_Zugang,\">0\"')})",
+        "anl_afa": (f'IF(N(${hspalte("anl_abn")}{zeile})=0,"",'
+                    f"SUMIFS(anl_AfABasis,{_anl(id_, ABNUTZBAR)}))"),
+        "anl_diff": f'IF(OR({afa}="",{bwa}=""),"",{afa}-N({bwa}))',
+    }[key]
+    return f'=IF({id_}="","",{ausdruck})'
+
+
 def annahme_objekt(key: str, zeile: int):
     """Annahmeformel für ein leeres Eingabefeld des Objektblatts; None = keine Annahme.
 
     Die Formel steht in der Eingabezelle selbst (blau) und wird durch Eintippen ersetzt.
+    Kommt der Wert aus dem Blatt Anlagen, steht er vor der Annahme (grün).
     """
     def c(k):
         return f"${spalte(k)}{zeile}"
 
     def n(k):
         return f"N({c(k)})"
+
+    id_ = c("objekt_id")
 
     ausdruck = {
         "erhaltung": f"{n('miete')}*par_AnnErhQuote",
@@ -71,7 +136,21 @@ def annahme_objekt(key: str, zeile: int):
     }.get(key)
     if ausdruck is None:
         return None
-    return f'=IF({c("objekt_id")}="","",{ausdruck})'
+    aus_anlagen = {
+        "ak_gebaeude": f"SUMIFS(anl_AHK,{_anl(id_, ABNUTZBAR)})",
+        # durchschnittlicher Satz: AfA p. a. der abnutzbaren Anlagen / AK
+        "afa_satz": (f"IF({n('ak_gebaeude')}>0,SUMIFS(anl_AfA,{_anl(id_, ABNUTZBAR)})"
+                     f"/{n('ak_gebaeude')},{ausdruck})"),
+        # Buchwert G+B; gleich den AK, solange nicht außerplanmäßig abgeschrieben
+        "ak_gub": f"SUMIFS(anl_BWBasis,{_anl(id_, GUB)})",
+        "kaufjahr": f"{MINIFS}(anl_Zugang,{_anl(id_)})",
+        "restbuchwert": f"SUMIFS(anl_BWBasis,{_anl(id_, ABNUTZBAR)})",
+        # nur zur Anzeige: die Prognose rechnet je Anlage (prg_AfAHalten)
+        "afa_jahr": f"SUMIFS(INDEX(anl_AfAJahre,0,1),{_anl(id_, ABNUTZBAR)})",
+    }.get(key)
+    if aus_anlagen:
+        ausdruck = f"IF({deckung_anlagen(key, zeile)},{aus_anlagen},{ausdruck})"
+    return f'=IF({id_}="","",{ausdruck})'
 
 
 def status_objekt(zeile: int) -> str:
@@ -98,10 +177,103 @@ def annahmen_objekt(zeile: int, nur_kritisch: bool = False) -> str:
     id_ = f"${spalte('objekt_id')}{zeile}"
     felder = [f for f in OBJEKT_FELDER
               if f.annahme and not f.abgeleitet and (f.kritisch or not nur_kritisch)]
-    summe = "+".join(f"{ISFORMEL}(${spalte(f.key)}{zeile})" for f in felder)
+    def zaehlt(f):
+        formel = f"{ISFORMEL}(${spalte(f.key)}{zeile})"
+        deckung = deckung_anlagen(f.key, zeile)
+        return f"{formel}*NOT({deckung})" if deckung else formel
+
+    summe = "+".join(zaehlt(f) for f in felder)
     if nur_kritisch:
         summe = f"IF(COUNTIF(vk_ID,{id_})>0,{summe},0)"
     return f'=IF({id_}="","",{summe})'
+
+
+# --- Blatt Anlagen (Projektplan Abschnitt 21) ---
+#
+# Je Anlage Buchwert und AfA in geschlossener Form ab dem Buchwert zum Stand des
+# Anlagenverzeichnisses (par_AnlStand): linear AfA p. a. bis der Buchwert verbraucht ist,
+# degressiv Satz × Buchwert, „keine“ ohne AfA. Keine Kette über die Jahre, jede Zelle
+# lässt sich für sich nachrechnen.
+
+
+def aspalte(key: str) -> str:
+    """Spaltenbuchstabe im Blatt Anlagen: Eingaben, berechnete Spalten, Status, dann Jahre."""
+    keys = [f.key for f in ANLAGE_FELDER] + [s.key for s in ANLAGE_SPALTEN] + ["status"]
+    return get_column_letter(keys.index(key) + 1)
+
+
+def anlage_jahresspalte(i: int) -> str:
+    """Spalte der AfA im Prognosejahr i (0 = erstes Prognosejahr)."""
+    return get_column_letter(len(ANLAGE_FELDER) + len(ANLAGE_SPALTEN) + 2 + i)
+
+
+def _a(key: str, zeile: int) -> str:
+    return f"${aspalte(key)}{zeile}"
+
+
+def _anlage_leer_oder(zeile: int, ausdruck: str) -> str:
+    return f'=IF({_a("nr", zeile)}="","",{ausdruck})'
+
+
+def _anlage_werte(zeile: int) -> tuple:
+    bw, satz = f"N({_a('bw_stand', zeile)})", f"N({_a('satz', zeile)})"
+    return bw, satz, f"N({_a('afa', zeile)})", _a("methode", zeile)
+
+
+def _anlage_buchwert(zeile: int, jahr: str) -> str:
+    """Buchwert der Anlage am Ende des Jahres jahr (nicht vor dem Stand)."""
+    bw, satz, afa, methode = _anlage_werte(zeile)
+    n = f"MAX({jahr}-par_AnlStand,0)"
+    return (f'IF({methode}="{AFA_DEGRESSIV}",{bw}*(1-{satz})^{n},'
+            f'IF({methode}="{METHODE_KEINE}",{bw},MAX({bw}-{afa}*{n},0)))')
+
+
+def _anlage_afa(zeile: int, jahr: str) -> str:
+    """AfA der Anlage im Jahr jahr; 0 bis zum Stand des Anlagenverzeichnisses."""
+    bw, satz, afa, methode = _anlage_werte(zeile)
+    n = f"({jahr}-1-par_AnlStand)"
+    return (f'IF({jahr}<=par_AnlStand,0,IF({methode}="{AFA_DEGRESSIV}",{bw}*(1-{satz})^{n}'
+            f'*{satz},IF({methode}="{METHODE_KEINE}",0,MIN({afa},MAX({bw}-{afa}*{n},0)))))')
+
+
+def annahme_anlage(key: str, zeile: int):
+    """Formel für ein leeres Feld im Blatt Anlagen; nur AfA p. a."""
+    if key != "afa":
+        return None
+    bw, satz, _, methode = _anlage_werte(zeile)
+    # linear wie DATEV: AHK × Satz auf volle Euro aufgerundet (ROUND gegen Gleitkommareste)
+    return _anlage_leer_oder(
+        zeile, f'IF({methode}="{AFA_DEGRESSIV}",ROUND({bw}*{satz},2),IF({methode}='
+               f'"{METHODE_KEINE}",0,ROUNDUP(ROUND(N({_a("ahk", zeile)})*{satz},2),0)))')
+
+
+def anlage_zeile(zeile: int) -> dict:
+    """Berechnete Spalten einer Anlagezeile je Schlüssel, dazu "jahre": AfA je Prognosejahr."""
+    art = _a("art", zeile)
+    abnutzbar = ",".join(f'{art}="{a}"' for a in ARTEN_ABNUTZBAR)
+    pflicht = [_a(f.key, zeile) for f in ANLAGE_FELDER if f.pflicht]
+    return {
+        "gruppe": _anlage_leer_oder(zeile, f'IF({art}="{ART_GUB}","{ART_GUB}",'
+                                           f'IF(OR({abnutzbar}),"{GRUPPE_ABNUTZBAR}",""))'),
+        # nur Grund und Boden und Gebäude bestimmen das Kaufjahr des Objekts
+        "zugang": _anlage_leer_oder(zeile, f'IF(AND(OR({art}="{ART_GUB}",{art}="{ART_GEBAEUDE}"),'
+                                           f'N({_a("datum", zeile)})>0),'
+                                           f'YEAR({_a("datum", zeile)}),"")'),
+        "bw_basis": _anlage_leer_oder(zeile, _anlage_buchwert(zeile, "par_Basisjahr")),
+        # Stand = Basisjahr: AfA des Jahres lt. Inventar
+        "afa_basis": _anlage_leer_oder(
+            zeile, f"IF(par_AnlStand=par_Basisjahr,N({_a('afa_stand', zeile)}),"
+                   f"{_anlage_afa(zeile, 'par_Basisjahr')})"),
+        "status": _anlage_leer_oder(
+            zeile,
+            f'IF({_gefuellt(pflicht)}<{len(pflicht)},"Pflichtfeld fehlt",'
+            f'IF(COUNTIF(anl_Nr,{_a("nr", zeile)})>1,"Inventar-Nr. doppelt",'
+            f'IF({_a("gruppe", zeile)}="","{ANL_NICHT_IM_MODELL}",'
+            f'IF({_a("objekt_id", zeile)}="","{ANL_OHNE_OBJEKT}",'
+            f'IF(COUNTIF(obj_ID,{_a("objekt_id", zeile)})=0,"{ANL_OBJEKT_FEHLT}","OK")))))'),
+        "jahre": [_anlage_leer_oder(zeile, _anlage_afa(zeile, f"(par_Startjahr+{i})"))
+                  for i in range(prognosejahre())],
+    }
 
 
 # --- Prognosematrix (Etappe 2, Projektplan Abschnitt 8) ---
@@ -170,7 +342,12 @@ def prognose_zeile(zeile: int, objekt_nr: int, erstes_jahr: bool) -> dict:
     id_obj = _stamm("obj_ID", objekt_nr)
     bw_vor = (_stamm("obj_Restbuchwert", objekt_nr) if erstes_jahr
               else _p("buchwert", zeile - 1))
+    bw_halten_vor = (f"N({_stamm('obj_Restbuchwert', objekt_nr)})" if erstes_jahr
+                     else _p("buchwert_halten", zeile - 1))
     afa_voll = f"N({_stamm('obj_AfAJahr', objekt_nr)})"
+    # mit Anlagen: Summe der AfA je Anlage im Jahr, jede läuft bis zu ihrem Buchwert aus
+    je_anlage = (f"SUMIFS(INDEX(anl_AfAJahre,0,{_p('jahr', zeile)}-par_Startjahr+1),"
+                 f"{_anl(id_obj, ABNUTZBAR)})")
 
     def indexiert(name, satz, aktiv=True):
         return _leer_oder(zeile, _indexiert(name, satz, zeile, objekt_nr, aktiv))
@@ -184,8 +361,8 @@ def prognose_zeile(zeile: int, objekt_nr: int, erstes_jahr: bool) -> dict:
         "einnahmen": indexiert("obj_EinnBasis", "par_Mietsteig"),
         "erhaltung": _leer_oder(zeile, f"{_p('erhaltung_halten', zeile)}*{_p('aktiv', zeile)}"),
         "ausgaben": indexiert("obj_AusgBasis", "par_Kostensteig"),
-        # keine AfA über den Restbuchwert hinaus
-        "afa": _leer_oder(zeile, f"MIN({afa_voll},{bw_vor})*{_p('aktiv', zeile)}"),
+        # keine AfA über den Restbuchwert hinaus; im Bestand gleich der AfA bei Halten
+        "afa": _leer_oder(zeile, f"{_p('afa_halten', zeile)}*{_p('aktiv', zeile)}"),
         "buchwert": _leer_oder(zeile, f"MAX({bw_vor}-{_p('afa', zeile)},0)"),
         "ergebnis": _leer_oder(
             zeile,
@@ -197,10 +374,12 @@ def prognose_zeile(zeile: int, objekt_nr: int, erstes_jahr: bool) -> dict:
         "neu": _leer_oder(zeile, "0"),
         # G+B wird nicht abgeschrieben; ob das Objekt noch im Bestand ist, filtert die Auswertung
         "buchwert_gub": _leer_oder(zeile, _stamm("obj_AKGuB", objekt_nr)),
-        # Buchwert ohne Verkauf: Restbuchwert minus volle AfA je Jahr seit dem Basisjahr
+        # Buchwert ohne Verkauf: Restbuchwert minus AfA bei Halten seit dem Basisjahr
         "buchwert_halten": _leer_oder(
-            zeile, f"MAX({_stamm('obj_Restbuchwert', objekt_nr)}"
-                   f"-({_p('jahr', zeile)}-par_Basisjahr)*{afa_voll},0)"),
+            zeile, f"MAX({bw_halten_vor}-{_p('afa_halten', zeile)},0)"),
+        "afa_halten": _leer_oder(
+            zeile, f"MIN(IF(N({_stamm('obj_AnlAbn', objekt_nr)})>0,{je_anlage},{afa_voll}),"
+                   f"{bw_halten_vor})"),
         # Szenarien B und C: Bestandsobjekte rechnen wie im Plan
         "mit_quelle": _leer_oder(zeile, "0"),
         "afa_ohne6b": _leer_oder(zeile, _p("afa", zeile)),
@@ -270,6 +449,7 @@ def prognose_zeile_neu(zeile: int, neu_nr: int, erstes_jahr: bool) -> dict:
         "buchwert_gub": _leer_oder(zeile, f'IF({gueltig},IF({t}>={kj},{ne("ne_AKGuB")},0),0)'),
         # gehört nicht zur Baseline
         "buchwert_halten": _leer_oder(zeile, "0"),
+        "afa_halten": _leer_oder(zeile, "0"),
         "erhaltung_halten": _leer_oder(zeile, "0"),
         # Szenarien B und C: ohne Übertragung der Rücklage, volle AK als AfA-Basis
         "mit_quelle": _leer_oder(zeile, ne("ne_MitQuelle")),
@@ -736,6 +916,9 @@ def pruefung_anzahl() -> dict:
         "bwa_zuordnung": ("=SUMPRODUCT(--(COUNTIF(zuo_Nummern,zuo_Nr)=0))"
                           "+SUMPRODUCT(--(ABS(zuo_Differenz)>0.5))"),
         "annahmen": '=COUNTIF(obj_Annahmen,">0")',
+        "anlagen": (f'=SUMPRODUCT((anl_Status<>"")*(anl_Status<>"{STATUS_OK}")'
+                    f'*(anl_Status<>"{ANL_NICHT_IM_MODELL}"))'),
+        "anlagen_afa": '=COUNTIF(obj_AnlDiff,">1")+COUNTIF(obj_AnlDiff,"<-1")',
     }
 
 

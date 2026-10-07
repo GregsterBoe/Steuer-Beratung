@@ -14,7 +14,7 @@
 
 | Eingabe | Rechnung | Ausgabe | Kontrolle | BWA |
 | --- | --- | --- | --- | --- |
-| Parameter, Objekte, Verkäufe, Neuobjekte | Prognose, Rücklagen, Liquidität | Start, Übersicht, Vergleich, Auswertung | Prüfung, Varianten | Alle Objekte, je Kostenstelle ein Blatt, Verkauf und Kauf |
+| Parameter, Objekte, Anlagen, Verkäufe, Neuobjekte | Prognose, Rücklagen, Liquidität | Start, Übersicht, Vergleich, Auswertung | Prüfung, Varianten | Alle Objekte, je Kostenstelle ein Blatt, Verkauf und Kauf |
 
 ## Etappen
 
@@ -43,6 +43,7 @@ Stand: Etappen 1 bis 9 sind umgesetzt.
 - Ausgabe im DATEV-BWA-Format je Kostenstelle mit Summenblatt, Sonderbereich Verkauf und Kauf
 - Blatt BWA-Zuordnung: BWA-Zeile je Sonderposten (Verkauf netto oder brutto, § 6b-Rücklage, Neuobjekte, Zins) wählbar, Herleitung unter jeder BWA, Kontrolle gegen die Liquidität
 - Startblatt mit Handlungsempfehlung, Auffülllogik für fehlende Daten mit Farblogik, Schnellcheck-Mappe
+- Blatt Anlagen: Anlagenverzeichnis (DATEV-Export) oder Aufschlüsselung der Abschreibungen aus den Kostenstellenblättern; liefert AK, Buchwert und Kaufjahr je Objekt und die AfA je Anlage und Jahr
 
 ## Nutzung
 
@@ -53,19 +54,20 @@ python -m prognosemodell --ohne-testdaten
 python -m prognosemodell --makros    # .xlsm mit VBA-Steuerung (braucht LibreOffice beim Bauen)
 python -m prognosemodell --schnellcheck --kostenstellen Kostenstellen.xlsx   # schlanke Mappe ausgabe/Schnellcheck_VV.xlsx
 python -m prognosemodell --kostenstellen Kostenstellen.xlsx --ausgabe Ordner/Prognose.xlsx   # laufende Werte je Blatt einlesen; nur Ordner = Standardname darin
+python -m prognosemodell --kostenstellen Kostenstellen.xlsx --inventar Inventar_2025.xlsx   # dazu das Anlagenverzeichnis
 python -m pruefung.pruefen           # rechnet per LibreOffice headless und prüft gegen Sollwerte
 python -m pruefung.pruefen "Etappe 9"  # nur Fälle, deren Name den Text enthält
 python -m pruefung.pruefen_einlesen  # prüft die Einleseschicht, ohne LibreOffice
-python -m prognosemodell.vorlagen    # schreibt vorlagen/Kostenstellen_BWA_Vorlage.xlsx
+python -m prognosemodell.vorlagen    # schreibt vorlagen/Kostenstellen_BWA_Vorlage.xlsx und vorlagen/Inventar_Vorlage.xlsx
 ```
 
 Das Prüfskript und `--makros` brauchen LibreOffice mit Calc und der Python-UNO-Brücke (`soffice`, unter Debian/Ubuntu die Pakete `libreoffice-calc` und `python3-uno`).
 
 Zielformat der Eingabe ist die DATEV-BWA-Kostenstellenblattsammlung; `vorlagen/Kostenstellen_BWA_Vorlage.xlsx` zeigt das Layout mit erfundenen Werten. Als Jahresspalte gilt ein Kopf wie 2026, „Jahr 2026“ oder „Plan 2027“; ein Summenblatt „Alle Objekte“ wird übersprungen. Die Ergebnisse stehen wieder in dieser Struktur, siehe unten.
 
-`--kostenstellen` überspringt jedes Blatt, das nicht im Kostenstellenformat ist (kein „Nr.“ in B4, keine Kostenstelle in B2 oder keine Spalte des Basisjahrs in Zeile 4), etwa Annahmen oder Übersichten. Jedes übersprungene Blatt nennt es mit Grund in der Ausgabe. Je Kostenstellenblatt liest es B2 (Kostenstelle = ObjektID), C2 (Objektname) und aus der Spalte des Basisjahrs die BWA-Zeilen 1020 (Miete), 1090 (weitere Einnahmen), 1250 (Erhaltung) sowie 1100–1220 und 1260 (weitere Ausgaben). Die Datei muss in Excel gespeichert sein, damit berechnete Werte vorliegen. Dazu liest es 1240 als „AfA Basisjahr lt. Buchhaltung“. Steuerliche Stammdaten (AK, Kaufjahr, AfA-Satz, Restbuchwert) kommen nicht aus diesen Blättern; solange sie fehlen, rechnet die Mappe mit Annahmen (siehe unten).
+`--kostenstellen` überspringt jedes Blatt, das nicht im Kostenstellenformat ist (kein „Nr.“ in B4, keine Kostenstelle in B2 oder keine Spalte des Basisjahrs in Zeile 4), etwa Annahmen oder Übersichten. Jedes übersprungene Blatt nennt es mit Grund in der Ausgabe. Je Kostenstellenblatt liest es B2 (Kostenstelle = ObjektID), C2 (Objektname) und aus der Spalte des Basisjahrs die BWA-Zeilen 1020 (Miete), 1090 (weitere Einnahmen), 1250 (Erhaltung) sowie 1100–1220 und 1260 (weitere Ausgaben). Die Datei muss in Excel gespeichert sein, damit berechnete Werte vorliegen. Dazu liest es 1240 als „AfA Basisjahr lt. Buchhaltung“ und, falls vorhanden, die Aufschlüsselung der Abschreibungen unter der BWA (Buchwert und Jahres-AfA je Anlagengruppe, siehe unten). Die übrigen steuerlichen Stammdaten (AK, Kaufjahr) kommen aus dem Anlagenverzeichnis; solange sie fehlen, rechnet die Mappe mit Annahmen (siehe unten).
 
-Das Prognoseblatt hat je Objektzeile einen Block mit 20 Jahreszeilen: Miete, weitere Einnahmen, Erhaltung und weitere Ausgaben wachsen mit ihren Steigerungsraten. Die AfA beträgt AK Gebäude × Satz, höchstens aber den Restbuchwert. Danach sind AfA und Buchwert null.
+Das Prognoseblatt hat je Objektzeile einen Block mit 20 Jahreszeilen: Miete, weitere Einnahmen, Erhaltung und weitere Ausgaben wachsen mit ihren Steigerungsraten. Die AfA beträgt AK Gebäude × Satz, höchstens aber den Restbuchwert. Danach sind AfA und Buchwert null. Hat das Objekt Anlagen im Blatt Anlagen, ist die AfA die Summe der AfA je Anlage: Jede Anlage läuft für sich aus, sobald ihr Buchwert verbraucht ist.
 
 Das Blatt **Übersicht** öffnet als erstes. Es zeigt von 2026 bis 2046 den Wert der Immobilien und das Gesamtvermögen am Jahresende, je als Tabelle und Liniendiagramm, und zwar in zwei Linien:
 
@@ -144,11 +146,12 @@ Fehlende Daten füllt eine **Auffülllogik**: Die Annahme steht als Formel in de
 | --- | --- |
 | Verkehrswert | Miete × 20 |
 | Gebäudeanteil | 75 % |
-| AfA-Satz | 2 % |
-| Kaufjahr | vor 15 Jahren |
-| AK Gebäude | AfA lt. Buchhaltung / Satz |
-| Restbuchwert | aus AK und Kaufjahr; 0, wenn die Buchhaltung keine AfA mehr zeigt |
-| AfA je Jahr (Prognose) | AfA lt. Buchhaltung (auch 0), läuft bis der Restbuchwert verbraucht ist |
+| AfA-Satz | Blatt Anlagen (AfA p. a. / AK), sonst 2 % |
+| Kaufjahr | Blatt Anlagen (frühester Zugang G+B oder Gebäude), sonst vor 15 Jahren |
+| AK Gebäude | Blatt Anlagen (AHK der abnutzbaren Anlagen), sonst AfA lt. Buchhaltung / Satz |
+| AK G+B | Blatt Anlagen (Buchwert G+B), sonst aus AK Gebäude und Gebäudeanteil |
+| Restbuchwert | Blatt Anlagen (Buchwert Ende Basisjahr), sonst aus AK und Kaufjahr; 0, wenn die Buchhaltung keine AfA mehr zeigt |
+| AfA je Jahr (Prognose) | Blatt Anlagen (je Anlage bis zu ihrem Buchwert), sonst AfA lt. Buchhaltung (auch 0), läuft bis der Restbuchwert verbraucht ist |
 | Erhaltung | 10 % der Miete |
 | Verkaufspreis | Verkehrswert fortgeschrieben |
 
@@ -165,11 +168,24 @@ Farben der Eingabezellen:
 - **rot:** Pflicht fehlt oder Annahme gelöscht
 - **orange:** Annahme bei einem verkauften Objekt; bestimmt Gewinn und Rücklage, daher Warnung
 - **blau:** Annahme
-- **grün:** aus der Buchhaltung eingelesen
+- **grün:** aus der Buchhaltung eingelesen oder aus dem Blatt Anlagen; zählt nicht als Annahme
 - **gelb:** händisch eingetragen
 - **grau:** Formel
 
 Der **Schnellcheck** (`--schnellcheck`) ist dieselbe Rechnung mit schlanker Ansicht: § 6b und Reinvestition stehen als Annahme auf ja, die steuerlichen Stammdaten sind zugeklappt, die Rechenblätter ausgeblendet. Mit ObjektID und Miete je Objekt und einem geplanten Verkauf liefert er eine erste Empfehlung. Die Statusspalte im Objektblatt meldet fehlende Pflichtfelder, doppelte IDs, ein Kaufjahr nach dem Basisjahr und einen Restbuchwert über den AK.
+
+**Anlagenverzeichnis (Blatt Anlagen)**
+
+Zwei Quellen füllen das Blatt, je Kostenstelle gilt die genauere:
+- **Anlagenverzeichnis** (`--inventar`, DATEV-Export „Inventarübersicht“): eine Zeile je Anlage mit Konto, AHK-Datum, AHK, Buchwert Wj-Ende, AfA-Art, AfA-% und KOST1. KOST1 verweist auf die Kostenstelle (1 = „KSt 1“). Abgegangene Anlagen entfallen.
+- **Aufschlüsselung im Kostenstellenblatt:** unter der BWA die Blöcke „Buchwert, JE“ und „Abschreibungen JW“ (Spalte des Vorjahrs, im Muster F). Je Gruppe entsteht eine Anlage mit Buchwert und Jahres-AfA, aber ohne AHK und Datum. Sie zählt nur für Kostenstellen, die das Anlagenverzeichnis nicht abdeckt; sonst gleicht die Ausgabe beim Einlesen beide Buchwerte ab.
+
+Je Anlage rechnet das Blatt den Buchwert am Ende des Basisjahrs und die AfA je Prognosejahr. Linear gilt AHK × Satz, auf volle Euro aufgerundet wie bei DATEV, bis der Buchwert verbraucht ist; degressiv gilt Satz × Buchwert. Die Art kommt aus Konto (SKR04) und AfA-Art und lässt sich je Zeile ändern:
+- **G+B:** Grund und Boden, keine AfA, ergibt AK G+B.
+- **Gebäude, BGA, im Bau:** abnutzbar, ergeben AK Gebäude und Restbuchwert. Im Bau ohne AfA, bis Art und Methode nach Fertigstellung umgestellt werden.
+- **Finanzanlage, sonstige:** nicht im Modell.
+
+Es zählen nur Zeilen mit Status OK. Anlagen ohne Objekt (keine KOST1, oder ihre Kostenstelle hat keine Zeile im Blatt Objekte) meldet das Prüfungsblatt als Hinweis. Im Muster betrifft das vor allem Grund und Boden: Ohne KOST1 bleibt AK G+B eine Annahme, bis die ObjektID eingetragen ist. Ein zweiter Hinweis meldet Objekte, deren AfA lt. Anlagen von BWA 1240 abweicht. Die BWA-Blätter je Kostenstelle zeigen unter der Herleitung die Aufschlüsselung „Buchwert, JE“ und „Abschreibungen JW“ je Anlage und Jahr, wie im Kostenstellenblatt der Kanzlei.
 
 Details, Formeln und Testfälle stehen in [docs/Projektplan.md](docs/Projektplan.md).
 
