@@ -192,4 +192,6 @@ Es zählen nur Zeilen mit Status OK. Anlagen ohne Objekt (keine KOST1 und keine 
 
 Details, Formeln und Testfälle stehen in [docs/Projektplan.md](docs/Projektplan.md).
 
+Eine kompakte Bedienungsanleitung für die Steuerberatung steht in [docs/Bedienungsanleitung_Steuerberatung.docx](docs/Bedienungsanleitung_Steuerberatung.docx) (erzeugt mit `python docs/bedienungsanleitung.py docs/Bedienungsanleitung_Steuerberatung.docx`).
+
 > Alle Steuersätze und Fristen vor dem Echteinsatz mit dem zuständigen Berufsträger prüfen.
