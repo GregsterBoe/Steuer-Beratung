@@ -151,8 +151,9 @@ def aufschluesselung(ws, gruppen: list, erste_zeile: int) -> None:
 
 
 def kostenstellenblatt(ws, kst: str, name: str, werte: dict, basisjahr: int,
-                       planjahre: int = 20, gruppen: list = None) -> None:
-    """Ein Blatt im BWA-Layout; Monate = Jahreswert / 12, Planspalten leer."""
+                       planjahre: int = 20, gruppen: list = None, plan: dict = None) -> None:
+    """Ein Blatt im BWA-Layout; Monate = Jahreswert / 12, Planspalten leer bis auf
+    plan: {BWA-Nr.: {Jahr: Wert}}, etwa schon geplante Abschreibungen."""
     zeilen = bwa_kopf(ws, kst, name, basisjahr, planjahre)
     if gruppen:
         aufschluesselung(ws, gruppen, max(zeilen.values()) + 3)
@@ -167,9 +168,14 @@ def kostenstellenblatt(ws, kst: str, name: str, werte: dict, basisjahr: int,
         for m in range(12):
             ws.cell(row=zeile, column=SPALTE_MONATE + m, value=round(wert / 12, 2))
         ws.cell(row=zeile, column=SPALTE_JAHR, value=wert)
+    for nr, jahre in (plan or {}).items():
+        for jahr, wert in jahre.items():
+            ws.cell(row=zeilen[nr], column=SPALTE_PLAN + jahr - basisjahr - 1, value=wert)
 
 
-def erstelle_vorlage(beispiele=BEISPIELE, basisjahr: int = None) -> Workbook:
+def erstelle_vorlage(beispiele=BEISPIELE, basisjahr: int = None, plan: dict = None) -> Workbook:
+    """Kanzlei-Excel mit Summenblatt und je Kostenstelle einem Blatt;
+    plan: {KSt: {BWA-Nr.: {Jahr: Wert}}} für schon gefüllte Planspalten."""
     if basisjahr is None:
         basisjahr = next(p.wert for p in PARAMETER if p.name == "par_Basisjahr")
     wb = Workbook()
@@ -182,7 +188,7 @@ def erstelle_vorlage(beispiele=BEISPIELE, basisjahr: int = None) -> Workbook:
                        basisjahr)
     for kst, name, werte in beispiele:
         kostenstellenblatt(wb.create_sheet(kst), kst, name, werte, basisjahr,
-                           gruppen=AUFSCHLUESSELUNG.get(kst))
+                           gruppen=AUFSCHLUESSELUNG.get(kst), plan=(plan or {}).get(kst))
     return wb
 
 

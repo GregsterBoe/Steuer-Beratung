@@ -358,6 +358,11 @@ def prognose_zeile(zeile: int, objekt_nr: int, erstes_jahr: bool) -> dict:
     je_anlage = (f"SUMIFS(INDEX(anl_AfAJahre,0,{_p('jahr', zeile)}-par_Startjahr+1),"
                  f"{_anl(id_obj, ABNUTZBAR)})")
 
+    # AfA-Plan (Kostenstellen-Datei): ein Jahr mit Wert ersetzt die Fortschreibung
+    plan = (f"INDEX(afp_Jahre,MATCH({_p('id', zeile)},afp_ID,0),"
+            f"{_p('jahr', zeile)}-par_Startjahr+1)")
+    fortschreibung = f"IF(N({_stamm('obj_AnlAbn', objekt_nr)})>0,{je_anlage},{afa_voll})"
+
     def indexiert(name, satz, aktiv=True):
         return _leer_oder(zeile, _indexiert(name, satz, zeile, objekt_nr, aktiv))
 
@@ -387,7 +392,7 @@ def prognose_zeile(zeile: int, objekt_nr: int, erstes_jahr: bool) -> dict:
         "buchwert_halten": _leer_oder(
             zeile, f"MAX({bw_halten_vor}-{_p('afa_halten', zeile)},0)"),
         "afa_halten": _leer_oder(
-            zeile, f"MIN(IF(N({_stamm('obj_AnlAbn', objekt_nr)})>0,{je_anlage},{afa_voll}),"
+            zeile, f"MIN(IF(IFERROR(ISNUMBER({plan}),FALSE),N({plan}),{fortschreibung}),"
                    f"{bw_halten_vor})"),
         # Szenarien B und C: Bestandsobjekte rechnen wie im Plan
         "mit_quelle": _leer_oder(zeile, "0"),
@@ -930,6 +935,7 @@ def pruefung_anzahl() -> dict:
         "anlagen_bez": (f'=COUNTIF(anl_Zuordnung,"{ZUORDNUNG_BEZEICHNUNG}*")'
                         f'+COUNTIF(anl_Zuordnung,"{ZUORDNUNG_MEHRDEUTIG}*")'),
         "baujahr": "=SUM(obj_AnlBauOffen)",
+        "afa_plan": '=COUNTIF(afp_Anzahl,">0")',
         "anlagen_afa": '=COUNTIF(obj_AnlDiff,">1")+COUNTIF(obj_AnlDiff,"<-1")',
     }
 

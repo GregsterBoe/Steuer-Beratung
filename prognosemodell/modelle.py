@@ -132,7 +132,7 @@ CODENAMEN = {
     "Objekte": "wsObjekte", "Verkäufe": "wsVerkaeufe", "Neuobjekte": "wsNeuobjekte",
     "Prognose": "wsPrognose", "Rücklagen": "wsRuecklagen", "Liquidität": "wsLiquiditaet",
     "Auswertung": "wsAuswertung", "Prüfung": "wsPruefung", "Varianten": "wsVarianten",
-    "BWA-Zuordnung": "wsBWAZuordnung", "Anlagen": "wsAnlagen",
+    "BWA-Zuordnung": "wsBWAZuordnung", "Anlagen": "wsAnlagen", "AfA-Plan": "wsAfAPlan",
 }
 
 
@@ -702,6 +702,9 @@ PRUEFUNGEN = [
              "(orange): stimmt nur bei Neubau. Bei gekauftem Bestandsgebäude das echte "
              "Baujahr eintragen, sonst das Jahr zur Bestätigung eintippen", WARNUNG,
              "Blatt Objekte, Spalte Baujahr"),
+    Pruefung("afa_plan", "Objekte mit AfA-Plan (Blatt AfA-Plan, meist aus BWA 1240 der "
+             "Kostenstellen-Datei): in den Jahren mit Wert ersetzt er die AfA-Fortschreibung",
+             HINWEIS, "Blatt AfA-Plan, Spalte Jahre mit Wert"),
     Pruefung("anlagen_afa", "Objekte, deren AfA im Basisjahr lt. Blatt Anlagen von der AfA lt. "
              "Buchhaltung (BWA 1240) um mehr als 1 € abweicht: Zuordnung der Anlagen prüfen",
              HINWEIS, "Blatt Objekte, Spalten AfA Basisjahr lt. Anlagen und lt. Buchhaltung"),

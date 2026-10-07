@@ -711,7 +711,7 @@ Für das Modell relevante BWA-Zeilen (über die Nummer in Spalte B suchen, nicht
 | 1020 | Umsatzerlöse | Miete im Basisjahr |
 | 1090 | So. betr. Erlöse | weitere laufende Einnahmen |
 | 1100–1220, 1260 | Personal, Raum, betr. Steuern, Versicherungen, Besondere Kosten (1160), Kfz, Werbung, Warenabgabe, Sonstige | weitere laufende Ausgaben |
-| 1240 | Abschreibungen | Abgleich mit der AfA-Fortschreibung, nicht als Eingabe |
+| 1240 | Abschreibungen | Basisjahr: AfA lt. Buchhaltung, Abgleich mit der Fortschreibung. Planjahre mit Wert: AfA-Plan (Abschnitt 22) |
 | 1250 | Reparatur/Instandh. | Erhaltungsaufwand im Basisjahr |
 | 1310, 1322 | Zinsaufwand, Zinserträge | erst Stufe 2 (Finanzierung) |
 | 1300, 1345, 1380 | Betriebsergebnis, Ergebnis vor Steuern, Vorläufiges Ergebnis | Plausibilisierung |
@@ -804,7 +804,7 @@ Die Mappe enthält hinter den Kontrollblättern:
 
 - Das Blatt heißt wie das eingelesene Kostenstellenblatt, sonst wie die ObjektID.
 - B2 trägt die ObjektID, alle Formeln suchen über sie.
-- Links stehen die Ist-Werte: Vorjahre, Monate und Basisjahr, wie eingelesen. Ohne eingelesene BWA zeigt das Basisjahr Miete, weitere Einnahmen, Erhaltung und weitere Ausgaben aus dem Objektblatt.
+- Links stehen die Ist-Werte: Vorjahre und Monate, wie eingelesen. Das Basisjahr kommt aus dem Objektblatt (Abschnitt 22), damit eine Änderung dort auch in der BWA steht.
 - Rechts stehen die Planjahre als Formeln aus der Prognose, Szenario A.
 - Zeile 5 trägt das Planjahr als Zahl, nur als Hilfe für die Formeln.
 - Ein Wert 0 bleibt leer, deshalb sind die Planspalten eines verkauften Objekts ab dem Folgejahr leer und die eines Neuobjekts bis zum Kaufjahr.
@@ -816,7 +816,7 @@ Die Mappe enthält hinter den Kontrollblättern:
 | 1090 | weitere Einnahmen |
 | 1100–1220 | weitere Ausgaben × Anteil der Kostenart im Basisjahr (Ist-Wert / weitere Ausgaben Basisjahr) |
 | 1260 | weitere Ausgaben minus 1100–1220; ohne Aufteilung die ganzen weiteren Ausgaben |
-| 1240 | AfA aus der Fortschreibung (Steuerbilanz) |
+| 1240 | AfA aus dem AfA-Plan, wo er einen Wert hat, sonst aus der Fortschreibung (Steuerbilanz) |
 | 1250 | Erhaltung |
 | 1323 | Veräußerungsgewinn im Verkaufsjahr, Auflösung und Zuschlag im Fristjahr |
 | 1312 | Veräußerungsverlust und Einstellung in die § 6b-Rücklage im Verkaufsjahr |
@@ -1221,3 +1221,39 @@ Vorlagen: `vorlagen/Inventar_Vorlage.xlsx` (Format des DATEV-Exports, erfundene 
 - [ ] Anlagen im Bau: Fertigstellung und AfA-Beginn erfassen (Art Gebäude, Methode linear, Satz).
 - [ ] BGA einer Kostenstelle beim Verkauf: geht sie mit ab oder bleibt sie? Derzeit geht sie mit.
 
+## 22. Basisjahr der BWA aus dem Objektblatt, AfA-Plan aus der Kostenstellen-Datei
+
+**Basisjahr aus dem Objektblatt**
+
+Vorher standen im Basisjahr der BWA-Blätter die eingelesenen Ist-Werte als feste Zahlen. Eine Änderung im Blatt Objekte, etwa eine höhere Miete, wirkte nur auf die Planjahre, und „Alle Objekte“ zeigte im Basisjahr noch den alten Wert. Jetzt rechnet die Spalte Basisjahr (hellblau) aus dem Objektblatt:
+
+| BWA-Nr. | Basisjahr |
+| --- | --- |
+| 1020 | Miete Basisjahr (obj\_MieteBasis) |
+| 1090 | weitere Einnahmen Basisjahr (obj\_EinnBasis) |
+| 1240 | AfA Basisjahr lt. Buchhaltung (obj\_AfABWA) |
+| 1250 | Erhaltung Basisjahr (obj\_ErhBasis, auch als Annahme) |
+| 1100–1220 | Ist, wie eingelesen |
+| 1260 | weitere Ausgaben Basisjahr (obj\_AusgBasis) minus 1100–1220 |
+| Summenzeilen | Formeln wie in den Planjahren |
+| übrige (Zins, neutral, Steuer) | Ist, wie eingelesen |
+
+Unverändert ergibt das die eingelesenen Werte: 1260 nimmt wie in den Planjahren den Rest der weiteren Ausgaben auf, auch eine Kostenart ohne eigene Zeile wie 1160. Eine Änderung der weiteren Ausgaben landet ganz in 1260. Vorjahre und Monate bleiben Ist.
+
+Das Summenblatt „Alle Objekte“ summiert im Basisjahr die Bereiche des Objektblatts über alle Objekte, auch die erst in Excel angelegten ohne eigenes BWA-Blatt. Die Kostenarten 1100–1220 und die übrigen Zeilen bleiben die Summe der Kostenstellenblätter.
+
+**AfA-Plan**
+
+In der Kostenstellen-Datei der Kanzlei ist die AfA (BWA 1240) teils schon bis 2046 eingetragen. Vorher las das Modell nur das Basisjahr und schrieb alle Planjahre selbst fort. Jetzt liest es aus Zeile 1240 jede Jahresspalte nach dem Basisjahr, die eine Zahl enthält, auch 0. Die Werte stehen im neuen Blatt **AfA-Plan**: je Objekt eine Zeile (ObjektID), je Prognosejahr eine Spalte (afp\_ID, afp\_Jahre, afp\_Anzahl). Eingelesene Werte sind grün, geänderte oder eingetippte gelb.
+
+Die Prognose nimmt die AfA bei Halten aus dem AfA-Plan, wo das Jahr einen Wert hat. Leere Jahre rechnet sie wie bisher: Summe der AfA je Anlage, sonst AfA je Jahr. In beiden Fällen höchstens der Buchwert bei Halten des Vorjahrs. Buchwert, Verkauf (Buchwertabgang) und BWA 1240 der Planjahre bauen darauf auf. Die Aufschlüsselung je Anlage unter der BWA zeigt weiter die berechnete AfA.
+
+Im Muster (KSt 1) stehen 2027–2046 je 42.375 €, gleich der Fortschreibung aus dem Anlagenverzeichnis.
+
+Prüfung, Hinweis: Objekte mit AfA-Plan. Im Schnellcheck ist das Blatt ausgeblendet.
+
+**Prüfung im Prüfskript**
+
+- `pruefen_einlesen`: AfA-Plan aus den Planspalten der Vorlage, Lücke und 0, Basisjahr unberührt; ohne Planwerte leer.
+- `pruefen`, Fall „BWA: Basisjahr aus dem Blatt Objekte“: geänderte Miete und weitere Ausgaben von KSt 1 im Basisjahr, in 1260, den Summenzeilen und in „Alle Objekte“; das Vorjahr bleibt Ist.
+- `pruefen`, Fall „AfA-Plan“: geplante Jahre 2027, 2028 und 2030 (0), dazwischen und danach die Fortschreibung; Buchwert bei Halten, BWA 1240 und der Hinweis im Prüfungsblatt.

@@ -39,7 +39,7 @@ BWA_MIETE = (1020,)
 BWA_EINNAHMEN = (1090,)
 BWA_ERHALTUNG = (1250,)
 BWA_AUSGABEN = (1100, 1120, 1140, 1150, 1160, 1180, 1200, 1220, 1260)
-BWA_ABSCHREIBUNG = (1240,)  # nur Abgleich mit der AfA-Fortschreibung
+BWA_ABSCHREIBUNG = (1240,)  # Basisjahr: Abgleich; Planjahre mit Wert: AfA-Plan
 
 
 # Aufschlüsselung der Abschreibungen unter der BWA (ohne BWA-Nr., Beschriftung in Spalte C):
@@ -72,6 +72,8 @@ class LaufendeWerte:
     ist: dict = field(default_factory=dict)
     # Aufschlüsselung der Abschreibungen je Anlagengruppe (Buchwert Stand, Jahres-AfA)
     anlagen: list = field(default_factory=list)
+    # schon geplante AfA (BWA 1240) je Jahr nach dem Basisjahr, etwa bis 2046 fortgeschrieben
+    afa_plan: dict = field(default_factory=dict)
 
 
 def _kopfjahr(wert) -> Optional[int]:
@@ -150,6 +152,24 @@ def _ist_werte(ws, zeilen: dict, basisjahr: int) -> dict:
         if werte:
             ist[nr] = werte
     return ist
+
+
+def _plan_werte(ws, zeilen: dict, nummern: tuple, basisjahr: int) -> dict:
+    """Jahr -> Summe der BWA-Zeilen in den Jahresspalten nach dem Basisjahr.
+
+    Nur Zahlen zählen, auch 0; leere Zellen bleiben der Fortschreibung des Modells.
+    """
+    plan = {}
+    for zelle in ws[KOPFZEILE]:
+        jahr = _kopfjahr(zelle.value)
+        if jahr is None or jahr <= basisjahr:
+            continue
+        werte = [_zahl(ws.cell(row=zeilen[nr], column=zelle.column).value)
+                 for nr in nummern if nr in zeilen]
+        werte = [w for w in werte if w is not None]
+        if werte:
+            plan[jahr] = sum(werte)
+    return plan
 
 
 def _formatfehler(ws, basisjahr: int) -> Optional[str]:
@@ -270,6 +290,7 @@ def lese_kostenstellen(pfad, basisjahr: int, stand: int = None) -> tuple:
             abschreibung=summe(BWA_ABSCHREIBUNG),
             ist=_ist_werte(ws, zeilen, basisjahr),
             anlagen=_abschreibungsbloecke(ws, objekt_id, stand),
+            afa_plan=_plan_werte(ws, zeilen, BWA_ABSCHREIBUNG, basisjahr),
         ))
     if not ergebnis:
         gruende = "; ".join(f"{t!r}: {g}" for t, g in uebersprungen)

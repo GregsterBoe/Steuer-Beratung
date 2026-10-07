@@ -49,7 +49,9 @@ def main() -> None:
             print(f"eingelesen: {lw.objekt_id} ({lw.name}) aus Blatt {lw.blatt!r}: "
                   f"Miete {lw.miete:,.2f}, Erhaltung {lw.erhaltung:,.2f}, "
                   f"AfA lt. BWA {lw.abschreibung:,.2f}"
-                  + (f", {len(lw.anlagen)} Anlagengruppe(n)" if lw.anlagen else ""))
+                  + (f", {len(lw.anlagen)} Anlagengruppe(n)" if lw.anlagen else "")
+                  + (f", AfA-Plan {min(lw.afa_plan)}–{max(lw.afa_plan)} "
+                     f"({len(lw.afa_plan)} Jahre)" if lw.afa_plan else ""))
     inventar = []
     if args.inventar:
         inventar, abgang = lese_inventar(args.inventar)

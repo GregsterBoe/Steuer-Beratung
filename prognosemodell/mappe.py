@@ -350,6 +350,65 @@ def _blatt_anlagen(wb, modell: Modell) -> None:
     ws.auto_filter.ref = f"A2:{get_column_letter(jahr_spalte + jahre - 1)}{letzte}"
 
 
+def _blatt_afa_plan(wb, modell: Modell) -> None:
+    """Schon geplante AfA je Objekt und Jahr (BWA 1240 der Kostenstellen-Datei): Jahre mit
+    Wert ersetzen die Fortschreibung bei Halten, leere Jahre rechnet das Modell selbst."""
+    ws = wb.create_sheet("AfA-Plan")
+    jahre = prognosejahre()
+    erste, letzte = 3, MAX_OBJEKTE + 2
+    j0 = 4                       # erste Jahresspalte (D)
+    import0 = j0 + jahre + 1     # ausgeblendete Kopie der eingelesenen Werte
+    ws["A1"] = ("AfA-Plan: Abschreibungen je Objekt und Jahr, wie in der Kostenstellen-Datei "
+                "(BWA 1240) schon geplant. Ein Jahr mit Wert ersetzt die AfA-Fortschreibung "
+                "des Modells (bei Halten, höchstens bis zum Restbuchwert); leere Jahre "
+                "schreibt das Modell fort. Grün = eingelesen, gelb = Eingabe.")
+    ws["A1"].font = Font(italic=True)
+    _kopf(ws, 2, ["ObjektID", "Objektname", "Jahre mit Wert"])
+    for i in range(jahre):
+        c = ws.cell(row=2, column=j0 + i, value=f"=par_Startjahr+{i}")
+        c.font, c.fill, c.number_format = FONT_KOPF, FILL_KOPF, FMT_JAHR
+    ende = get_column_letter(j0 + jahre - 1)
+    _name(wb, "afp_ID", f"'AfA-Plan'!$A${erste}:$A${letzte}")
+    _name(wb, "afp_Anzahl", f"'AfA-Plan'!$C${erste}:$C${letzte}")
+    _name(wb, "afp_Jahre", f"'AfA-Plan'!${get_column_letter(j0)}${erste}:${ende}${letzte}")
+    for zeile in range(erste, letzte + 1):
+        ws.cell(row=zeile, column=1).fill = FILL_EINGABE
+        c = ws.cell(row=zeile, column=2, value=f'=IF($A{zeile}="","",IFERROR(INDEX(obj_Name,'
+                                               f'MATCH($A{zeile},obj_ID,0)),"ObjektID fehlt"))')
+        c.fill = FILL_BERECHNET
+        c = ws.cell(row=zeile, column=3,
+                    value=f"=COUNT(${get_column_letter(j0)}{zeile}:${ende}{zeile})")
+        c.fill = FILL_BERECHNET
+        for i in range(jahre):
+            c = ws.cell(row=zeile, column=j0 + i)
+            c.fill, c.number_format = FILL_EINGABE, FMT_EURO
+    zeile = erste
+    for obj in modell.objekte:
+        if not obj.objekt_id:
+            continue
+        ws.cell(row=zeile, column=1, value=obj.objekt_id)
+        ist = modell.kostenstellen.get(obj.objekt_id)
+        for jahr, wert in (ist.afa_plan if ist is not None else {}).items():
+            i = jahr - bwa._basisjahr(modell) - 1
+            if 0 <= i < jahre:
+                ws.cell(row=zeile, column=j0 + i, value=wert)
+                ws.cell(row=zeile, column=import0 + i, value=wert)
+        zeile += 1
+    erste_import = get_column_letter(import0)
+    ws.conditional_formatting.add(
+        f"{get_column_letter(j0)}{erste}:{ende}{letzte}",
+        FormulaRule(formula=[f"AND(ISNUMBER({get_column_letter(j0)}{erste}),"
+                             f"{get_column_letter(j0)}{erste}={erste_import}{erste})"],
+                    fill=FILL_EINGELESEN))
+    for i in range(jahre):
+        ws.column_dimensions[get_column_letter(import0 + i)].hidden = True
+        ws.column_dimensions[get_column_letter(j0 + i)].width = 12
+    ws.column_dimensions["A"].width = 12
+    ws.column_dimensions["B"].width = 28
+    ws.column_dimensions["C"].width = 10
+    ws.freeze_panes = "D3"
+
+
 def _blatt_prognose(wb) -> None:
     """Je Zeile des Objektblatts ein Block mit einer Zeile je Prognosejahr, danach je Neuobjekt."""
     ws = wb.create_sheet("Prognose")
@@ -937,13 +996,14 @@ SCHRITTE = [
 ]
 # Blattreiter: gelb Eingabe, grau Rechnung, blau Ausgabe, grün Kontrolle
 REITER = {"Start": "305496", "Parameter": "FFC000", "Objekte": "FFC000", "Anlagen": "FFC000",
+          "AfA-Plan": "FFC000",
           "Verkäufe": "FFC000",
           "Neuobjekte": "FFC000", "Prognose": "A5A5A5", "Rücklagen": "A5A5A5",
           "Liquidität": "A5A5A5", "Prüfung": "70AD47", "Varianten": "70AD47",
           "BWA-Zuordnung": "FFC000"}
 FARBE_AUSGABE = "5B9BD5"
 # im Schnellcheck ausgeblendet; über Rechtsklick auf einen Reiter wieder einblendbar
-SCHNELL_AUSGEBLENDET = ("Prognose", "Rücklagen", "Liquidität", "Auswertung")
+SCHNELL_AUSGEBLENDET = ("AfA-Plan", "Prognose", "Rücklagen", "Liquidität", "Auswertung")
 
 
 def _link(zelle, blatt: str) -> None:
@@ -1082,6 +1142,7 @@ def erstelle_mappe(modell: Modell) -> Workbook:
     _blatt_parameter(wb, modell)
     _blatt_objekte(wb, modell)
     _blatt_anlagen(wb, modell)
+    _blatt_afa_plan(wb, modell)
     _blatt_verkaeufe(wb, modell)
     _blatt_neuobjekte(wb, modell)
     _blatt_prognose(wb)
