@@ -256,8 +256,13 @@ ANLAGE_FELDER = [
     Feld("kost1", "KOST1", "anl_KOST1", FMT_TEXT, False, 8,
          hinweis="Kostenstelle lt. Anlagenverzeichnis; nur zur Information"),
     Feld("objekt_id", "ObjektID", "anl_ID", FMT_TEXT, False, 12,
-         hinweis="ObjektID im Blatt Objekte; beim Einlesen aus KOST1 (1 = KSt 1). Leer: "
-                 "die Anlage zählt zu keinem Objekt"),
+         hinweis="ObjektID im Blatt Objekte; beim Einlesen aus KOST1 (1 = KSt 1), ohne KOST1 "
+                 "über die Bezeichnung (Spalte Zuordnung). Leer: die Anlage zählt zu keinem "
+                 "Objekt"),
+    Feld("zuordnung", "Zuordnung", "anl_Zuordnung", FMT_TEXT, False, 26,
+         hinweis="woher die ObjektID kommt: KOST1, „Bezeichnung …“ (Treffer über die "
+                 "Bezeichnung, orange: bitte prüfen, danach „geprüft“ eintragen) oder "
+                 "„mehrdeutig …“ (mehrere Objekte passen, ObjektID von Hand)"),
     Feld("art", "Art", "anl_Art", FMT_TEXT, True, 12, auswahl=ANLAGE_ARTEN,
          hinweis="G+B: Grund und Boden, keine AfA. Gebäude, BGA, im Bau: abnutzbar, bilden den "
                  "Gebäudebuchwert. Finanzanlage, sonstige: nicht im Modell"),
@@ -300,6 +305,10 @@ ANLAGE_JAHRE_NAME = "anl_AfAJahre"   # AfA je Prognosejahr, eine Spalte je Jahr
 # Statustexte; nur OK zählt in die Objekte
 ANL_NICHT_IM_MODELL = "nicht im Modell (Art)"
 ANL_OHNE_OBJEKT = "ohne ObjektID"
+# Herkunft der ObjektID im Blatt Anlagen (Spalte Zuordnung)
+ZUORDNUNG_KOST1 = "KOST1"
+ZUORDNUNG_BEZEICHNUNG = "Bezeichnung"   # Treffer über die Bezeichnung, prüfen
+ZUORDNUNG_MEHRDEUTIG = "mehrdeutig"
 ANL_OBJEKT_FEHLT = "ObjektID fehlt im Blatt Objekte"
 
 
@@ -593,6 +602,7 @@ class Anlage:
     konto: Optional[int] = None
     kost1: Optional[str] = None
     objekt_id: Optional[str] = None
+    zuordnung: Optional[str] = None      # Herkunft der ObjektID, siehe ZUORDNUNG_*
     datum: Optional[object] = None       # datetime.date
     ahk: Optional[float] = None
     afa_art: Optional[str] = None
@@ -680,6 +690,9 @@ PRUEFUNGEN = [
     Pruefung("anlagen", "Anlagen G+B, Gebäude, BGA oder im Bau ohne Objekt (keine oder unbekannte "
              "ObjektID) oder mit fehlender Angabe: AK und Buchwert fehlen im Modell",
              HINWEIS, "Blatt Anlagen, Spalte Status"),
+    Pruefung("anlagen_bez", "Anlagen ohne KOST1, die beim Einlesen über die Bezeichnung einem "
+             "Objekt zugeordnet wurden (ungeprüft) oder zu mehreren Objekten passen",
+             HINWEIS, "Blatt Anlagen, Spalten ObjektID und Zuordnung (orange)"),
     Pruefung("anlagen_afa", "Objekte, deren AfA im Basisjahr lt. Blatt Anlagen von der AfA lt. "
              "Buchhaltung (BWA 1240) um mehr als 1 € abweicht: Zuordnung der Anlagen prüfen",
              HINWEIS, "Blatt Objekte, Spalten AfA Basisjahr lt. Anlagen und lt. Buchhaltung"),

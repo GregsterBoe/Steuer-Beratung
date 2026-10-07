@@ -9,6 +9,8 @@ gesucht wird über die BWA-Nummer, nie über die Zeilenposition.
 
 import dataclasses
 import re
+import unicodedata
+from difflib import SequenceMatcher
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
@@ -17,7 +19,8 @@ from typing import Optional
 from openpyxl import load_workbook
 
 from .modelle import (AFA_DEGRESSIV, AFA_LINEAR, ART_BGA, ART_FINANZ, ART_GEBAEUDE, ART_GUB,
-                      ART_IM_BAU, ART_SONSTIGE, METHODE_KEINE, Anlage, Objekt)
+                      ART_IM_BAU, ART_SONSTIGE, METHODE_KEINE, ZUORDNUNG_BEZEICHNUNG,
+                      ZUORDNUNG_KOST1, ZUORDNUNG_MEHRDEUTIG, Anlage, Objekt)
 
 # Feste Stellen im Blatt
 ZELLE_ID = "B2"        # Kostenstelle, z. B. "KSt 1"
@@ -428,23 +431,128 @@ def lese_inventar(pfad) -> tuple:
     return anlagen, abgang
 
 
-def ordne_anlagen_zu(anlagen: list, objekt_ids) -> list:
+# Zuordnung über die Inventarbezeichnung, wenn KOST1 fehlt: die Wörter der Bezeichnung
+# werden einzeln mit ObjektID und Name der Kostenstelle verglichen (unscharf, damit
+# „Musterstr.“ zu „Musterstraße“ und kleine Tippfehler passen). Wörter für die Art der
+# Anlage tragen nichts zum Objekt bei.
+BEZ_FUELLWOERTER = {
+    "und", "u", "der", "die", "das", "den", "des", "dem", "in", "im", "am", "an", "zu", "zum",
+    "zur", "mit", "fuer", "von", "vom", "bei", "auf", "aus", "nach", "ohne", "nr", "kst",
+    "grund", "boden", "gub", "gb", "grundstueck", "grundstuecke", "gebaeude", "wohngebaeude",
+    "geschaeftsgebaeude", "buerogebaeude", "haus", "wohnhaus", "wohnbau", "bau", "anbau",
+    "neubau", "umbau", "aussenanlage", "aussenanlagen", "anlage", "anlagen", "anteil",
+    "objekt", "kostenstelle", "wohnung", "wohnungen", "whg", "einbau", "einbauten",
+    "sanierung", "modernisierung", "erweiterung", "teil", "gesamt", "alle",
+}
+BEZ_AEHNLICH = 0.8        # Mindestähnlichkeit zweier Wörter (difflib-Quote)
+BEZ_ABSTAND = 0.5         # Vorsprung des besten Objekts vor dem zweitbesten
+BEZ_KST = re.compile(r"\bkst\.?\s*(\d+)\b", re.IGNORECASE)
+
+
+def _woerter(text) -> tuple:
+    """(Wörter, Zahlen) eines Texts: klein, Umlaute ausgeschrieben, „straße“ zu „str“."""
+    text = str(text or "").lower()
+    for alt, neu in (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss")):
+        text = text.replace(alt, neu)
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+    woerter, zahlen = set(), set()
+    for t in re.findall(r"[a-z]+|\d+", text):
+        if t.isdigit():
+            zahlen.add(t.lstrip("0") or "0")
+            continue
+        t = re.sub(r"(str)asse$", r"\1", t)
+        if t not in BEZ_FUELLWOERTER and len(t) >= 2:
+            woerter.add(t)
+    return woerter, zahlen
+
+
+def _aehnlich(a: str, b: str) -> float:
+    if a == b:
+        return 1.0
+    if min(len(a), len(b)) < 4:       # kurze Kürzel nur exakt („KC“, „OG“)
+        return 0.0
+    if a.startswith(b) or b.startswith(a):
+        return 0.9
+    quote = SequenceMatcher(None, a, b).ratio()
+    return quote if quote >= BEZ_AEHNLICH else 0.0
+
+
+def treffer_bezeichnung(bezeichnung, objekte: dict) -> list:
+    """Objekte, deren ObjektID oder Name zur Bezeichnung passen, als Liste
+    (Punkte, ObjektID, passende Wörter) absteigend; ohne passendes Wort leer.
+    objekte: ObjektID -> Liste von Texten (ID, Name)."""
+    woerter, zahlen = _woerter(bezeichnung)
+    ergebnis = []
+    for oid, texte in objekte.items():
+        o_woerter, o_zahlen = set(), set()
+        for t in texte:
+            w, z = _woerter(t)
+            o_woerter |= w
+            o_zahlen |= z
+        passend, punkte = [], 0.0
+        for w in sorted(woerter):
+            bestes = max((_aehnlich(w, o) for o in o_woerter), default=0.0)
+            if bestes:
+                punkte += bestes
+                passend.append(w)
+        if not passend:
+            continue
+        gleiche_zahlen = sorted(zahlen & o_zahlen)
+        punkte += 0.5 * len(gleiche_zahlen)
+        ergebnis.append((round(punkte, 3), oid, passend + gleiche_zahlen))
+    return sorted(ergebnis, key=lambda t: (-t[0], str(t[1])))
+
+
+def _objekttexte(objekte) -> dict:
+    """ObjektID -> Texte für den Abgleich; objekte als ObjektIDs oder Objekte mit Name."""
+    texte = {}
+    for o in objekte:
+        oid = getattr(o, "objekt_id", o)
+        if oid:
+            texte.setdefault(oid, [str(oid)])
+            name = getattr(o, "name", None)
+            if name:
+                texte[oid].append(str(name))
+    return texte
+
+
+def ordne_anlagen_zu(anlagen: list, objekte) -> list:
     """ObjektID aus KOST1: die ObjektID mit derselben Endnummer (1 zu „KSt 1“),
-    sonst „KSt <KOST1>“. Ohne KOST1 bleibt die Anlage ohne Objekt."""
+    sonst „KSt <KOST1>“. Ohne KOST1 über die Inventarbezeichnung (treffer_bezeichnung),
+    gekennzeichnet in Zuordnung; passt nichts eindeutig, bleibt die Anlage ohne Objekt.
+    objekte: ObjektIDs oder Objekte (dann zählt auch der Name)."""
+    texte = _objekttexte(objekte)
     nach_nummer = {}
-    for oid in objekt_ids:
-        treffer = re.search(r"(\d+)\s*$", str(oid or ""))
+    for oid in texte:
+        treffer = re.search(r"(\d+)\s*$", str(oid))
         if treffer:
             nach_nummer.setdefault(int(treffer.group(1)), []).append(oid)
+
+    def aus_kost(kost1):
+        kost = int(kost1) if kost1.isdigit() else None
+        kandidaten = nach_nummer.get(kost, []) if kost is not None else []
+        return kandidaten[0] if len(kandidaten) == 1 else (
+            f"{KST_PRAEFIX}{kost}" if kost is not None else kost1)
+
     ergebnis = []
     for a in anlagen:
-        oid = a.objekt_id
+        oid, zuordnung = a.objekt_id, a.zuordnung
         if oid is None and a.kost1:
-            kost = int(a.kost1) if a.kost1.isdigit() else None
-            kandidaten = nach_nummer.get(kost, []) if kost is not None else []
-            oid = kandidaten[0] if len(kandidaten) == 1 else (
-                f"{KST_PRAEFIX}{kost}" if kost is not None else a.kost1)
-        ergebnis.append(dataclasses.replace(a, objekt_id=oid))
+            oid, zuordnung = aus_kost(a.kost1), ZUORDNUNG_KOST1
+        elif oid is None and a.bezeichnung:
+            kst = BEZ_KST.search(a.bezeichnung)
+            treffer = treffer_bezeichnung(a.bezeichnung, texte)
+            if kst:
+                oid = aus_kost(kst.group(1))
+                zuordnung = f"{ZUORDNUNG_BEZEICHNUNG}: KSt {kst.group(1)}"
+            elif len(treffer) == 1 or (treffer and treffer[0][0] - treffer[1][0]
+                                       >= BEZ_ABSTAND - 1e-9):
+                _, oid, woerter = treffer[0]
+                zuordnung = f"{ZUORDNUNG_BEZEICHNUNG}: {', '.join(woerter)}"
+            elif treffer:
+                beste = [t[1] for t in treffer if treffer[0][0] - t[0] < BEZ_ABSTAND - 1e-9]
+                zuordnung = f"{ZUORDNUNG_MEHRDEUTIG}: {', '.join(beste)}"
+        ergebnis.append(dataclasses.replace(a, objekt_id=oid, zuordnung=zuordnung))
     return ergebnis
 
 

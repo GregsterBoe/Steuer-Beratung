@@ -14,6 +14,7 @@ from openpyxl import Workbook
 from prognosemodell.einlesen import (EinleseFehler, anlagen_zusammenfuehren, lese_inventar,
                                      lese_kostenstellen, ordne_anlagen_zu, stand_aus_dateiname,
                                      zusammenfuehren)
+from prognosemodell.modelle import Anlage, Objekt
 from prognosemodell.testdaten import testobjekt
 from prognosemodell.vorlagen import (INVENTAR_BEISPIELE, erstelle_inventar_vorlage,
                                      erstelle_vorlage)
@@ -190,6 +191,28 @@ def main() -> int:
                ["KSt 1", "KSt 2", "KSt 9", None])
         andere = {a.nr: a.objekt_id for a in ordne_anlagen_zu(anlagen, ["Haus 2", "Haus 12"])}
         pruefe("KOST1 zu ObjektID mit gleicher Endnummer", andere["300002"], "Haus 2")
+
+        # ohne KOST1: Zuordnung über die Inventarbezeichnung, gekennzeichnet
+        objekte = [Objekt("KSt 1", name="Musterstraße 1"), Objekt("KSt 2", name="Beispielweg 7"),
+                   Objekt("KSt 3", name="KC 24+26"), Objekt("KSt 4", name="KC 30")]
+        ohne = [Anlage(nr=str(i), bw_stand=1.0, bezeichnung=b) for i, b in enumerate([
+            "Grund und Boden Musterstr. 1", "Außenanlage Beispeilweg", "Wohngebäude KC 24",
+            "Garage KC", "Grund und Boden ohne Kostenstelle", "Parkplatz Kst. 2", None])]
+        bez = [(a.objekt_id, a.zuordnung) for a in ordne_anlagen_zu(ohne, objekte)]
+        pruefe("Bezeichnung: abgekürzte Straße", bez[0],
+               ("KSt 1", "Bezeichnung: musterstr, 1"))
+        pruefe("Bezeichnung: Tippfehler", bez[1], ("KSt 2", "Bezeichnung: beispeilweg"))
+        pruefe("Bezeichnung: Kürzel und Hausnummer", bez[2], ("KSt 3", "Bezeichnung: kc, 24"))
+        pruefe("Bezeichnung: mehrdeutig bleibt ohne Objekt", bez[3],
+               (None, "mehrdeutig: KSt 3, KSt 4"))
+        pruefe("Bezeichnung: nur Füllwörter, keine Zuordnung", bez[4], (None, None))
+        pruefe("Bezeichnung: KSt in der Bezeichnung", bez[5], ("KSt 2", "Bezeichnung: KSt 2"))
+        pruefe("Bezeichnung fehlt", bez[6], (None, None))
+        pruefe("KOST1 gekennzeichnet", ordne_anlagen_zu(anlagen, objekte)[0].zuordnung, "KOST1")
+        pruefe("KOST1 geht vor der Bezeichnung",
+               ordne_anlagen_zu([Anlage(nr="x", bw_stand=1.0, kost1="1",
+                                        bezeichnung="Beispielweg 7")], objekte)[0].objekt_id,
+               "KSt 1")
         mit_inventar = ordne_anlagen_zu(anlagen, ["KSt 1", "KSt 2"])
         zusammen, abgleich = anlagen_zusammenfuehren(mit_inventar, [v1, v2])
         pruefe("Anlagenverzeichnis geht vor der Aufschlüsselung", len(zusammen),

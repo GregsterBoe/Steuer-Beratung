@@ -8,7 +8,7 @@ from pathlib import Path
 from .einlesen import (anlagen_zusammenfuehren, lese_inventar, lese_kostenstellen,
                        ordne_anlagen_zu, stand_aus_dateiname, zusammenfuehren)
 from .mappe import erstelle_mappe
-from .modelle import PARAMETER, Modell
+from .modelle import PARAMETER, ZUORDNUNG_KOST1, Modell
 from .testdaten import testmodell
 
 
@@ -53,11 +53,16 @@ def main() -> None:
     inventar = []
     if args.inventar:
         inventar, abgang = lese_inventar(args.inventar)
-        inventar = ordne_anlagen_zu(inventar, [o.objekt_id for o in modell.objekte])
+        inventar = ordne_anlagen_zu(inventar, modell.objekte)
         ids = {o.objekt_id for o in modell.objekte}
         mit_objekt = sum(a.objekt_id in ids for a in inventar)
         print(f"Anlagenverzeichnis: {len(inventar)} Anlagen eingelesen ({abgang} abgegangen), "
               f"{mit_objekt} einem Objekt zugeordnet, Stand {stand or _basisjahr() - 1}")
+        for a in inventar:
+            if a.zuordnung and a.zuordnung != ZUORDNUNG_KOST1:
+                ziel = f"-> {a.objekt_id}" if a.objekt_id else "-> kein Objekt"
+                print(f"  ohne KOST1: {a.nr} „{a.bezeichnung}“ {ziel} ({a.zuordnung}), "
+                      f"im Blatt Anlagen prüfen")
     modell.anlagen, abgleich = anlagen_zusammenfuehren(inventar, laufende)
     for objekt_id, bw_inventar, bw_kst, afa_kst in abgleich:
         hinweis = "" if abs(bw_inventar - bw_kst) < 1 else "  <- weicht ab, Zuordnung prüfen"
