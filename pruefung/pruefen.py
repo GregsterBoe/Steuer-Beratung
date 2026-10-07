@@ -162,15 +162,19 @@ def ueb(jahr: int) -> int:
 # Sollwerte der Etappe 2 von Hand: AfA 800.000 × 2 % = 16.000, Miete 60.000 × 1,02^n,
 # Erhaltung 8.000 × 1,025^n, weitere Ausgaben × 1,02^n, n = Jahr − 2026.
 # Übersicht: Verkehrswert 1.400.000 × 1,02^n je Objekt.
-def vorlage_eingelesen() -> Modell:
-    """Modell aus der BWA-Vorlage: KSt 1 mit den Stammdaten des Testobjekts, KSt 2 ohne."""
+def vorlage_eingelesen(plan: dict = None, **geaendert) -> Modell:
+    """Modell aus der BWA-Vorlage: KSt 1 mit den Stammdaten des Testobjekts, KSt 2 ohne.
+
+    plan: schon gefüllte Planspalten der Vorlage (erstelle_vorlage); geaendert: Felder von
+    KSt 1, nach dem Einlesen im Blatt Objekte überschrieben."""
     with tempfile.TemporaryDirectory() as tmp:
         pfad = Path(tmp) / "vorlage.xlsx"
-        erstelle_vorlage().save(pfad)
+        erstelle_vorlage(plan=plan).save(pfad)
         laufende, _ = lese_kostenstellen(pfad, 2026)
     stamm = [dataclasses.replace(testobjekt(), objekt_id="KSt 1", name=None)]
-    return Modell(objekte=zusammenfuehren(stamm, laufende),
-                  kostenstellen={lw.objekt_id: lw for lw in laufende})
+    objekte = zusammenfuehren(stamm, laufende)
+    objekte[0] = dataclasses.replace(objekte[0], **geaendert)
+    return Modell(objekte=objekte, kostenstellen={lw.objekt_id: lw for lw in laufende})
 
 
 def anlagen_eingelesen(inventar: bool = True, ohne_kost1=(), **parameter) -> Modell:
@@ -957,6 +961,41 @@ def faelle():
             ("bwa_1120", lj(2027), 2_448),
             ("bwa_1260", lj(2027), 1_734),
             ("bwa_1020", lj(2027), 183_600),
+        ]),
+        # Basisjahr der BWA aus dem Blatt Objekte: Miete KSt 1 auf 66.000, weitere Ausgaben
+        # 3.600 + 1.000; 1260 = 4.600 − 1140 1.200 − 1150 1.800. Vorjahr bleibt Ist.
+        # Alle Objekte: 1260 = 13.900 − 11.200 (1100–1220 beider Blätter)
+        ("BWA: Basisjahr aus dem Blatt Objekte",
+         vorlage_eingelesen(miete=66_000, weitere_ausgaben=4_600), [
+            ("BWA:KSt 1:1020", 2026, 66_000),
+            ("BWA:KSt 1:1020", 2025, 58_800),
+            ("BWA:KSt 1:1150", 2026, 1_800),
+            ("BWA:KSt 1:1260", 2026, 1_600),
+            ("BWA:KSt 1:1240", 2026, 16_000),
+            ("BWA:KSt 1:1280", 2026, 28_600),
+            ("BWA:KSt 1:1345", 2026, 33_400),   # − Zins 4.000 lt. Ist
+            ("BWA:KSt 2:1020", 2026, 120_000),
+            ("BWA:Alle Objekte:1020", 2026, 186_000),
+            ("BWA:Alle Objekte:1260", 2026, 2_700),
+            ("BWA:Alle Objekte:1310", 2026, 13_000),
+            ("BWA:KSt 1:1020", 2027, 67_320),
+        ]),
+        # AfA-Plan aus BWA 1240 der Kostenstellen-Datei: 2027 15.000, 2028 14.000, 2030 0;
+        # 2029 und ab 2031 schreibt das Modell fort (AfA lt. Buchhaltung 16.000)
+        ("AfA-Plan: geplante Jahre ersetzen die Fortschreibung",
+         vorlage_eingelesen(plan={"KSt 1": {1240: {2027: 15_000, 2028: 14_000, 2030: 0}}}), [
+            ("afp_ID", 0, "KSt 1"),
+            ("afp_Anzahl", 0, 3),
+            ("afp_Anzahl", 1, 0),
+            ("prg_AfA", prg(1, 2027), 15_000),
+            ("prg_AfA", prg(1, 2028), 14_000),
+            ("prg_AfA", prg(1, 2029), 16_000),
+            ("prg_AfA", prg(1, 2030), 0),
+            ("prg_AfA", prg(1, 2031), 16_000),
+            ("prg_BuchwertHalten", prg(1, 2030), 480_000 - 45_000),
+            ("BWA:KSt 1:1240", 2027, 15_000),
+            ("BWA:KSt 1:1240", 2030, 0),
+            ("pr_Anzahl", pr("afa_plan"), 1),
         ]),
         # AfA lt. Buchhaltung läuft in der Prognose weiter: 12.000 statt AK × Satz 16.000,
         # bis der Restbuchwert 30.000 verbraucht ist; 0 lt. Buchhaltung = abgeschrieben

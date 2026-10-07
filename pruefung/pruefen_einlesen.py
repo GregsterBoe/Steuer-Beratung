@@ -128,6 +128,16 @@ def main() -> int:
         pruefe("Vorlage: Erhaltung", v1.erhaltung, 8_000.0)
         pruefe("Vorlage: weitere Ausgaben 1140 + 1150 + 1260", v1.weitere_ausgaben, 3_600.0)
         pruefe("Vorlage: weitere Einnahmen KSt 2", v2.weitere_einnahmen, 1_500.0)
+        pruefe("Vorlage: Planspalten leer, kein AfA-Plan", v1.afa_plan, {})
+
+        # schon geplante AfA in den Planspalten (BWA 1240), Lücke 2029 bleibt dem Modell
+        geplant = tmp / "geplant.xlsx"
+        erstelle_vorlage(basisjahr=2026, plan={"KSt 1": {
+            1240: {2027: 15_000, 2028: 14_000.5, 2030: 0}, 1020: {2027: 99}}}).save(geplant)
+        g1 = lese_kostenstellen(geplant, 2026)[0][0]
+        pruefe("AfA-Plan: Jahre mit Wert aus BWA 1240, auch 0, Lücke bleibt leer",
+               g1.afa_plan, {2027: 15_000.0, 2028: 14_000.5, 2030: 0.0})
+        pruefe("AfA-Plan: Basisjahr bleibt AfA lt. Buchhaltung", g1.abschreibung, 16_000.0)
         pruefe("Vorlage: AfA lt. BWA KSt 2", v2.abschreibung, 30_000.0)
         try:
             (p1, _), _ = lese_kostenstellen(vorlage, 2027)
