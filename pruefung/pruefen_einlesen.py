@@ -138,6 +138,27 @@ def main() -> int:
         pruefe("AfA-Plan: Jahre mit Wert aus BWA 1240, auch 0, Lücke bleibt leer",
                g1.afa_plan, {2027: 15_000.0, 2028: 14_000.5, 2030: 0.0})
         pruefe("AfA-Plan: Basisjahr bleibt AfA lt. Buchhaltung", g1.abschreibung, 16_000.0)
+
+        # Neukauf-Kostenstellen: alle Blätter hinter „KSt 9999“; die Marke selbst bleibt
+        # eine Kostenstelle
+        nk_pfad = tmp / "neukauf.xlsx"
+        erstelle_vorlage(basisjahr=2026, neukauf=[
+            ("KSt 31", "Neubau Nord", {1020: 50_000, 1250: 2_000, 1150: 1_000}),
+            ("KSt 32", "Neubau Süd", {})], plan={"KSt 31": {1020: {2028: 52_000}}}).save(nk_pfad)
+        alle, _ = lese_kostenstellen(nk_pfad, 2026)
+        pruefe("Neukauf: Reihenfolge und Kennzeichen",
+               [(lw.objekt_id, lw.neukauf) for lw in alle],
+               [("KSt 1", False), ("KSt 2", False), ("KSt 9999", False), ("KSt 31", True),
+                ("KSt 32", True)])
+        nk = alle[3]
+        pruefe("Neukauf: Miete je Jahr ab Basisjahr", nk.jahre["miete"],
+               {2026: 50_000.0, 2028: 52_000.0})
+        pruefe("Neukauf: weitere Ausgaben 1100–1220, 1260", nk.jahre["ausgaben"],
+               {2026: 1_000.0})
+        pruefe("Neukauf: Erhaltung", nk.jahre["erhaltung"], {2026: 2_000.0})
+        pruefe("Neukauf: leeres Blatt ohne Jahreswerte", alle[4].jahre["miete"], {})
+        pruefe("Neukauf: kein Bestandsobjekt",
+               [o.objekt_id for o in zusammenfuehren([], alle)], ["KSt 1", "KSt 2", "KSt 9999"])
         pruefe("Vorlage: AfA lt. BWA KSt 2", v2.abschreibung, 30_000.0)
         try:
             (p1, _), _ = lese_kostenstellen(vorlage, 2027)

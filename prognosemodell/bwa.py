@@ -24,12 +24,16 @@ from .vorlagen import (BWA_ZEILEN, ERSTE_ZEILE, SPALTE_JAHR, SPALTE_PLAN, SPALTE
 SUMMENBLATT = "Alle Objekte"
 SONDERBEREICH = "Verkauf und Kauf"
 ZEILE_JAHR = ERSTE_ZEILE - 1   # Hilfszeile mit dem Planjahr als Zahl, für die Formeln
+ZEILEN = {nr: ERSTE_ZEILE + i for i, (nr, _) in enumerate(BWA_ZEILEN)}   # wie bwa_kopf
 
 # Kostenarten aus „weitere Ausgaben“; 1260 Sonstige Kosten nimmt den Rest auf
-AUSGABEN_ZEILEN = (1100, 1120, 1140, 1150, 1180, 1200, 1220)
+AUSGABEN_ZEILEN = (1100, 1120, 1140, 1150, 1160, 1180, 1200, 1220)
 KOSTENARTEN = AUSGABEN_ZEILEN + (1240, 1250, 1260)
-# Basisjahr aus dem Objektblatt, damit Änderungen dort in der BWA ankommen; die Kostenarten
-# 1100–1220 bleiben Ist, 1260 nimmt den Rest der weiteren Ausgaben auf
+# Kostenstellenblatt führend: Spalte Basisjahr ist Eingabe, das Blatt Objekte verweist darauf
+# (Feld -> BWA-Zeilen). Ohne eingelesene Kostenstelle umgekehrt: Basisjahr aus dem
+# Objektblatt (IST_AUS_OBJEKT), die Kostenarten 1100–1220 bleiben leer, 1260 nimmt den Rest auf
+OBJEKT_AUS_KST = {"miete": (1020,), "weitere_einnahmen": (1090,), "erhaltung": (1250,),
+                  "afa_bwa": (1240,), "weitere_ausgaben": (1260,) + AUSGABEN_ZEILEN}
 IST_AUS_OBJEKT = {1020: "obj_MieteBasis", 1090: "obj_EinnBasis", 1240: "obj_AfABWA",
                   1250: "obj_ErhBasis"}
 AUSGABEN_AUS_OBJEKT = "obj_AusgBasis"
@@ -47,6 +51,7 @@ FILL_EINGABE = PatternFill("solid", fgColor="FFF2CC")
 FILL_GEAENDERT = PatternFill("solid", fgColor="FFE699")   # abweichend vom Standard
 FILL_FEHLER = PatternFill("solid", fgColor="F8CBAD")
 FILL_AUS_OBJEKT = PatternFill("solid", fgColor="DDEBF7")  # Basisjahr aus dem Objektblatt
+SUMMENZEILEN = (1051, 1080, 1092, 1280, 1300, 1320, 1330, 1345, 1353, 1380)
 GUELTIG = (STATUS_OK, STATUS_6B_UNZULAESSIG)
 
 UNGUELTIGE_ZEICHEN = re.compile(r"[\[\]:*?/\\]")
@@ -345,7 +350,9 @@ def _abschreibungen(ws, anlagen: list, planjahre: int) -> None:
 
 
 def _blatt_objekt(wb, titel: str, objekt_id: str, name, ist, basisjahr: int,
-                  planjahre: int, neu: bool, anlagen: list = ()):
+                  planjahre: int, neu: bool, anlagen: list = (), kst: bool = False):
+    """kst: Ist-Werte aus der Kostenstellen-Datei; dann ist die Spalte Basisjahr Eingabe
+    (gelb) und führt, sonst kommt sie aus dem Blatt Objekte (hellblau)."""
     ws = wb.create_sheet(titel)
     z = bwa_kopf(ws, objekt_id, name or "", basisjahr, planjahre)
     _jahreszeile(ws, planjahre)
@@ -353,8 +360,16 @@ def _blatt_objekt(wb, titel: str, objekt_id: str, name, ist, basisjahr: int,
         if nr in z:
             for spalte, wert in werte.items():
                 ws.cell(row=z[nr], column=spalte, value=wert)
-    if not neu:
-        # Basisjahr aus dem Objektblatt; Vorjahre und Monate bleiben Ist
+    t = get_column_letter(SPALTE_JAHR)
+    if kst:
+        # Basisjahr führt: Einzelzeilen gelb zum Ändern, Summenzeilen als Formel
+        for nr, bez in BWA_ZEILEN:
+            if bez and nr not in SUMMENZEILEN and nr != 1094:
+                ws.cell(row=z[nr], column=SPALTE_JAHR).fill = FILL_EINGABE
+        for nr, formel in _summenformeln(z, t).items():
+            ws.cell(row=z[nr], column=SPALTE_JAHR, value=formel)
+    elif not neu:
+        # ohne Kostenstellen-Datei: Basisjahr aus dem Objektblatt
         def obj(feld):
             return f"IFERROR(N(INDEX({feld},MATCH($B$2,obj_ID,0))),0)"
         _basisspalte(ws, z, obj)
@@ -362,13 +377,36 @@ def _blatt_objekt(wb, titel: str, objekt_id: str, name, ist, basisjahr: int,
     _herleitung(ws, planjahre, objekt=True)
     if anlagen:
         _abschreibungen(ws, anlagen, planjahre)
-    hinweis = ("Neuobjekt: Werte ab dem Jahr nach dem Kauf. " if neu else "") + (
-        "Planspalten = Szenario A, vor Finanzierung; Zins und Steuer nur im Blatt "
-        f"„{SUMMENBLATT}“." + ("" if neu else " Basisjahr hellblau: aus dem Blatt Objekte "
-                               "(1260 = weitere Ausgaben abzüglich 1100–1220)."))
-    ws["E2"] = hinweis
+    if neu:
+        basis = ""
+    elif kst:
+        basis = (" Basisjahr gelb: hier ändern, das Blatt Objekte und die Summe in "
+                 f"„{SUMMENBLATT}“ übernehmen den Wert.")
+    else:
+        basis = (" Basisjahr hellblau: aus dem Blatt Objekte (1260 = weitere Ausgaben "
+                 "abzüglich 1100–1220).")
+    ws["E2"] = (("Neuobjekt: Werte ab dem Jahr nach dem Kauf. " if neu else "")
+                + "Planspalten = Szenario A, vor Finanzierung; Zins und Steuer nur im Blatt "
+                f"„{SUMMENBLATT}“." + basis)
     ws["E2"].font = Font(italic=True)
     return ws
+
+
+def _bezug(titel: str, nr: int, z: dict) -> str:
+    blatt = titel.replace("'", "''")
+    return f"'{blatt}'!${get_column_letter(SPALTE_JAHR)}${z[nr]}"
+
+
+def verknuepfe_objekt(wb, zeile: int, titel: str, z: dict) -> None:
+    """Basiswerte der Objektzeile verweisen auf die Spalte Basisjahr des Kostenstellenblatts;
+    die ausgeblendete Spalte „eingelesen“ hält dieselbe Verknüpfung zum Vergleich."""
+    from . import formeln
+    ws = wb["Objekte"]
+    for key, nummern in OBJEKT_AUS_KST.items():
+        formel = "=" + "+".join(_bezug(titel, nr, z) for nr in nummern)
+        ws[f"{formeln.spalte(key)}{zeile}"] = formel
+        ws[f"{formeln.ispalte(key)}{zeile}"] = formel
+    ws[f"{formeln.kst_blatt_spalte()}{zeile}"] = titel
 
 
 def _basisspalte(ws, z: dict, obj) -> None:
@@ -391,41 +429,44 @@ def blaetter_bwa(wb, modell: Modell) -> list:
     planjahre = prognosejahre()
     summe = wb.create_sheet(blattname(SUMMENBLATT, wb.sheetnames))
     eintraege = []
-    for obj in modell.objekte:
+    for zeile, obj in enumerate(modell.objekte, start=2):   # Zeile im Blatt Objekte
         if not obj.objekt_id:
             continue
         ist = modell.kostenstellen.get(obj.objekt_id)
         wunsch = ist.blatt if ist is not None else obj.objekt_id
-        eintraege.append((wunsch, obj.objekt_id, obj.name, ist.ist if ist else None, False))
+        eintraege.append((wunsch, obj.objekt_id, obj.name, ist.ist if ist else None, False,
+                          zeile if ist is not None else None))
     for ne in modell.neuobjekte:
         if ne.neu_id:
-            eintraege.append((ne.neu_id, ne.neu_id, ne.name, None, True))
+            eintraege.append((ne.neu_id, ne.neu_id, ne.name, None, True, None))
     titel = []
-    for wunsch, objekt_id, name, ist, neu in eintraege:
+    for wunsch, objekt_id, name, ist, neu, obj_zeile in eintraege:
         t = blattname(wunsch, wb.sheetnames)
         anlagen = [a for a in modell.anlagen
                    if not neu and a.objekt_id == objekt_id and a.art in ARTEN_ABNUTZBAR]
-        _blatt_objekt(wb, t, objekt_id, name, ist, basisjahr, planjahre, neu, anlagen)
+        _blatt_objekt(wb, t, objekt_id, name, ist, basisjahr, planjahre, neu, anlagen,
+                      kst=obj_zeile is not None)
+        if obj_zeile is not None:
+            verknuepfe_objekt(wb, obj_zeile, t, ZEILEN)
         titel.append(t)
 
     z = bwa_kopf(summe, "KSt", SUMMENBLATT, basisjahr, planjahre)
     _jahreszeile(summe, planjahre)
     bestand = [t for t, e in zip(titel, eintraege) if not e[4]]
-    # Ist-Werte: Summe der Kostenstellenblätter; im Basisjahr die Werte des Objektblatts
-    # über alle Objekte, auch die ohne eigenes Blatt
+    # Ist-Werte und Basisjahr: Summe der Kostenstellenblätter
     for spalte in range(SPALTE_VORJAHRE, SPALTE_JAHR + 1):
         sp = get_column_letter(spalte)
         for nr, bez in BWA_ZEILEN:
             if bez and bestand:
                 summe.cell(row=z[nr], column=spalte,
                            value="=" + "+".join(f"N('{b}'!{sp}{z[nr]})" for b in bestand))
-    _basisspalte(summe, z, lambda feld: f"SUM({feld})")
     _planspalten(summe, z, planjahre, lambda sp: _planformeln_summe(z, sp, bestand))
     _herleitung(summe, planjahre, objekt=False)
     summe["E2"] = ("Planspalten = Szenario A über alle Objekte und Neuobjekte, vor "
                    "Finanzierung. Nr. 1353 = Ergebnis vor Verlustvortrag im Blatt "
                    f"Liquidität (Kontrolle im Blatt {ZUORDNUNG}), Steuer mit Verlustvortrag. "
-                   "Basisjahr hellblau: Summe des Blatts Objekte über alle Objekte.")
+                   "Ist-Spalten und Basisjahr: Summe der Kostenstellenblätter; Objekte ohne "
+                   "eigenes Blatt nur in den Planspalten.")
     summe["E2"].font = Font(italic=True)
     ende = get_column_letter(SPALTE_PLAN + planjahre - 1)
     anfang = get_column_letter(SPALTE_PLAN)

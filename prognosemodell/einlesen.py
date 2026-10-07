@@ -21,6 +21,7 @@ from openpyxl import load_workbook
 from .modelle import (AFA_DEGRESSIV, AFA_LINEAR, ART_BGA, ART_FINANZ, ART_GEBAEUDE, ART_GUB,
                       ART_IM_BAU, ART_SONSTIGE, METHODE_KEINE, ZUORDNUNG_BEZEICHNUNG,
                       ZUORDNUNG_KOST1, ZUORDNUNG_MEHRDEUTIG, Anlage, Objekt)
+from .vorlagen import NEUKAUF_MARKE
 
 # Feste Stellen im Blatt
 ZELLE_ID = "B2"        # Kostenstelle, z. B. "KSt 1"
@@ -40,6 +41,9 @@ BWA_EINNAHMEN = (1090,)
 BWA_ERHALTUNG = (1250,)
 BWA_AUSGABEN = (1100, 1120, 1140, 1150, 1160, 1180, 1200, 1220, 1260)
 BWA_ABSCHREIBUNG = (1240,)  # Basisjahr: Abgleich; Planjahre mit Wert: AfA-Plan
+# Neukauf-Kostenstellen: Position im Blatt Neukauf-KSt -> BWA-Zeilen
+NEUKAUF_POSITIONEN = {"miete": BWA_MIETE, "einnahmen": BWA_EINNAHMEN,
+                      "erhaltung": BWA_ERHALTUNG, "ausgaben": BWA_AUSGABEN}
 
 
 # Aufschlüsselung der Abschreibungen unter der BWA (ohne BWA-Nr., Beschriftung in Spalte C):
@@ -74,6 +78,10 @@ class LaufendeWerte:
     anlagen: list = field(default_factory=list)
     # schon geplante AfA (BWA 1240) je Jahr nach dem Basisjahr, etwa bis 2046 fortgeschrieben
     afa_plan: dict = field(default_factory=dict)
+    # Neukauf-Kostenstelle (Blatt hinter „KSt 9999“): kein Bestandsobjekt, sondern Planwerte
+    # für ein Neuobjekt; jahre = {Position: {Jahr: Wert}} ab dem Basisjahr, siehe NEUKAUF_POSITIONEN
+    neukauf: bool = False
+    jahre: dict = field(default_factory=dict)
 
 
 def _kopfjahr(wert) -> Optional[int]:
@@ -172,8 +180,16 @@ def _plan_werte(ws, zeilen: dict, nummern: tuple, basisjahr: int) -> dict:
     return plan
 
 
-def _formatfehler(ws, basisjahr: int) -> Optional[str]:
-    """Grund, warum das Blatt kein lesbares Kostenstellenblatt ist; None = Format passt."""
+def _ist_marke(ws) -> bool:
+    """Blatt der Kostenstelle „KSt 9999“: dahinter folgen die Neukauf-Kostenstellen."""
+    def norm(wert):
+        return " ".join(str(wert or "").split()).lower()
+    return NEUKAUF_MARKE.lower() in (norm(ws.title), norm(ws[ZELLE_ID].value))
+
+
+def _formatfehler(ws, basisjahr: int, neukauf: bool = False) -> Optional[str]:
+    """Grund, warum das Blatt kein lesbares Kostenstellenblatt ist; None = Format passt.
+    Neukauf-Kostenstellen brauchen keine Spalte des Basisjahrs."""
     kennung = ws.cell(row=KOPFZEILE, column=SPALTE_NR).value
     if not (isinstance(kennung, str) and kennung.strip().lower() == KENNUNG.lower()):
         return f"kein {KENNUNG!r} in Zeile {KOPFZEILE}, Spalte B"
@@ -184,7 +200,7 @@ def _formatfehler(ws, basisjahr: int) -> Optional[str]:
     if str(objekt_id).strip().lower() == SUMMENBLATT_ID or \
             (isinstance(name, str) and name.strip().lower() == SUMMENBLATT_NAME):
         return "Summenblatt aller Kostenstellen"
-    if _jahresspalte(ws, basisjahr) is None:
+    if _jahresspalte(ws, basisjahr) is None and not neukauf:
         return f"keine Spalte {basisjahr} in Zeile {KOPFZEILE}"
     return None
 
@@ -251,6 +267,8 @@ def lese_kostenstellen(pfad, basisjahr: int, stand: int = None) -> tuple:
     """Liest alle Kostenstellenblätter der Kanzlei-Excel.
 
     Blätter mit anderem Format (etwa Annahmen oder Übersichten) werden übersprungen.
+    Blätter hinter der Kostenstelle „KSt 9999“ sind Neukauf-Kostenstellen (neukauf=True):
+    Planwerte je Jahr für Neuobjekte, keine Bestandsobjekte.
     stand: Jahr der Aufschlüsselung der Abschreibungen (Wj-Ende), Standard Basisjahr − 1.
     Rückgabe: (je Kostenstellenblatt eine LaufendeWerte-Zeile,
     Liste (Blatttitel, Grund) der übersprungenen Blätter).
@@ -260,10 +278,13 @@ def lese_kostenstellen(pfad, basisjahr: int, stand: int = None) -> tuple:
     werte_wb = load_workbook(pfad, data_only=True)   # berechnete Werte
     formel_wb = load_workbook(pfad, data_only=False)  # nur für Fehlermeldungen
     ergebnis, gesehen, uebersprungen = [], {}, []
+    neukauf = False   # ab dem Blatt hinter „KSt 9999“
     for ws in werte_wb.worksheets:
-        grund = _formatfehler(ws, basisjahr)
+        grund = _formatfehler(ws, basisjahr, neukauf)
+        marke = _ist_marke(ws)
         if grund:
             uebersprungen.append((ws.title, grund))
+            neukauf = neukauf or marke
             continue
         objekt_id = str(ws[ZELLE_ID].value).strip()
         if objekt_id in gesehen:
@@ -277,8 +298,19 @@ def lese_kostenstellen(pfad, basisjahr: int, stand: int = None) -> tuple:
         wf = formel_wb[ws.title]
 
         def summe(nummern):
-            return _summe(ws, wf, zeilen, nummern, spalte)
+            return _summe(ws, wf, zeilen, nummern, spalte) if spalte else 0.0
 
+        if neukauf:
+            ergebnis.append(LaufendeWerte(
+                blatt=ws.title, objekt_id=objekt_id,
+                name=str(name).strip() if name is not None else None,
+                miete=summe(BWA_MIETE), weitere_einnahmen=summe(BWA_EINNAHMEN),
+                erhaltung=summe(BWA_ERHALTUNG), weitere_ausgaben=summe(BWA_AUSGABEN),
+                abschreibung=summe(BWA_ABSCHREIBUNG), neukauf=True,
+                jahre={pos: _plan_werte(ws, zeilen, nummern, basisjahr - 1)
+                       for pos, nummern in NEUKAUF_POSITIONEN.items()}))
+            continue
+        neukauf = marke
         ergebnis.append(LaufendeWerte(
             blatt=ws.title,
             objekt_id=objekt_id,
@@ -308,6 +340,8 @@ def zusammenfuehren(stammdaten: list, laufende: list) -> list:
     nach_id = {o.objekt_id: o for o in stammdaten}
     ergebnis = list(stammdaten)
     for lw in laufende:
+        if lw.neukauf:
+            continue
         felder = dict(miete=lw.miete, weitere_einnahmen=lw.weitere_einnahmen,
                       erhaltung=lw.erhaltung, weitere_ausgaben=lw.weitere_ausgaben,
                       afa_bwa=lw.abschreibung)   # 0 = keine AfA mehr

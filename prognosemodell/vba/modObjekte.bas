@@ -8,6 +8,9 @@ Option Explicit
 ' Leere Eingabezellen tragen Annahmeformeln (blau); die Vorlage obj_Vorlage stellt
 ' sie wieder her, wenn sie geloescht wurden.
 
+' Spalte Basisjahr der Kostenstellenblaetter (T, vorlagen.SPALTE_JAHR)
+Private Const SPALTE_BASISJAHR As Long = 20
+
 ' Position der ObjektID (1 = erste Objektzeile), 0 = nicht vorhanden
 Public Function ObjektPosition(ByVal objektId As String) As Long
     Dim ids As Range, i As Long
@@ -98,6 +101,69 @@ Public Function AnnahmenWiederherstellen(Optional ByVal pos As Long = 0) As Long
             End If
         Next j
     Next i
+End Function
+
+' Kostenstellenblatt fuehrt: Basiswerte, die im Blatt Objekte ueber die Verknuepfung
+' getippt wurden, ins Kostenstellenblatt (Spalte Basisjahr) schreiben und die
+' Verknuepfung wiederherstellen. Weitere Ausgaben: die Differenz geht auf 1260 Sonstige
+' Kosten. Geleerte Felder bekommen nur die Verknuepfung zurueck. Liefert die Anzahl Felder.
+Public Function InKostenstelleUebernehmen() As Long
+    Dim felder As Variant, f As Variant, eingabe As Range, verkn As Range, blaetter As Range
+    Dim i As Long, ziel As Range, neu As Double
+    felder = Array(Array("obj_MieteBasis", "obk_miete", 1020), _
+                   Array("obj_ErhBasis", "obk_erhaltung", 1250), _
+                   Array("obj_EinnBasis", "obk_weitere_einnahmen", 1090), _
+                   Array("obj_AusgBasis", "obk_weitere_ausgaben", 1260), _
+                   Array("obj_AfABWA", "obk_afa_bwa", 1240))
+    Set blaetter = Bereich("obj_KStBlatt")
+    For Each f In felder
+        Set eingabe = Bereich(f(0))
+        Set verkn = Bereich(f(1))
+        For i = 1 To eingabe.Rows.Count
+            If verkn.Cells(i, 1).HasFormula And Not eingabe.Cells(i, 1).HasFormula _
+                    And CStr(blaetter.Cells(i, 1).Value) <> "" Then
+                If CStr(eingabe.Cells(i, 1).Value) <> "" Then
+                    Set ziel = BasisjahrZelle(CStr(blaetter.Cells(i, 1).Value), CLng(f(2)))
+                    neu = CDbl(eingabe.Cells(i, 1).Value)
+                    ' Differenz, damit bei weiteren Ausgaben die Kostenarten bleiben
+                    ziel.Value = Zahl(ziel.Value) + neu - Zahl(verkn.Cells(i, 1).Value)
+                End If
+                eingabe.Cells(i, 1).Formula = verkn.Cells(i, 1).Formula
+                InKostenstelleUebernehmen = InKostenstelleUebernehmen + 1
+            End If
+        Next i
+    Next f
+    Application.Calculate
+End Function
+
+Public Sub InKostenstelleUebernehmenStarten()
+    Dim n As Long
+    On Error GoTo Fehler
+    n = InKostenstelleUebernehmen()
+    MsgBox n & Txt(" Werte aus dem Blatt Objekte in die Kostenstellenbl{ae}tter " & _
+        "{ue}bernommen, Verkn{ue}pfungen wiederhergestellt."), vbInformation, "Prognosemodell"
+    Exit Sub
+Fehler:
+    MsgBox Err.Description, vbExclamation, "Prognosemodell"
+End Sub
+
+' Zelle der BWA-Nr. nr in der Spalte Basisjahr eines Kostenstellenblatts
+Private Function BasisjahrZelle(ByVal blatt As String, ByVal nr As Long) As Range
+    Dim ws As Worksheet, z As Long
+    Set ws = ThisWorkbook.Worksheets(blatt)
+    For z = 1 To 200
+        If IsNumeric(ws.Cells(z, 2).Value) And CStr(ws.Cells(z, 2).Value) <> "" Then
+            If CLng(ws.Cells(z, 2).Value) = nr Then
+                Set BasisjahrZelle = ws.Cells(z, SPALTE_BASISJAHR)
+                Exit Function
+            End If
+        End If
+    Next z
+    Err.Raise vbObjectError + 517, "modObjekte", "BWA-Nr. " & nr & " fehlt im Blatt " & blatt
+End Function
+
+Private Function Zahl(ByVal wert As Variant) As Double
+    If IsNumeric(wert) And CStr(wert) <> "" Then Zahl = CDbl(wert)
 End Function
 
 Public Sub AnnahmenWiederherstellenStarten()

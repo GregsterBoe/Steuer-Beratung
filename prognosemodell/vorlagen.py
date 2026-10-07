@@ -30,7 +30,7 @@ BWA_ZEILEN = [
     (1052, ""), (1070, ""), (1080, "Rohertrag"), (1081, ""), (1090, "So. betr. Erlöse"),
     (1091, ""), (1092, "Betriebl. Rohertrag"), (1093, ""), (1094, "Kostenarten:"),
     (1100, "Personalkosten"), (1120, "Raumkosten"), (1140, "Betriebl. Steuern"),
-    (1150, "Versich./Beiträge"), (1180, "Kfz-Kosten (o. St.)"),
+    (1150, "Versich./Beiträge"), (1160, "Besondere Kosten"), (1180, "Kfz-Kosten (o. St.)"),
     (1200, "Werbe-/Reisekosten"), (1220, "Kosten Warenabgabe"), (1240, "Abschreibungen"),
     (1250, "Reparatur/Instandh."), (1260, "Sonstige Kosten"), (1280, "Gesamtkosten"),
     (1290, ""), (1300, "Betriebsergebnis"), (1301, ""), (1310, "Zinsaufwand"),
@@ -41,7 +41,7 @@ BWA_ZEILEN = [
     (1353, "Außerordentliches Ergebnis"), (1354, ""), (1355, "Steuern Eink.u.Ertr"),
     (1360, ""), (1380, "Vorläufiges Ergebnis"),
 ]
-KOSTENARTEN = (1100, 1120, 1140, 1150, 1180, 1200, 1220, 1240, 1250, 1260)
+KOSTENARTEN = (1100, 1120, 1140, 1150, 1160, 1180, 1200, 1220, 1240, 1250, 1260)
 
 # Layout, wie es einlesen.py erwartet (B2/C2 Kopf, Zeile 4 Spaltenköpfe, ab Zeile 6 BWA)
 ERSTE_ZEILE = 6
@@ -59,6 +59,8 @@ BEISPIELE = [
                                  1310: 9_000, 1322: 300}),
 ]
 VORJAHRESFAKTOR = (0.96, 0.98)  # Basisjahr − 2, − 1
+# Blätter hinter der Kostenstelle „KSt 9999“ sind Neukauf-Kostenstellen (einlesen.py)
+NEUKAUF_MARKE = "KSt 9999"
 # Aufschlüsselung der Abschreibungen je Kostenstelle, Stand Ende Basisjahr − 1:
 # (Beschriftung Buchwert, Beschriftung AfA, Buchwert, Jahres-AfA); wie im Muster der
 # Kanzlei dürfen die Beschriftungen abweichen („Wohnbau 7“ zu „Wohnbau“)
@@ -173,9 +175,12 @@ def kostenstellenblatt(ws, kst: str, name: str, werte: dict, basisjahr: int,
             ws.cell(row=zeilen[nr], column=SPALTE_PLAN + jahr - basisjahr - 1, value=wert)
 
 
-def erstelle_vorlage(beispiele=BEISPIELE, basisjahr: int = None, plan: dict = None) -> Workbook:
+def erstelle_vorlage(beispiele=BEISPIELE, basisjahr: int = None, plan: dict = None,
+                     neukauf=()) -> Workbook:
     """Kanzlei-Excel mit Summenblatt und je Kostenstelle einem Blatt;
-    plan: {KSt: {BWA-Nr.: {Jahr: Wert}}} für schon gefüllte Planspalten."""
+    plan: {KSt: {BWA-Nr.: {Jahr: Wert}}} für schon gefüllte Planspalten.
+    neukauf: weitere Beispiele (KSt, Name, Werte Basisjahr) hinter einem Blatt „KSt 9999“,
+    also Neukauf-Kostenstellen; ihre Planwerte ebenfalls über plan."""
     if basisjahr is None:
         basisjahr = next(p.wert for p in PARAMETER if p.name == "par_Basisjahr")
     wb = Workbook()
@@ -189,6 +194,12 @@ def erstelle_vorlage(beispiele=BEISPIELE, basisjahr: int = None, plan: dict = No
     for kst, name, werte in beispiele:
         kostenstellenblatt(wb.create_sheet(kst), kst, name, werte, basisjahr,
                            gruppen=AUFSCHLUESSELUNG.get(kst), plan=(plan or {}).get(kst))
+    if neukauf:
+        kostenstellenblatt(wb.create_sheet(NEUKAUF_MARKE), NEUKAUF_MARKE, "Verwaltung", {},
+                           basisjahr)
+    for kst, name, werte in neukauf:
+        kostenstellenblatt(wb.create_sheet(kst), kst, name, werte, basisjahr,
+                           plan=(plan or {}).get(kst))
     return wb
 
 
