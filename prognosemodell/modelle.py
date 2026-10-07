@@ -205,7 +205,9 @@ OBJEKT_FELDER = [
     # Erhaltung nach Alter; die Großmaßnahme zählt als sofort abziehbarer Erhaltungsaufwand
     Feld("baujahr", "Baujahr", "obj_Baujahr", FMT_JAHR, False, 10, minimum=1800, maximum=2100,
          ganzzahl=True, annahme=True,
-         hinweis="leer: Basisjahr − Gebäudealter (Parameter); steuert Alterung und Großmaßnahme"),
+         hinweis="leer: frühestes AHK-Datum der Gebäude im Blatt Anlagen (orange: stimmt nur "
+                 "bei Neubau, bei gekauftem Bestandsgebäude echtes Baujahr eintippen), sonst "
+                 "Basisjahr − Gebäudealter (Parameter); steuert Alterung und Großmaßnahme"),
     Feld("san_jahr", "Großmaßnahme Jahr", "obj_SanJahr", FMT_JAHR, False, 11, minimum=0,
          maximum=2100, ganzzahl=True, annahme=True,
          hinweis="0 = keine; leer: Baujahr + Alter für Großmaßnahme (Parameter), "
@@ -296,6 +298,9 @@ OBJEKT_ANLAGEN_SPALTEN = [
     Spalte("anl_ak", "davon mit AHK", "obj_AnlAK", FMT_ZAHL, 9),
     Spalte("anl_gub", "Anlagen G+B", "obj_AnlGuB", FMT_ZAHL, 9),
     Spalte("anl_kauf", "Anlagen mit Zugangsjahr", "obj_AnlKauf", FMT_ZAHL, 10),
+    Spalte("anl_bau", "Baujahr lt. Anlagen (frühester Gebäudezugang)", "obj_AnlBau", FMT_JAHR,
+           12),
+    Spalte("anl_bau_offen", "Baujahr aus Anlagen ungeprüft", "obj_AnlBauOffen", FMT_ZAHL, 10),
     Spalte("anl_afa", "AfA Basisjahr lt. Anlagen", "obj_AnlAfA", FMT_EURO, 14),
     Spalte("anl_diff", "Abweichung zur AfA lt. Buchhaltung", "obj_AnlDiff", FMT_EURO, 14),
 ]
@@ -693,6 +698,10 @@ PRUEFUNGEN = [
     Pruefung("anlagen_bez", "Anlagen ohne KOST1, die beim Einlesen über die Bezeichnung einem "
              "Objekt zugeordnet wurden (ungeprüft) oder zu mehreren Objekten passen",
              HINWEIS, "Blatt Anlagen, Spalten ObjektID und Zuordnung (orange)"),
+    Pruefung("baujahr", "Objekte, deren Baujahr aus dem frühesten AHK-Datum der Gebäude stammt "
+             "(orange): stimmt nur bei Neubau. Bei gekauftem Bestandsgebäude das echte "
+             "Baujahr eintragen, sonst das Jahr zur Bestätigung eintippen", WARNUNG,
+             "Blatt Objekte, Spalte Baujahr"),
     Pruefung("anlagen_afa", "Objekte, deren AfA im Basisjahr lt. Blatt Anlagen von der AfA lt. "
              "Buchhaltung (BWA 1240) um mehr als 1 € abweicht: Zuordnung der Anlagen prüfen",
              HINWEIS, "Blatt Objekte, Spalten AfA Basisjahr lt. Anlagen und lt. Buchhaltung"),
