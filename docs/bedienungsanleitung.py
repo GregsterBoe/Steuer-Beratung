@@ -77,6 +77,7 @@ def tabelle(kopf, zeilen, breiten, farben=None):
             zeile.cells[i].width = Cm(b)
             for p in zeile.cells[i].paragraphs:
                 p.paragraph_format.space_after = Pt(1)
+                p.paragraph_format.keep_with_next = True   # Tabelle nicht trennen
                 for r in p.runs:
                     r.font.size = Pt(9.5)
     doc.add_paragraph().paragraph_format.space_after = Pt(0)
@@ -91,15 +92,14 @@ absatz("**Kurzanleitung für die Steuerberatung:** 20-Jahres-Prognose für Immob
 # ---------------------------------------------------------------- 1
 doc.add_heading("1. Ablauf in fünf Schritten", level=1)
 punkte([
-    "**Daten bereitstellen:** Kostenstellen-Datei (DATEV-BWA, ein Blatt je Kostenstelle, in "
-    "Excel gespeichert) und, falls vorhanden, das Anlagenverzeichnis (DATEV „Inventarübersicht“). "
-    "Die Mappe wird daraus erzeugt; das übernimmt die technische Betreuung.",
-    "**Blatt Start öffnen:** Handlungsempfehlung, Belastbarkeit der Daten und Farblegende prüfen.",
+    "**Blatt Start öffnen:** Handlungsempfehlung, Belastbarkeit der Daten und Farblegende ansehen.",
+    "**Kostenstellen prüfen:** Werte des Basisjahrs in den Kostenstellenblättern kontrollieren "
+    "und dort korrigieren.",
     "**Annahmen prüfen:** Blatt Parameter (Steuersatz, Steigerungen, Alternativrendite) und "
     "blaue Zellen im Blatt Objekte. Wo bessere Werte bekannt sind, eintippen.",
     "**Planung erfassen:** geplante Verkäufe im Blatt Verkäufe, Käufe im Blatt Neuobjekte.",
-    "**Ergebnis lesen:** Start, Übersicht und Vergleich; zuvor im Blatt Prüfung sicherstellen, "
-    "dass keine Fehler offen sind.",
+    "**Prüfen und lesen:** „Plausibilität prüfen“ drücken, Fehler beheben, dann Start, "
+    "Übersicht und Vergleich lesen.",
 ], "List Number")
 
 # ---------------------------------------------------------------- 2
@@ -107,17 +107,16 @@ doc.add_heading("2. Die wichtigsten Blätter", level=1)
 tabelle(["Blatt", "Wofür"], [
     ["**Start**", "Empfehlung (Option mit dem höchsten Endvermögen nach latenter Steuer), "
                   "Vorsprung gegenüber Halten, tiefster Liquiditätsstand, Anleitung mit Links"],
-    ["**Parameter**", "Alle Sätze und Annahmen zentral; Schaltflächen der Makros"],
+    ["**Parameter**", "Alle Sätze und Annahmen zentral; Schaltflächen (Abschnitt 7)"],
     ["**Objekte**", "Ein Bestandsobjekt je Zeile: Miete, Kosten, AK, Kaufjahr, Verkehrswert, Status"],
     ["**Verkäufe**", "ObjektID, Jahr, Preis, Kosten, Anteil G+B lt. Kaufvertrag, § 6b ja/nein, "
                      "„reinvestieren = ja“ legt ein Neuobjekt aus Annahmen an"],
     ["**Neuobjekte**", "Kaufjahr, Kaufpreis, Anteil G+B, AfA-Satz und -Methode, Quelle-Rücklage, "
                        "optional „Kostenstelle Neukauf“"],
     ["**Anlagen**", "Anlagenverzeichnis: AK, Buchwert und AfA je Anlage und Jahr"],
-    ["**Übersicht / Vergleich**", "Wert der Immobilien und Gesamtvermögen je Jahr; Szenarien "
-                                  "nebeneinander mit Differenzen"],
+    ["**Übersicht / Vergleich**", "Ergebnis je Jahr und Szenarien nebeneinander (Abschnitt 5)"],
     ["**Prüfung**", "Alle Plausibilitätsprüfungen als Fehler, Warnung oder Hinweis"],
-    ["**Alle Objekte, KSt-Blätter**", "Ist und Plan im DATEV-BWA-Format je Kostenstelle und "
+    ["**Alle Objekte, KSt-Blätter**", "Ist und Plan im BWA-Format je Kostenstelle und "
                                       "als Summe; Verkauf und Kauf als eigenes Blatt"],
 ], [4.2, 12.4])
 
@@ -154,57 +153,55 @@ absatz("Alle Kostenstellen hinter „KSt 9999“ gelten als geplante Käufe. Sie
        "Blatt (Basisjahr und Planjahre gelb), zählen aber nicht zu „Alle Objekte“. Trägt man die "
        "Kostenstelle im Blatt Neuobjekte unter „Kostenstelle Neukauf“ ein, übernimmt die Prognose "
        "ab dem Jahr nach dem Kauf Miete, Einnahmen, Erhaltung und Ausgaben aus diesem Blatt; "
-       "Jahre ohne Wert werden mit der Steigerung fortgeschrieben. Die AfA rechnet weiter das "
-       "Modell aus Kaufpreis, Anteil G+B, AfA-Satz und § 6b-Übertragung.")
+       "Jahre ohne Wert werden mit der Steigerung fortgeschrieben. Kaufpreis, Anteil G+B und "
+       "AfA-Satz bleiben Eingaben im Blatt Neuobjekte.")
 
 # ---------------------------------------------------------------- 5
-doc.add_heading("5. Steuerliche Logik in Kürze", level=1)
+doc.add_heading("5. Ergebnis lesen", level=1)
 punkte([
-    "**Verkauf** zum Jahresende; Miete und AfA laufen im Verkaufsjahr noch. Der Erlös wird nach "
-    "Kaufvertrag, sonst nach Verkehrswertanteil auf Gebäude und G+B aufgeteilt.",
-    "**§ 6b-Rücklage** aus den positiven Teilgewinnen, getrennt nach Gebäude und G+B. Frist vier "
-    "Jahre, mit begonnenem Neubau sechs. Nicht übertragene Rücklage wird im Fristjahr aufgelöst, "
-    "mit 6 % Zuschlag je Jahr.",
-    "**Übertragung** in fester Reihenfolge: Gebäudegewinn auf Gebäude, G+B-Gewinn auf G+B, Rest "
-    "auf das Gebäude. Die AfA des Neuobjekts läuft von der geminderten Basis.",
-    "**Steuer** = (laufendes Ergebnis + steuerwirksamer Rücklagenbetrag) × Grenzsteuersatz; "
-    "Verluste werden vorgetragen. Freie Liquidität wird mit der Alternativrendite verzinst.",
-    "**Erhaltung** steigt ab 30 Jahren Gebäudealter zusätzlich; ab 50 Jahren fällt eine "
-    "Großmaßnahme an (Standard 15 % des Gebäudewerts). Neuobjekte tragen anfangs die Hälfte.",
+    "**Start:** empfohlene Option mit dem höchsten Endvermögen nach latenter Steuer, Vorsprung "
+    "gegenüber Halten und tiefster Liquiditätsstand.",
+    "**Übersicht:** Wert der Immobilien und Gesamtvermögen je Jahr, als Tabelle und Diagramm, "
+    "mit und ohne die geplanten Verkäufe.",
+    "**Vergleich:** Kennzahlen der Szenarien am Ende des Prognosezeitraums nebeneinander.",
+    "**Varianten:** mit „Variante festhalten“ gesicherte Stände, etwa verschiedene Verkaufsjahre.",
 ])
-
-doc.add_heading("Szenarien", level=2)
 tabelle(["Szenario", "Inhalt"], [
     ["A Plan", "§ 6b-Kette wie erfasst"],
-    ["B", "Gewinn sofort versteuert, kein Neukauf aus der Rücklage, Geld in der Alternativanlage"],
-    ["C", "sofort versteuert, Neuobjekte trotzdem gekauft, volle AfA-Basis"],
+    ["B", "Gewinn sofort versteuert, kein Neukauf aus der Rücklage, Geld angelegt"],
+    ["C", "sofort versteuert, Neuobjekte trotzdem gekauft"],
     ["Baseline", "alles halten"],
 ], [3.0, 13.6])
-absatz("A − C zeigt die reine Wirkung von § 6b: der Zins auf die gestundete Steuer.")
 
 # ---------------------------------------------------------------- 6
-doc.add_heading("6. Prüfung und Schaltflächen", level=1)
+doc.add_heading("6. Prüfung", level=1)
 punkte([
-    "**Fehler:** Status ungleich OK (Objekte, Verkäufe, Neuobjekte), Fristverstoß, Steuerwelt "
-    "nicht GmbH. Vor jeder Auswertung beheben.",
+    "**Fehler:** Status ungleich OK in Objekten, Verkäufen oder Neuobjekten, Fristverstoß. "
+    "Vor jeder Auswertung beheben.",
     "**Warnung:** Vorbesitzzeit für § 6b zu kurz, Rücklage nicht voll übertragen, Drei-Objekt-"
     "Grenze, Abweichung vom Kostenstellenblatt, unbekannte Neukauf-Kostenstelle.",
     "**Hinweis:** Frist nach Prognoseende, negative Liquidität, fehlender Verkehrswert, Anlagen "
     "ohne Objekt.",
 ])
-absatz("In der Makro-Fassung (.xlsm) stehen auf dem Parameterblatt: Plausibilität prüfen, Neu "
-       "berechnen, Variante festhalten (Kennzahlen als feste Werte im Blatt Varianten, etwa für "
-       "verschiedene Verkaufsjahre), Objekt anlegen, duplizieren, entfernen, Annahmen "
-       "wiederherstellen, Objekte -> Kostenstellen, leere Prognoseblöcke aus-/einblenden. "
-       "Makros rechnen nichts; alle Ergebnisse stehen in den Zellformeln.")
 
 # ---------------------------------------------------------------- 7
-doc.add_heading("7. Praxistipps", level=1)
+doc.add_heading("7. Schaltflächen (Blatt Parameter)", level=1)
+tabelle(["Schaltfläche", "Wirkung"], [
+    ["Plausibilität prüfen", "zeigt alle Fehler, Warnungen und Hinweise"],
+    ["Neu berechnen", "rechnet die Mappe vollständig neu"],
+    ["Variante festhalten", "speichert die Kennzahlen des Vergleichs im Blatt Varianten"],
+    ["Objekt anlegen / duplizieren / entfernen", "pflegt die Zeilen im Blatt Objekte"],
+    ["Annahmen wiederherstellen", "setzt geleerte Felder wieder auf die Annahme"],
+    ["Objekte -> Kostenstellen", "überträgt überschriebene Werte ins Kostenstellenblatt"],
+    ["Leere Prognoseblöcke aus-/einblenden", "blendet ungenutzte Zeilen der Prognose aus"],
+], [6.2, 10.4])
+
+# ---------------------------------------------------------------- 8
+doc.add_heading("8. Praxistipps", level=1)
 punkte([
     "Bei verkauften Objekten AK, Kaufjahr und Anteil G+B belegen; orange Zellen bestimmen den "
     "Gewinn direkt.",
-    "Der **Schnellcheck** (schlanke Mappe) genügt für eine erste Einschätzung: ObjektID und Miete "
-    "je Objekt plus ein geplanter Verkauf.",
+    "Graue Formelzellen nicht überschreiben; Änderungen immer in gelben oder blauen Zellen.",
     "Zinsen und Tilgung sind noch nicht enthalten (Betrachtung vor Finanzierung).",
     "**Alle Steuersätze, Fristen und Annahmen vor dem Echteinsatz durch den zuständigen "
     "Berufsträger prüfen.**",
