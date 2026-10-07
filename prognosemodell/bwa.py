@@ -354,7 +354,7 @@ def _blatt_objekt(wb, titel: str, objekt_id: str, name, ist, basisjahr: int,
     """kst: Ist-Werte aus der Kostenstellen-Datei; dann ist die Spalte Basisjahr Eingabe
     (gelb) und führt, sonst kommt sie aus dem Blatt Objekte (hellblau)."""
     ws = wb.create_sheet(titel)
-    z = bwa_kopf(ws, objekt_id, name or "", basisjahr, planjahre)
+    z = bwa_kopf(ws, objekt_id, name or "", basisjahr, planjahre, monate_einklappen=True)
     _jahreszeile(ws, planjahre)
     for nr, werte in (ist or {}).items():
         if nr in z:
@@ -396,7 +396,7 @@ def _blatt_neukauf_kst(wb, titel: str, lw, basisjahr: int, planjahre: int):
     """Neukauf-Kostenstelle (hinter „KSt 9999“) als eigenes Blatt: Datenbasis der Neuobjekte,
     die auf sie verweisen. Basisjahr und Planjahre sind Eingabe (gelb), Summen als Formel."""
     ws = wb.create_sheet(titel)
-    z = bwa_kopf(ws, lw.objekt_id, lw.name or "", basisjahr, planjahre)
+    z = bwa_kopf(ws, lw.objekt_id, lw.name or "", basisjahr, planjahre, monate_einklappen=True)
     _jahreszeile(ws, planjahre)
     for nr, werte in lw.ist.items():
         if nr in z:
@@ -509,7 +509,7 @@ def blaetter_bwa(wb, modell: Modell) -> list:
         verknuepfe_neukauf(wb, block, t)
         neukauf.append(t)
 
-    z = bwa_kopf(summe, "KSt", SUMMENBLATT, basisjahr, planjahre)
+    z = bwa_kopf(summe, "KSt", SUMMENBLATT, basisjahr, planjahre, monate_einklappen=True)
     _jahreszeile(summe, planjahre)
     bestand = [t for t, e in zip(titel, eintraege) if not e[4]]
     # Ist-Werte und Basisjahr: Summe der Kostenstellenblätter

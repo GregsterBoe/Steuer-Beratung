@@ -90,10 +90,13 @@ def _summen(werte: dict) -> dict:
     return w
 
 
-def bwa_kopf(ws, kst: str, name: str, basisjahr: int, planjahre: int = 20) -> dict:
+def bwa_kopf(ws, kst: str, name: str, basisjahr: int, planjahre: int = 20,
+             monate_einklappen: bool = False) -> dict:
     """Kopf und Zeilenbeschriftung eines BWA-Blatts; liefert BWA-Nr. -> Blattzeile.
 
-    Gemeinsam für die Vorlage und die BWA-Ausgabe der Mappe (bwa.py).
+    Gemeinsam für die Vorlage und die BWA-Ausgabe der Mappe (bwa.py). Mit
+    monate_einklappen sind die Monatsspalten gruppiert und zugeklappt (Schalter
+    über der Jahresspalte); in der Vorlage bleiben sie zum Erfassen offen.
     """
     ws["B2"], ws["C2"] = kst, name
     ws["B2"].font = ws["C2"].font = Font(bold=True)
@@ -124,6 +127,10 @@ def bwa_kopf(ws, kst: str, name: str, basisjahr: int, planjahre: int = 20) -> di
             ws.cell(row=zeile, column=spalte).number_format = FMT_BWA
         ws.column_dimensions[get_column_letter(spalte)].width = 12
     ws.column_dimensions["C"].width = 26
+    if monate_einklappen:
+        ws.column_dimensions.group(get_column_letter(SPALTE_MONATE),
+                                   get_column_letter(SPALTE_MONATE + 11), hidden=True)
+        ws.sheet_properties.outlinePr.summaryRight = True
     ws.freeze_panes = "D5"
     return zeilen
 

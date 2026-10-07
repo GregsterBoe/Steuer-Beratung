@@ -38,6 +38,7 @@ TOLERANZ = 0.01  # ein Cent
 OHNE_ALTERUNG = {"par_ErhAlterung": 0, "par_NeuErhAnlaufFaktor": 1, "par_SanQuote": 0}
 FEHLT = object()        # Makro ohne Rückgabewert: nur prüfen, dass es fehlerfrei läuft
 AUSGEBLENDET = "Zeile ausgeblendet"  # statt Bereichsname: Zeilennummer im Blatt Prognose
+EINGEKLAPPT = "Spalte eingeklappt:"  # + Blattname; statt Zeile: Spaltennummer, Soll (Ebene, aus)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -905,6 +906,11 @@ def faelle():
             ("bwa_1310", lj(2028), 0),
             ("BWA:OBJ-001:1020", 2026, 60_000),
             ("BWA:OBJ-001:1280", 2026, 8_000),
+            # Monatsspalten H–S gruppiert und eingeklappt, Jahres- und Planspalten offen
+            *[(f"{EINGEKLAPPT}{blatt}", spalte, soll)
+              for blatt in ("OBJ-001", "NEU-001", "Alle Objekte")
+              for spalte, soll in ((7, (0, False)), (8, (1, True)), (19, (1, True)),
+                                   (20, (0, False)), (21, (0, False)))],
             ("BWA:OBJ-001:1020", 2027, 61_200),
             ("BWA:OBJ-001:1240", 2027, 16_000),
             ("BWA:OBJ-001:1323", 2027, 720_000),
@@ -1523,12 +1529,22 @@ def faelle():
     ]
 
 
+def eingeklappt(ws, spalte: int) -> tuple:
+    """Gliederungsebene und Ausblendung einer Spalte (Spaltenbereiche mit min/max beachten)."""
+    for dim in ws.column_dimensions.values():
+        if dim.min and dim.max and dim.min <= spalte <= dim.max:
+            return dim.outline_level, bool(dim.hidden)
+    return 0, False
+
+
 def pruefe(fall: str, wb, pruefungen) -> int:
     """Sollwerte eines Falls prüfen, Ergebnis ausgeben, Anzahl Abweichungen zurückgeben."""
     fehler = 0
     for name, zeile, soll in pruefungen:
         if name == AUSGEBLENDET:             # Zeile im Blatt Prognose ausgeblendet?
             ist = bool(wb["Prognose"].row_dimensions[zeile].hidden)
+        elif name.startswith(EINGEKLAPPT):
+            ist = eingeklappt(wb[name[len(EINGEKLAPPT):]], zeile)
         else:
             ist = wert(wb, name, zeile)
         if ist == "":

@@ -1270,3 +1270,9 @@ Im Blatt Neuobjekte nennt die neue Spalte „Kostenstelle Neukauf“ (ne\_KSt) d
 - `pruefen`, Makrofall „Objekte: Makro überträgt …“: Miete und weitere Ausgaben (Differenz auf 1260) im Kostenstellenblatt, Verknüpfung wiederhergestellt.
 - `pruefen`, Fall „Neuobjekte: Prognose aus der Neukauf-Kostenstelle“: eigenes Blatt KSt 31, Planjahre, Fortschreibung, nicht in „Alle Objekte“, Rückfall auf die Mietrendite bei unbekannter Kostenstelle.
 - `pruefen`, Fall „Neuobjekte: Änderung im Blatt der Neukauf-Kostenstelle“: getippter Planwert im Blatt KSt 31 geht in die Prognose des Neuobjekts.
+
+## 24. Monatsspalten eingeklappt
+
+In allen BWA-Blättern der Mappe (Kostenstellen, Neuobjekte, Neukauf-Kostenstellen, „Alle Objekte“) sind die zwölf Monatsspalten des Basisjahrs (H–S) als Gliederung gruppiert und beim Öffnen eingeklappt. Sichtbar bleiben Vorjahre, Basisjahr und Planjahre; der Schalter „+“ sitzt über der Jahresspalte T. Die Vorlage der Kostenstellen-Datei lässt die Monate offen, weil dort erfasst wird (`bwa_kopf(..., monate_einklappen=False)`).
+
+- `pruefen`, Fall „BWA: Abnahmefall Verkauf und Reinvestition“: Spalten H und S Ebene 1 und ausgeblendet, G, T und U offen, je für OBJ-001, NEU-001 und „Alle Objekte“ (nach dem Speichern durch LibreOffice).
