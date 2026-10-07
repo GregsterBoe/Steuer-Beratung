@@ -8,6 +8,7 @@ from openpyxl.utils import get_column_letter
 
 from .modelle import (AFA_DEGRESSIV, ANL_NICHT_IM_MODELL, ANLAGE_FELDER, ANLAGE_SPALTEN,
                       ARTEN_ABNUTZBAR, ART_GEBAEUDE, ART_GUB, GRUPPE_ABNUTZBAR, METHODE_KEINE,
+                      KST_VERKNUEPFT, OBJEKT_EINGELESEN,
                       ANL_OBJEKT_FEHLT, ANL_OHNE_OBJEKT, OBJEKT_ANLAGEN_SPALTEN,
                       OBJEKT_ERSTE_ANLAGEN_SPALTE,
                       FEHLER, NEU_FELDER, STATUS_ANNAHME_GELOESCHT, NEU_SPALTEN, OBJEKT_FELDER, PROGNOSE_SPALTEN,
@@ -31,6 +32,31 @@ def hspalte(key: str) -> str:
         if s.key == key:
             return get_column_letter(len(OBJEKT_FELDER) + 1 + OBJEKT_ERSTE_ANLAGEN_SPALTE + i)
     raise KeyError(key)
+
+
+# Status, Annahmen, kritische Annahmen, dann die Anlagen-Hilfsspalten
+OBJEKT_HILFSSPALTEN = OBJEKT_ERSTE_ANLAGEN_SPALTE + len(OBJEKT_ANLAGEN_SPALTEN)
+
+
+def ispalte(key: str) -> str:
+    """Ausgeblendete Spalte im Blatt Objekte mit dem eingelesenen Wert des Felds (nach Status,
+    Annahmen und Anlagen-Hilfsspalten); bei verknüpften Feldern die Formel aufs BWA-Blatt."""
+    eingelesen = [f.key for f in OBJEKT_FELDER if f.key in OBJEKT_EINGELESEN]
+    start = len(OBJEKT_FELDER) + 1 + OBJEKT_HILFSSPALTEN + 1
+    return get_column_letter(start + eingelesen.index(key))
+
+
+def kst_blatt_spalte() -> str:
+    """Ausgeblendete Spalte im Blatt Objekte mit dem Namen des Kostenstellenblatts."""
+    return get_column_letter(len(OBJEKT_FELDER) + 1 + OBJEKT_HILFSSPALTEN + 1
+                             + len(OBJEKT_EINGELESEN))
+
+
+def aus_kostenstelle(key: str, zeile: int):
+    """Bedingung: Feld ist mit dem Kostenstellenblatt verknüpft; None = nie."""
+    if key not in KST_VERKNUEPFT:
+        return None
+    return f'${ispalte(key)}{zeile}<>""'
 
 
 ISFORMEL = "_xlfn.ISFORMULA"   # Excel 2013+, in der Datei mit Präfix
@@ -188,7 +214,8 @@ def annahmen_objekt(zeile: int, nur_kritisch: bool = False) -> str:
               if f.annahme and not f.abgeleitet and (f.kritisch or not nur_kritisch)]
     def zaehlt(f):
         formel = f"{ISFORMEL}(${spalte(f.key)}{zeile})"
-        deckung = deckung_anlagen(f.key, zeile)
+        # aus dem Blatt Anlagen oder dem Kostenstellenblatt: keine Annahme
+        deckung = deckung_anlagen(f.key, zeile) or aus_kostenstelle(f.key, zeile)
         return f"{formel}*NOT({deckung})" if deckung else formel
 
     summe = "+".join(zaehlt(f) for f in felder)
@@ -435,20 +462,28 @@ def prognose_zeile_neu(zeile: int, neu_nr: int, erstes_jahr: bool) -> dict:
     afa_plan, buchwert_plan = afa(ne("ne_AfABasis"), "buchwert", "afa")
     afa_ohne, buchwert_ohne = afa(ne("ne_AKGebNeu"), "buchwert_ohne6b", "afa_ohne6b")
 
-    def ab_kauf(basis, satz):
-        return _leer_oder(zeile, f"IF({aktiv},{basis}*(1+{satz})^({t}-{kj}),0)")
+    def kst(pos):
+        """Jahreswert der Neukauf-Kostenstelle (Blatt Neukauf-KSt, fortgeschrieben); "" ohne."""
+        return (f'IFERROR(INDEX(nk_Fort,MATCH({ne("ne_KSt")}&"|{pos}",nk_Schluessel,0),'
+                f'{t}-par_Basisjahr+1),"")')
+
+    def ab_kauf(basis, satz, pos):
+        """Wert der Neukauf-Kostenstelle, sonst basis ab dem Kauf mit der Steigerung."""
+        return _leer_oder(zeile, f"IF({aktiv},IF(ISNUMBER({kst(pos)}),{kst(pos)},"
+                                 f"{basis}*(1+{satz})^({t}-{kj})),0)")
 
     return {
         "id": f'=IF({ne("ne_ID")}="","",{ne("ne_ID")})',
         "jahr": "=par_Startjahr" if erstes_jahr else f"={_p('jahr', zeile - 1)}+1",
         "aktiv": _leer_oder(zeile, f"IF({gueltig},IF({t}>{kj},1,0),0)"),
-        "miete": ab_kauf(f'{ne("ne_Kaufpreis")}*{ne("ne_Mietrendite")}', "par_Mietsteig"),
-        "einnahmen": _leer_oder(zeile, "0"),
+        "miete": ab_kauf(f'{ne("ne_Kaufpreis")}*{ne("ne_Mietrendite")}', "par_Mietsteig",
+                         "miete"),
+        "einnahmen": _leer_oder(zeile, f"IF({aktiv},N({kst('einnahmen')}),0)"),
         # in den Anlaufjahren nach dem Kauf gemindert (Neubau oder frisch saniert)
         "erhaltung": ab_kauf(f'{ne("ne_Kaufpreis")}*{ne("ne_ErhQuote")}'
                              f'*IF({t}-{kj}<=par_NeuErhAnlaufJahre,par_NeuErhAnlaufFaktor,1)',
-                             "par_Erhaltsteig"),
-        "ausgaben": _leer_oder(zeile, "0"),
+                             "par_Erhaltsteig", "erhaltung"),
+        "ausgaben": _leer_oder(zeile, f"IF({aktiv},N({kst('ausgaben')}),0)"),
         "afa": afa_plan,
         "buchwert": buchwert_plan,
         "ergebnis": _leer_oder(
@@ -901,6 +936,11 @@ def vergleich_zeile(praefix_art: str, name: str, art: str, sz: Szenario) -> str:
 # Verkäufe und Rücklagen haben dieselben Zeilen, rl_* und vk_* lassen sich kombinieren.
 
 
+def _feldname(key: str) -> str:
+    """Benannter Bereich eines Objektfelds."""
+    return next(f.name for f in OBJEKT_FELDER if f.key == key)
+
+
 def _nicht_ok(status: str, ausnahme: str = None) -> str:
     weitere = f'*({status}<>"{ausnahme}")' if ausnahme else ""
     return f'=SUMPRODUCT(({status}<>"")*({status}<>"{STATUS_OK}"){weitere})'
@@ -935,6 +975,10 @@ def pruefung_anzahl() -> dict:
         "anlagen_bez": (f'=COUNTIF(anl_Zuordnung,"{ZUORDNUNG_BEZEICHNUNG}*")'
                         f'+COUNTIF(anl_Zuordnung,"{ZUORDNUNG_MEHRDEUTIG}*")'),
         "baujahr": "=SUM(obj_AnlBauOffen)",
+        # je Objekt: mindestens ein verknüpftes Feld weicht vom Kostenstellenblatt ab
+        "kst_abweichung": "=SUMPRODUCT(--((" + "+".join(
+            f'(obk_{k}<>"")*({_feldname(k)}<>obk_{k})' for k in KST_VERKNUEPFT) + ")>0))",
+        "neukauf_kst": '=SUMPRODUCT((ne_KSt<>"")*(COUNTIF(nk_ID,ne_KSt)=0))',
         "afa_plan": '=COUNTIF(afp_Anzahl,">0")',
         "anlagen_afa": '=COUNTIF(obj_AnlDiff,">1")+COUNTIF(obj_AnlDiff,"<-1")',
     }

@@ -804,7 +804,7 @@ Die Mappe enthält hinter den Kontrollblättern:
 
 - Das Blatt heißt wie das eingelesene Kostenstellenblatt, sonst wie die ObjektID.
 - B2 trägt die ObjektID, alle Formeln suchen über sie.
-- Links stehen die Ist-Werte: Vorjahre und Monate, wie eingelesen. Das Basisjahr kommt aus dem Objektblatt (Abschnitt 22), damit eine Änderung dort auch in der BWA steht.
+- Links stehen die Ist-Werte: Vorjahre und Monate, wie eingelesen. Das Basisjahr ist Eingabe und führt: Objekte und „Alle Objekte“ übernehmen es (Abschnitt 23).
 - Rechts stehen die Planjahre als Formeln aus der Prognose, Szenario A.
 - Zeile 5 trägt das Planjahr als Zahl, nur als Hilfe für die Formeln.
 - Ein Wert 0 bleibt leer, deshalb sind die Planspalten eines verkauften Objekts ab dem Folgejahr leer und die eines Neuobjekts bis zum Kaufjahr.
@@ -1223,24 +1223,9 @@ Vorlagen: `vorlagen/Inventar_Vorlage.xlsx` (Format des DATEV-Exports, erfundene 
 
 ## 22. Basisjahr der BWA aus dem Objektblatt, AfA-Plan aus der Kostenstellen-Datei
 
-**Basisjahr aus dem Objektblatt**
+**Basisjahr aus dem Objektblatt** (abgelöst durch Abschnitt 23)
 
-Vorher standen im Basisjahr der BWA-Blätter die eingelesenen Ist-Werte als feste Zahlen. Eine Änderung im Blatt Objekte, etwa eine höhere Miete, wirkte nur auf die Planjahre, und „Alle Objekte“ zeigte im Basisjahr noch den alten Wert. Jetzt rechnet die Spalte Basisjahr (hellblau) aus dem Objektblatt:
-
-| BWA-Nr. | Basisjahr |
-| --- | --- |
-| 1020 | Miete Basisjahr (obj\_MieteBasis) |
-| 1090 | weitere Einnahmen Basisjahr (obj\_EinnBasis) |
-| 1240 | AfA Basisjahr lt. Buchhaltung (obj\_AfABWA) |
-| 1250 | Erhaltung Basisjahr (obj\_ErhBasis, auch als Annahme) |
-| 1100–1220 | Ist, wie eingelesen |
-| 1260 | weitere Ausgaben Basisjahr (obj\_AusgBasis) minus 1100–1220 |
-| Summenzeilen | Formeln wie in den Planjahren |
-| übrige (Zins, neutral, Steuer) | Ist, wie eingelesen |
-
-Unverändert ergibt das die eingelesenen Werte: 1260 nimmt wie in den Planjahren den Rest der weiteren Ausgaben auf, auch eine Kostenart ohne eigene Zeile wie 1160. Eine Änderung der weiteren Ausgaben landet ganz in 1260. Vorjahre und Monate bleiben Ist.
-
-Das Summenblatt „Alle Objekte“ summiert im Basisjahr die Bereiche des Objektblatts über alle Objekte, auch die erst in Excel angelegten ohne eigenes BWA-Blatt. Die Kostenarten 1100–1220 und die übrigen Zeilen bleiben die Summe der Kostenstellenblätter.
+Zuerst rechnete die Spalte Basisjahr der BWA-Blätter aus dem Blatt Objekte. Seit Abschnitt 23 führt das Kostenstellenblatt, das Blatt Objekte verweist darauf.
 
 **AfA-Plan**
 
@@ -1255,5 +1240,32 @@ Prüfung, Hinweis: Objekte mit AfA-Plan. Im Schnellcheck ist das Blatt ausgeblen
 **Prüfung im Prüfskript**
 
 - `pruefen_einlesen`: AfA-Plan aus den Planspalten der Vorlage, Lücke und 0, Basisjahr unberührt; ohne Planwerte leer.
-- `pruefen`, Fall „BWA: Basisjahr aus dem Blatt Objekte“: geänderte Miete und weitere Ausgaben von KSt 1 im Basisjahr, in 1260, den Summenzeilen und in „Alle Objekte“; das Vorjahr bleibt Ist.
 - `pruefen`, Fall „AfA-Plan“: geplante Jahre 2027, 2028 und 2030 (0), dazwischen und danach die Fortschreibung; Buchwert bei Halten, BWA 1240 und der Hinweis im Prüfungsblatt.
+
+## 23. Kostenstellenblatt führt, Neukauf-Kostenstellen
+
+**Kostenstellenblatt führt im Basisjahr**
+
+Abschnitt 22 machte das Blatt Objekte zur Quelle des Basisjahrs. Gewünscht ist die andere Richtung: Die Kostenstellenblätter und „Alle Objekte“ sind zusammen das führende System. Eine Änderung im Kostenstellenblatt soll in „Alle Objekte“ und in alle Berechnungen eingehen. Das Blatt Objekte darf höchstens den Wert im Kostenstellenblatt ändern, wenn der Anwender das will, aber nicht direkt auf „Alle Objekte“ wirken.
+
+- **Kostenstellenblatt:** Bei Objekten mit eingelesener Kostenstelle ist die Spalte Basisjahr Eingabe (gelb), die Summenzeilen sind Formeln. 1160 (Besondere Kosten) hat jetzt eine eigene Zeile und zählt zu den weiteren Ausgaben.
+- **Blatt Objekte:** Miete (1020), weitere Einnahmen (1090), Erhaltung (1250), AfA lt. Buchhaltung (1240) und weitere Ausgaben (1100–1220, 1260) sind Formeln auf die Spalte Basisjahr des Kostenstellenblatts (grün, keine Annahme). Die ausgeblendeten Spalten „eingelesen“ halten dieselbe Verknüpfung (obk\_\*), eine weitere den Blattnamen (obj\_KStBlatt).
+- **Alle Objekte:** Ist-Spalten und Basisjahr sind die Summe der Kostenstellenblätter. Objekte ohne eigenes Blatt zählen nur in den Planspalten.
+- **Überschrieben im Blatt Objekte:** Die Prognose rechnet mit dem getippten Wert, Kostenstellenblatt und „Alle Objekte“ nicht. Die Zelle wird orange, das Prüfungsblatt warnt („kst\_abweichung“, Anzahl Objekte). Das Makro `InKostenstelleUebernehmen` (Schaltfläche „Objekte -> Kostenstellen“) schreibt solche Werte in die Spalte Basisjahr des Kostenstellenblatts und stellt die Verknüpfung wieder her. Bei den weiteren Ausgaben geht die Differenz auf 1260, die Kostenarten bleiben. Ein geleertes Feld bekommt nur die Verknüpfung zurück.
+- Objekte ohne eingelesene Kostenstelle (etwa Testdaten) behalten Abschnitt 22: Basisjahr der BWA aus dem Blatt Objekte (hellblau).
+
+**Neukauf-Kostenstellen**
+
+In der Kostenstellen-Datei folgen auf die Kostenstelle „KSt 9999“ Blätter für geplante Käufe (im Muster KSt 31–35). Erkannt am Blattnamen oder an B2 „KSt 9999“; alle gültigen Kostenstellenblätter danach sind Neukauf-Kostenstellen. Sie brauchen keine Spalte des Basisjahrs und werden keine Bestandsobjekte. KSt 9999 selbst bleibt eine normale Kostenstelle.
+
+Gelesen werden je Jahr ab dem Basisjahr die Positionen Miete (1020), weitere Einnahmen (1090), Erhaltung (1250) und weitere Ausgaben (1100–1220, 1260). Sie stehen im Blatt **Neukauf-KSt**: je Kostenstelle vier Zeilen, je Jahr eine Spalte (gelb Eingabe, grün eingelesen). Rechts schreibt das Blatt jede Zeile fort: Jahr mit Wert = Wert, sonst Vorjahr × (1 + Steigerung), Miete und Einnahmen mit par\_Mietsteig, Erhaltung mit par\_Erhaltsteig, Ausgaben mit par\_Kostensteig (nk\_ID, nk\_Schluessel, nk\_Fort).
+
+Im Blatt Neuobjekte nennt die neue Spalte „Kostenstelle Neukauf“ (ne\_KSt) die Kostenstelle. Ab dem Jahr nach dem Kauf nimmt die Prognose dann Miete, weitere Einnahmen, Erhaltung und weitere Ausgaben aus der Fortschreibung; ohne Wert gelten wie bisher Mietrendite und Erhaltungsquote (Einnahmen und Ausgaben 0). Kaufpreis, Anteil G+B, AfA-Satz und § 6b bleiben Eingaben des Neuobjekts, die AfA rechnet weiter das Modell, weil die Übertragung der Rücklage die AfA-Basis mindert. Eine unbekannte Kostenstelle meldet das Prüfungsblatt als Warnung („neukauf\_kst“).
+
+**Prüfung im Prüfskript**
+
+- `pruefen_einlesen`: Neukauf-Kennzeichen hinter KSt 9999, Jahreswerte je Position ab dem Basisjahr, keine Bestandsobjekte.
+- `pruefen`, Fall „BWA: Kostenstellenblatt führt im Basisjahr“: geänderte Miete und 1150 im Blatt KSt 1 in Objekte, Summenzeilen, Plan und „Alle Objekte“.
+- `pruefen`, Fall „Objekte: Basiswert überschrieben“: nur die Prognose folgt, Warnung im Prüfungsblatt.
+- `pruefen`, Makrofall „Objekte: Makro überträgt …“: Miete und weitere Ausgaben (Differenz auf 1260) im Kostenstellenblatt, Verknüpfung wiederhergestellt.
+- `pruefen`, Fall „Neuobjekte: Prognose aus der Neukauf-Kostenstelle“: Planjahre, Fortschreibung, Rückfall auf die Mietrendite bei unbekannter Kostenstelle.

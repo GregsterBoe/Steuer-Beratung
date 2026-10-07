@@ -133,6 +133,7 @@ CODENAMEN = {
     "Prognose": "wsPrognose", "Rücklagen": "wsRuecklagen", "Liquidität": "wsLiquiditaet",
     "Auswertung": "wsAuswertung", "Prüfung": "wsPruefung", "Varianten": "wsVarianten",
     "BWA-Zuordnung": "wsBWAZuordnung", "Anlagen": "wsAnlagen", "AfA-Plan": "wsAfAPlan",
+    "Neukauf-KSt": "wsNeukaufKSt",
 }
 
 
@@ -220,6 +221,8 @@ OBJEKT_FELDER = [
 # Spalten, die beim Einlesen aus der Buchhaltung kommen (grün, solange unverändert)
 OBJEKT_EINGELESEN = ("name", "miete", "erhaltung", "weitere_einnahmen", "weitere_ausgaben",
                      "afa_bwa")
+# davon mit Kostenstellenblatt verknüpft: Formel auf die Spalte Basisjahr des BWA-Blatts
+KST_VERKNUEPFT = ("miete", "erhaltung", "weitere_einnahmen", "weitere_ausgaben", "afa_bwa")
 
 # Berechnete Statusspalte direkt nach den Eingabefeldern
 STATUS_UEBERSCHRIFT = "Status"
@@ -444,7 +447,20 @@ NEU_FELDER = [
     Feld("erhaltungsquote", "Erhaltung auf Kaufpreis", "ne_ErhQuote", FMT_PROZENT, False, 11,
          minimum=0, maximum=1),
     Feld("quelle", "Quelle RücklageID", "ne_Quelle", FMT_TEXT, False, 16),
+    Feld("kst", "Kostenstelle Neukauf", "ne_KSt", FMT_TEXT, False, 14,
+         hinweis="z. B. KSt 31 aus dem Blatt Neukauf-KSt: dessen Jahreswerte ersetzen Miete, "
+                 "weitere Einnahmen, Erhaltung und weitere Ausgaben aus Mietrendite und "
+                 "Erhaltungsquote; die AfA rechnet weiter das Modell"),
 ]
+# Blatt Neukauf-KSt: Planwerte der Neukauf-Kostenstellen (hinter „KSt 9999“) je Jahr.
+# (Schlüssel, Bezeichnung, BWA-Nr., Steigerung für Jahre ohne Wert)
+NEUKAUF_POSITIONEN = [
+    ("miete", "Miete", "1020", "par_Mietsteig"),
+    ("einnahmen", "weitere Einnahmen", "1090", "par_Mietsteig"),
+    ("erhaltung", "Erhaltung", "1250", "par_Erhaltsteig"),
+    ("ausgaben", "weitere Ausgaben", "1100–1220, 1260", "par_Kostensteig"),
+]
+MAX_NEUKAUF = 20   # Kostenstellen im Blatt Neukauf-KSt
 NEU_SPALTEN = [
     # 1 = rechnet in der Prognose mit (Pflichtfelder da, ID eindeutig, Kaufjahr im Raster)
     Spalte("gueltig", "im Modell", "ne_Gueltig", FMT_ZAHL, 8),
@@ -643,6 +659,7 @@ class Neuobjekt:
     mietrendite: Optional[float] = None
     erhaltungsquote: Optional[float] = None
     quelle: Optional[str] = None         # RücklageID, z. B. "RL-OBJ-001"
+    kst: Optional[str] = None            # Neukauf-Kostenstelle, z. B. "KSt 31"
 
 
 # Blatt Prüfung: Plausibilitätsprüfungen (Etappe 9, Projektplan Abschnitt 5 und 19)
@@ -702,6 +719,13 @@ PRUEFUNGEN = [
              "(orange): stimmt nur bei Neubau. Bei gekauftem Bestandsgebäude das echte "
              "Baujahr eintragen, sonst das Jahr zur Bestätigung eintippen", WARNUNG,
              "Blatt Objekte, Spalte Baujahr"),
+    Pruefung("kst_abweichung", "Objekte, deren Basiswerte im Blatt Objekte von ihrem "
+             "Kostenstellenblatt abweichen (orange, überschrieben): Prognose und BWA Alle Objekte "
+             "passen nicht zusammen. Im Kostenstellenblatt ändern oder per Makro „Objekte → "
+             "Kostenstellen“ übernehmen", WARNUNG, "Blatt Objekte, orange Zellen"),
+    Pruefung("neukauf_kst", "Neuobjekte mit Kostenstelle Neukauf, die im Blatt Neukauf-KSt "
+             "fehlt: das Neuobjekt rechnet mit Mietrendite und Erhaltungsquote", WARNUNG,
+             "Blatt Neuobjekte, Spalte Kostenstelle Neukauf"),
     Pruefung("afa_plan", "Objekte mit AfA-Plan (Blatt AfA-Plan, meist aus BWA 1240 der "
              "Kostenstellen-Datei): in den Jahren mit Wert ersetzt er die AfA-Fortschreibung",
              HINWEIS, "Blatt AfA-Plan, Spalte Jahre mit Wert"),
@@ -729,6 +753,8 @@ class Modell:
     # Ist-Werte aus den Kostenstellenblättern je ObjektID (einlesen.LaufendeWerte);
     # ohne Eintrag zeigt das BWA-Blatt im Basisjahr die Werte des Objektblatts
     kostenstellen: dict = field(default_factory=dict)
+    # Neukauf-Kostenstellen (hinter „KSt 9999“) je KSt, einlesen.LaufendeWerte mit jahre
+    neukauf: dict = field(default_factory=dict)
     # Schnellcheck: § 6b und Reinvestition je Verkauf als Annahme, Details ausgeblendet
     schnellcheck: bool = False
     # Blatt BWA-Zuordnung: abweichende BWA-Nr. je Posten, z. B. {"gewinn": 1351},

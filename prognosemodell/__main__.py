@@ -43,8 +43,15 @@ def main() -> None:
         laufende, uebersprungen = lese_kostenstellen(args.kostenstellen, _basisjahr(), stand)
         for titel, grund in uebersprungen:
             print(f"übersprungen: Blatt {titel!r} ({grund})")
+        neukauf = [lw for lw in laufende if lw.neukauf]
+        laufende = [lw for lw in laufende if not lw.neukauf]
         modell.objekte = zusammenfuehren(modell.objekte, laufende)
         modell.kostenstellen = {lw.objekt_id: lw for lw in laufende}
+        modell.neukauf = {lw.objekt_id: lw for lw in neukauf}
+        for lw in neukauf:
+            jahre = sorted({j for werte in lw.jahre.values() for j in werte})
+            print(f"Neukauf-Kostenstelle: {lw.objekt_id} ({lw.name}) aus Blatt {lw.blatt!r}"
+                  + (f", Planwerte {jahre[0]}–{jahre[-1]}" if jahre else ", ohne Planwerte"))
         for lw in laufende:
             print(f"eingelesen: {lw.objekt_id} ({lw.name}) aus Blatt {lw.blatt!r}: "
                   f"Miete {lw.miete:,.2f}, Erhaltung {lw.erhaltung:,.2f}, "

@@ -24,6 +24,7 @@ from prognosemodell.mappe import erstelle_mappe
 from prognosemodell.modelle import (FEHLER, HINWEIS, MAX_OBJEKTE, PRUEFUNGEN, Anlage,
                                     STATUS_ANNAHME_GELOESCHT, WARNUNG, Modell, Neuobjekt,
                                     Objekt, Verkauf, prognosejahre)
+from prognosemodell.formeln import spalte
 from prognosemodell.testdaten import testobjekt
 from prognosemodell.vorlagen import erstelle_inventar_vorlage, erstelle_vorlage
 
@@ -42,11 +43,25 @@ class Wie:
     zeile: int = 0
 
 
-def durchrechnen(modell: Modell, arbeitsordner: Path):
+@dataclasses.dataclass
+class Getippt:
+    """Modell, dazu nach dem Generieren eingetippte Zellen {(Blatt, Zelle): Wert}."""
+    modell: Modell
+    zellen: dict
+
+
+def mappe(modell: Modell, zellen: dict = None):
+    wb = erstelle_mappe(modell)
+    for (blatt, zelle), wert in (zellen or {}).items():
+        wb[blatt][zelle] = wert
+    return wb
+
+
+def durchrechnen(modell: Modell, arbeitsordner: Path, zellen: dict = None):
     """Mappe schreiben, per LibreOffice neu berechnen lassen, Werte zurückgeben."""
     roh = arbeitsordner / "roh" / "mappe.xlsx"
     roh.parent.mkdir(parents=True, exist_ok=True)
-    erstelle_mappe(modell).save(roh)
+    mappe(modell, zellen).save(roh)
     aus = arbeitsordner / "gerechnet"
     soffice = shutil.which("soffice") or shutil.which("libreoffice")
     if not soffice:
@@ -162,19 +177,26 @@ def ueb(jahr: int) -> int:
 # Sollwerte der Etappe 2 von Hand: AfA 800.000 × 2 % = 16.000, Miete 60.000 × 1,02^n,
 # Erhaltung 8.000 × 1,025^n, weitere Ausgaben × 1,02^n, n = Jahr − 2026.
 # Übersicht: Verkehrswert 1.400.000 × 1,02^n je Objekt.
-def vorlage_eingelesen(plan: dict = None, **geaendert) -> Modell:
+def vorlage_eingelesen(plan: dict = None, basis: dict = None, neukauf=(),
+                       neuobjekte=()) -> Modell:
     """Modell aus der BWA-Vorlage: KSt 1 mit den Stammdaten des Testobjekts, KSt 2 ohne.
 
-    plan: schon gefüllte Planspalten der Vorlage (erstelle_vorlage); geaendert: Felder von
-    KSt 1, nach dem Einlesen im Blatt Objekte überschrieben."""
+    plan: schon gefüllte Planspalten der Vorlage (erstelle_vorlage); basis: {BWA-Nr.: Wert}
+    im Kostenstellenblatt KSt 1, Spalte Basisjahr, nach dem Einlesen geändert (wie im
+    Blatt KSt 1 der Mappe getippt); neukauf: Neukauf-Kostenstellen hinter „KSt 9999“."""
+    from prognosemodell.vorlagen import SPALTE_JAHR
     with tempfile.TemporaryDirectory() as tmp:
         pfad = Path(tmp) / "vorlage.xlsx"
-        erstelle_vorlage(plan=plan).save(pfad)
+        erstelle_vorlage(plan=plan, neukauf=neukauf).save(pfad)
         laufende, _ = lese_kostenstellen(pfad, 2026)
+    nk = {lw.objekt_id: lw for lw in laufende if lw.neukauf}
+    laufende = [lw for lw in laufende if not lw.neukauf]
+    for nr, wert_ in (basis or {}).items():
+        laufende[0].ist.setdefault(nr, {})[SPALTE_JAHR] = wert_
     stamm = [dataclasses.replace(testobjekt(), objekt_id="KSt 1", name=None)]
-    objekte = zusammenfuehren(stamm, laufende)
-    objekte[0] = dataclasses.replace(objekte[0], **geaendert)
-    return Modell(objekte=objekte, kostenstellen={lw.objekt_id: lw for lw in laufende})
+    return Modell(objekte=zusammenfuehren(stamm, laufende), neukauf=nk,
+                  kostenstellen={lw.objekt_id: lw for lw in laufende},
+                  neuobjekte=list(neuobjekte))
 
 
 def anlagen_eingelesen(inventar: bool = True, ohne_kost1=(), **parameter) -> Modell:
@@ -962,23 +984,85 @@ def faelle():
             ("bwa_1260", lj(2027), 1_734),
             ("bwa_1020", lj(2027), 183_600),
         ]),
-        # Basisjahr der BWA aus dem Blatt Objekte: Miete KSt 1 auf 66.000, weitere Ausgaben
-        # 3.600 + 1.000; 1260 = 4.600 − 1140 1.200 − 1150 1.800. Vorjahr bleibt Ist.
-        # Alle Objekte: 1260 = 13.900 − 11.200 (1100–1220 beider Blätter)
-        ("BWA: Basisjahr aus dem Blatt Objekte",
-         vorlage_eingelesen(miete=66_000, weitere_ausgaben=4_600), [
+        # Kostenstellenblatt führt: im Blatt KSt 1 Basisjahr Miete 66.000 und 1150 2.800
+        # getippt. Objekte, Prognose und Alle Objekte folgen; Vorjahr bleibt Ist.
+        # weitere Ausgaben 1.200 + 2.800 + 600 = 4.600, 1150 im Plan nach Anteil 2.800 / 4.600
+        ("BWA: Kostenstellenblatt führt im Basisjahr",
+         vorlage_eingelesen(basis={1020: 66_000, 1150: 2_800}), [
             ("BWA:KSt 1:1020", 2026, 66_000),
             ("BWA:KSt 1:1020", 2025, 58_800),
-            ("BWA:KSt 1:1150", 2026, 1_800),
-            ("BWA:KSt 1:1260", 2026, 1_600),
-            ("BWA:KSt 1:1240", 2026, 16_000),
+            ("BWA:KSt 1:1150", 2026, 2_800),
             ("BWA:KSt 1:1280", 2026, 28_600),
             ("BWA:KSt 1:1345", 2026, 33_400),   # − Zins 4.000 lt. Ist
-            ("BWA:KSt 2:1020", 2026, 120_000),
+            ("obj_MieteBasis", 0, 66_000),
+            ("obj_AusgBasis", 0, 4_600),
+            ("obj_ErhBasis", 0, 8_000),
+            ("obj_AfABWA", 0, 16_000),
+            ("obj_EinnBasis", 1, 1_500),        # KSt 2
             ("BWA:Alle Objekte:1020", 2026, 186_000),
-            ("BWA:Alle Objekte:1260", 2026, 2_700),
+            ("BWA:Alle Objekte:1150", 2026, 6_000),
             ("BWA:Alle Objekte:1310", 2026, 13_000),
             ("BWA:KSt 1:1020", 2027, 67_320),
+            ("BWA:KSt 1:1150", 2027, 2_856),
+            ("prg_Miete", prg(1, 2027), 67_320),
+            ("pr_Anzahl", pr("kst_abweichung"), 0),
+        ]),
+        # im Blatt Objekte überschrieben: nur die Prognose rechnet damit, das
+        # Kostenstellenblatt und Alle Objekte nicht; orange und Warnung
+        ("Objekte: Basiswert überschrieben, weicht vom Kostenstellenblatt ab",
+         Getippt(vorlage_eingelesen(), {("Objekte", f"{spalte('miete')}2"): 66_000}), [
+            ("obj_MieteBasis", 0, 66_000),
+            ("prg_Miete", prg(1, 2027), 67_320),
+            ("BWA:KSt 1:1020", 2026, 60_000),
+            ("BWA:Alle Objekte:1020", 2026, 180_000),
+            ("pr_Anzahl", pr("kst_abweichung"), 1),
+            ("pr_Ergebnis", pr("kst_abweichung"), WARNUNG),
+        ]),
+        # Makro schreibt die überschriebenen Werte ins Kostenstellenblatt: Miete 66.000,
+        # weitere Ausgaben 4.600 statt 3.600, Differenz 1.000 auf 1260 (600 -> 1.600)
+        ("Objekte: Makro überträgt überschriebene Werte ins Kostenstellenblatt",
+         Getippt(vorlage_eingelesen(), {("Objekte", f"{spalte('miete')}2"): 66_000,
+                                        ("Objekte", f"{spalte('weitere_ausgaben')}2"): 4_600}), [
+            ("BWA:KSt 1:1020", 2026, 66_000),
+            ("BWA:KSt 1:1260", 2026, 1_600),
+            ("BWA:KSt 1:1150", 2026, 1_800),
+            ("BWA:KSt 1:1280", 2026, 28_600),
+            ("BWA:Alle Objekte:1020", 2026, 186_000),
+            ("obj_MieteBasis", 0, 66_000),
+            ("obj_AusgBasis", 0, 4_600),
+            ("prg_Miete", prg(1, 2027), 67_320),
+            ("pr_Anzahl", pr("kst_abweichung"), 0),
+        ], [
+            ("modObjekte", "InKostenstelleUebernehmen", (), 2),
+            ("modObjekte", "InKostenstelleUebernehmen", (), 0),   # nichts mehr abweichend
+        ]),
+        # Neukauf-Kostenstelle KSt 31 (hinter KSt 9999): Miete 2028 52.000, 2029 53.000 lt.
+        # Planspalten, danach × 1,02; Erhaltung 2.000 und 1150 1.000 im Basisjahr, fortge-
+        # schrieben mit 2,5 % bzw. 2 %. NEU-2 nennt eine unbekannte Kostenstelle: Mietrendite
+        ("Neuobjekte: Prognose aus der Neukauf-Kostenstelle",
+         vorlage_eingelesen(
+             neukauf=[("KSt 31", "Neubau Nord", {1020: 50_000, 1250: 2_000, 1150: 1_000})],
+             plan={"KSt 31": {1020: {2028: 52_000, 2029: 53_000}}},
+             neuobjekte=[Neuobjekt("NEU-1", 2027, kaufpreis=1_000_000, anteil_gub=0.2,
+                                   afa_satz=0.02, mietrendite=0.04, erhaltungsquote=0.005,
+                                   kst="KSt 31"),
+                         Neuobjekt("NEU-2", 2027, kaufpreis=500_000, anteil_gub=0.2,
+                                   afa_satz=0.02, mietrendite=0.04, erhaltungsquote=0.005,
+                                   kst="KSt 99")]), [
+            ("nk_ID", 0, "KSt 31"),
+            ("obj_ID", 2, "KSt 9999"),
+            ("obj_ID", 3, None),                 # KSt 31 ist kein Bestandsobjekt
+            ("prg_Miete", prg_neu(1, 2027), 0),
+            ("prg_Miete", prg_neu(1, 2028), 52_000),
+            ("prg_Miete", prg_neu(1, 2029), 53_000),
+            ("prg_Miete", prg_neu(1, 2030), 54_060),
+            ("prg_Erhaltung", prg_neu(1, 2028), 2_101.25),
+            ("prg_Ausgaben", prg_neu(1, 2028), 1_040.40),
+            ("prg_Einnahmen", prg_neu(1, 2028), 0),
+            ("prg_AfA", prg_neu(1, 2028), 16_000),   # AK Gebäude 800.000 × 2 %
+            ("prg_Miete", prg_neu(2, 2028), 20_400),
+            ("BWA:NEU-1:1020", 2028, 52_000),
+            ("pr_Anzahl", pr("neukauf_kst"), 1),
         ]),
         # AfA-Plan aus BWA 1240 der Kostenstellen-Datei: 2027 15.000, 2028 14.000, 2030 0;
         # 2029 und ab 2031 schreibt das Modell fort (AfA lt. Buchhaltung 16.000)
@@ -1438,13 +1522,13 @@ def pruefe(fall: str, wb, pruefungen) -> int:
     return fehler
 
 
-def makro_lauf(lo, fall: str, modell: Modell, aufrufe, ordner: Path):
+def makro_lauf(lo, fall: str, modell: Modell, aufrufe, ordner: Path, zellen: dict = None):
     """Etappe 9: Mappe als .xlsm bauen, Makros in LibreOffice ausführen, Ergebnis lesen.
 
     Liefert die neu berechnete Mappe (Werte) und die Anzahl abweichender Rückgabewerte.
     """
     ordner.mkdir(parents=True, exist_ok=True)
-    xlsm = speichere_mit_makros(erstelle_mappe(modell), ordner / "mappe.xlsm", lo)
+    xlsm = speichere_mit_makros(mappe(modell, zellen), ordner / "mappe.xlsm", lo)
     fehler = 0
     doc = lo.laden(xlsm, makros=True)
     try:
@@ -1478,16 +1562,20 @@ def main() -> int:
         for i, (fall, objekte, pruefungen, *aufrufe) in enumerate(faelle()):
             if filter_ not in fall:
                 continue
+            zellen = None
+            if isinstance(objekte, Getippt):
+                objekte, zellen = objekte.modell, objekte.zellen
             modell = objekte if isinstance(objekte, Modell) else Modell(objekte=objekte)
             if not fall.startswith("Erhaltung"):
                 modell.parameter = {**OHNE_ALTERUNG, **modell.parameter}
             if aufrufe:
                 if lo is None:                   # eine LibreOffice-Sitzung für alle Makrofälle
                     lo = stapel.enter_context(LibreOffice(Path(tmp) / "makros"))
-                wb, n = makro_lauf(lo, fall, modell, aufrufe[0], Path(tmp) / f"fall{i}")
+                wb, n = makro_lauf(lo, fall, modell, aufrufe[0], Path(tmp) / f"fall{i}",
+                                   zellen)
                 fehler += n
             else:
-                wb = durchrechnen(modell, Path(tmp) / f"fall{i}")
+                wb = durchrechnen(modell, Path(tmp) / f"fall{i}", zellen)
             fehler += pruefe(fall, wb, pruefungen)
     print(f"\n{fehler} Abweichung(en)" if fehler else "\nAlle Prüfungen bestanden.")
     return 1 if fehler else 0

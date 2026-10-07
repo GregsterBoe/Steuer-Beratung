@@ -17,6 +17,7 @@ from . import bwa, formeln
 from .modelle import (ANLAGE_FELDER, ANLAGE_JAHRE_NAME, ANLAGE_SPALTEN, ANLAGE_STATUS_NAME,
                       MIN_ANLAGEN, OBJEKT_ANLAGEN_SPALTEN,
                       CODENAME_MAPPE, CODENAMEN, FEHLER, OBJEKT_EINGELESEN, FMT_EURO, FMT_JAHR, FMT_PROZENT,
+                      KST_VERKNUEPFT, MAX_NEUKAUF, NEUKAUF_POSITIONEN,
                       FMT_TEXT, FMT_ZAHL, HINWEIS, MAX_NEUOBJEKTE, MAX_VARIANTEN, PRUEFUNGEN,
                       VARIANTEN_KOPF, WARNUNG,
                       MAX_OBJEKTE, MAX_VERKAEUFE, NEU_FELDER, NEU_SPALTEN, NEU_STATUS_NAME, OBJEKT_FELDER,
@@ -47,11 +48,12 @@ FARBEN = [
     (FILL_PFLICHT, "rot", "Pflichtwert fehlt oder Annahme gelöscht: bitte eintragen"),
     (FILL_KRITISCH, "orange", "Annahme bei einem verkauften Objekt: bestimmt Gewinn und "
      "§ 6b-Rücklage, möglichst durch echten Wert ersetzen. Baujahr aus dem AHK-Datum des "
-     "Gebäudes bzw. ObjektID über die Inventarbezeichnung: prüfen"),
+     "Gebäudes bzw. ObjektID über die Inventarbezeichnung: prüfen. Im Blatt Objekte auch: "
+     "Basiswert weicht vom Kostenstellenblatt ab"),
     (FILL_ANNAHME, "blau", "Annahme aus den zentralen Annahmen (Parameterblatt); "
      "Eintippen ersetzt sie"),
-    (FILL_EINGELESEN, "grün", "aus der Buchhaltung eingelesen, unverändert, oder aus dem "
-     "Anlagenverzeichnis (Blatt Anlagen)"),
+    (FILL_EINGELESEN, "grün", "aus der Buchhaltung eingelesen, unverändert, aus dem "
+     "Kostenstellenblatt (Verknüpfung) oder aus dem Anlagenverzeichnis (Blatt Anlagen)"),
     (FILL_EINGABE, "gelb", "händisch eingetragen bzw. Eingabefeld"),
 ]
 ISF = formeln.ISFORMEL
@@ -100,10 +102,11 @@ def _validierung(ws, f, bereich: str) -> None:
 
 def _farblogik(ws, spalte: str, erste: int, letzte: int, f, id_spalte: str = "A",
                verkauft: str = None, eingelesen: str = None, anlagen: str = None,
-               anlagen_fill=FILL_EINGELESEN) -> None:
+               anlagen_fill=FILL_EINGELESEN, kst: str = None) -> None:
     """Bedingte Formate einer Eingabespalte, in dieser Reihenfolge (erste Regel gewinnt):
-    rot Pflicht/Annahme fehlt, grün aus dem Blatt Anlagen (anlagen_fill, orange = prüfen), orange kritische Annahme,
-    blau Annahme, grün eingelesen."""
+    rot Pflicht/Annahme fehlt, grün aus dem Blatt Anlagen (anlagen_fill, orange = prüfen),
+    grün verknüpft mit dem Kostenstellenblatt (kst = Zelle mit der Verknüpfung), orange davon
+    abweichend, orange kritische Annahme, blau Annahme, grün eingelesen."""
     bereich = f"{spalte}{erste}:{spalte}{letzte}"
     z, id_ = f"{spalte}{erste}", f"${id_spalte}{erste}"
     regeln = []
@@ -111,6 +114,9 @@ def _farblogik(ws, spalte: str, erste: int, letzte: int, f, id_spalte: str = "A"
         regeln.append((f'AND({id_}<>"",{z}="")', FILL_PFLICHT))
     if anlagen:
         regeln.append((f'AND({id_}<>"",{ISF}({z}),{anlagen})', anlagen_fill))
+    if kst:
+        regeln.append((f'AND({id_}<>"",{kst}<>"",{ISF}({z}))', FILL_EINGELESEN))
+        regeln.append((f'AND({id_}<>"",{kst}<>"",{z}<>{kst})', FILL_KRITISCH))
     if f.annahme and f.kritisch:
         bedingung = f",{verkauft}" if verkauft else ""
         regeln.append((f'AND({id_}<>"",{ISF}({z}){bedingung})', FILL_KRITISCH))
@@ -190,14 +196,23 @@ def _blatt_objekte(wb, modell: Modell) -> None:
     hilfe += [(s_.ueberschrift, s_.name, s_.breite,
                lambda z, k=s_.key: formeln.objekt_anlagen(k, z)) for s_ in OBJEKT_ANLAGEN_SPALTEN]
     formate = {s_.name: s_.format for s_ in OBJEKT_ANLAGEN_SPALTEN}
-    # eingelesene Werte, ausgeblendet: grün, solange die Eingabe ihnen gleicht
-    import_start = status_spalte + len(hilfe) + 1
+    # eingelesene Werte, ausgeblendet: grün, solange die Eingabe ihnen gleicht; bei
+    # Objekten mit Kostenstellenblatt die Verknüpfung dorthin (bwa.verknuepfe_objekte)
     eingelesen = [f for f in OBJEKT_FELDER if f.key in OBJEKT_EINGELESEN]
-    import_spalte = {f.key: get_column_letter(import_start + i) for i, f in enumerate(eingelesen)}
+    import_spalte = {f.key: formeln.ispalte(f.key) for f in eingelesen}
+    assert formeln.OBJEKT_HILFSSPALTEN == len(hilfe)
     _kopf(ws, 1, [f.ueberschrift for f in OBJEKT_FELDER] + [h[0] for h in hilfe])
-    for i, f in enumerate(eingelesen):
-        c = ws.cell(row=1, column=import_start + i, value=f"eingelesen: {f.ueberschrift}")
+    for f in eingelesen:
+        c = ws[f"{import_spalte[f.key]}1"]
+        c.value = f"eingelesen: {f.ueberschrift}"
         c.font = Font(italic=True)
+        if f.key in KST_VERKNUEPFT:
+            bst = import_spalte[f.key]
+            _name(wb, f"obk_{f.key}", f"Objekte!${bst}${erste}:${bst}${letzte}")
+    kst_blatt = formeln.kst_blatt_spalte()
+    ws[f"{kst_blatt}1"] = "Kostenstellenblatt"
+    ws[f"{kst_blatt}1"].font = Font(italic=True)
+    _name(wb, "obj_KStBlatt", f"Objekte!${kst_blatt}${erste}:${kst_blatt}${letzte}")
     ws.row_dimensions[1].height = 45
 
     for i, f in enumerate(OBJEKT_FELDER, start=1):
@@ -208,7 +223,8 @@ def _blatt_objekte(wb, modell: Modell) -> None:
         _farblogik(ws, bst, erste, letzte, f, verkauft=f"COUNTIF(vk_ID,$A{erste})>0",
                    eingelesen=f"${import_spalte[f.key]}{erste}" if f.key in import_spalte
                    else None, anlagen=formeln.deckung_anlagen(f.key, erste),
-                   anlagen_fill=FILL_KRITISCH if f.key in ANLAGEN_PRUEFEN else FILL_EINGELESEN)
+                   anlagen_fill=FILL_KRITISCH if f.key in ANLAGEN_PRUEFEN else FILL_EINGELESEN,
+                   kst=f"${import_spalte[f.key]}{erste}" if f.key in KST_VERKNUEPFT else None)
 
     for j, (_, name, breite, _) in enumerate(hilfe):
         bst = get_column_letter(status_spalte + j)
@@ -256,8 +272,7 @@ def _blatt_objekte(wb, modell: Modell) -> None:
             for key, bst in import_spalte.items():
                 ws[f"{bst}{zeile}"] = quelle[key]
 
-    for i, f in enumerate(eingelesen):
-        bst = get_column_letter(import_start + i)
+    for bst in list(import_spalte.values()) + [kst_blatt]:
         ws.column_dimensions[bst].hidden = True
     # Anlagen je Objekt als zuklappbare Gruppe
     anl_erste = status_spalte + len(hilfe) - len(OBJEKT_ANLAGEN_SPALTEN)
@@ -275,6 +290,12 @@ def _blatt_objekte(wb, modell: Modell) -> None:
                                   "Objekt, blau = Annahme, grün = eingelesen oder aus dem Blatt "
                                   "Anlagen, gelb = händisch. Annahmen stellt das Parameterblatt "
                                   "ein.")
+    ws["A" + str(vorlage + 3)] = (
+        "Objekte mit Kostenstellenblatt: Miete, Erhaltung, weitere Einnahmen und Ausgaben und "
+        "AfA lt. Buchhaltung verweisen auf dessen Spalte Basisjahr (grün). Werte dort ändern, "
+        "dann folgen Objekte, Prognose und BWA Alle Objekte. Hier überschrieben (orange) "
+        "rechnet nur die Prognose damit; das Makro „Objekte → Kostenstellen“ schreibt solche "
+        "Werte ins Kostenstellenblatt und stellt die Verknüpfung wieder her.")
 
 
 def _blatt_anlagen(wb, modell: Modell) -> None:
@@ -407,6 +428,85 @@ def _blatt_afa_plan(wb, modell: Modell) -> None:
     ws.column_dimensions["B"].width = 28
     ws.column_dimensions["C"].width = 10
     ws.freeze_panes = "D3"
+
+
+def _blatt_neukauf(wb, modell: Modell) -> None:
+    """Neukauf-Kostenstellen (in der Kostenstellen-Datei hinter „KSt 9999“): Planwerte je
+    Jahr für Neuobjekte, die im Blatt Neuobjekte auf die Kostenstelle verweisen. Jahre ohne
+    Wert schreibt das Blatt vom letzten Wert mit der Steigerung des Parameterblatts fort."""
+    ws = wb.create_sheet("Neukauf-KSt")
+    n = prognosejahre() + 1            # Basisjahr bis Endjahr
+    je = len(NEUKAUF_POSITIONEN)
+    erste, letzte = 3, 3 + MAX_NEUKAUF * je - 1
+    j0 = 5                             # erste Jahresspalte (E)
+    fort0 = j0 + n + 1                 # fortgeschrieben (Formeln)
+    import0 = fort0 + n + 1            # ausgeblendete Kopie der eingelesenen Werte
+    schluessel = get_column_letter(import0 + n)
+    ws["A1"] = ("Neukauf-Kostenstellen: Planwerte je Jahr für Neuobjekte (Blatt Neuobjekte, "
+                "Spalte Kostenstelle Neukauf). Gelb = Eingabe, grün = aus der Kostenstellen-"
+                "Datei (Blätter hinter KSt 9999). Jahre ohne Wert schreibt das Modell vom "
+                "letzten Wert mit der Steigerung fort (rechts); ab dem Jahr nach dem Kauf "
+                "ersetzen sie Mietrendite und Erhaltungsquote des Neuobjekts.")
+    ws["A1"].font = Font(italic=True)
+    c = ws.cell(row=1, column=fort0, value="fortgeschrieben (rechnet so im Neuobjekt)")
+    c.font = Font(bold=True)
+    _kopf(ws, 2, ["Kostenstelle", "Bezeichnung", "Position", "BWA-Nr."])
+    for i in range(n):
+        for spalte in (j0 + i, fort0 + i):
+            c = ws.cell(row=2, column=spalte, value=f"=par_Basisjahr+{i}")
+            c.font, c.fill, c.number_format = FONT_KOPF, FILL_KOPF, FMT_JAHR
+    _name(wb, "nk_ID", f"'Neukauf-KSt'!$A${erste}:$A${letzte}")
+    _name(wb, "nk_Schluessel", f"'Neukauf-KSt'!${schluessel}${erste}:${schluessel}${letzte}")
+    _name(wb, "nk_Fort", f"'Neukauf-KSt'!${get_column_letter(fort0)}${erste}:"
+                         f"${get_column_letter(fort0 + n - 1)}${letzte}")
+    for block in range(MAX_NEUKAUF):
+        kopf = erste + block * je
+        for k, (key, text, nr, satz) in enumerate(NEUKAUF_POSITIONEN):
+            zeile = kopf + k
+            for spalte in (1, 2):
+                c = ws.cell(row=zeile, column=spalte)
+                if k == 0:
+                    c.fill = FILL_EINGABE
+                else:
+                    bst = get_column_letter(spalte)
+                    c.value, c.fill = f'=IF({bst}{kopf}="","",{bst}{kopf})', FILL_BERECHNET
+            ws.cell(row=zeile, column=3, value=text)
+            ws.cell(row=zeile, column=4, value=nr)
+            for i in range(n):
+                c = ws.cell(row=zeile, column=j0 + i)
+                c.fill, c.number_format = FILL_EINGABE, FMT_EURO
+                wert = f"{get_column_letter(j0 + i)}{zeile}"
+                vor = f"{get_column_letter(fort0 + i - 1)}{zeile}"
+                formel = (f'=IF(ISNUMBER({wert}),{wert},"")' if i == 0 else
+                          f'=IF(ISNUMBER({wert}),{wert},IF(ISNUMBER({vor}),{vor}*(1+{satz}),""))')
+                c = ws.cell(row=zeile, column=fort0 + i, value=formel)
+                c.fill, c.number_format = FILL_BERECHNET, FMT_EURO
+            ws.cell(row=zeile, column=import0 + n,
+                    value=f'=IF($A{zeile}="","",$A{zeile}&"|{key}")')
+    basisjahr = bwa._basisjahr(modell)
+    for block, lw in enumerate(list(modell.neukauf.values())[:MAX_NEUKAUF]):
+        kopf = erste + block * je
+        ws.cell(row=kopf, column=1, value=lw.objekt_id)
+        ws.cell(row=kopf, column=2, value=lw.name)
+        for k, (key, _, _, _) in enumerate(NEUKAUF_POSITIONEN):
+            for jahr, wert in lw.jahre.get(key, {}).items():
+                i = jahr - basisjahr
+                if 0 <= i < n:
+                    ws.cell(row=kopf + k, column=j0 + i, value=wert)
+                    ws.cell(row=kopf + k, column=import0 + i, value=wert)
+    a, imp = get_column_letter(j0), get_column_letter(import0)
+    ws.conditional_formatting.add(
+        f"{a}{erste}:{get_column_letter(j0 + n - 1)}{letzte}",
+        FormulaRule(formula=[f"AND(ISNUMBER({a}{erste}),{a}{erste}={imp}{erste})"],
+                    fill=FILL_EINGELESEN))
+    for i in range(n + 1):
+        ws.column_dimensions[get_column_letter(import0 + i)].hidden = True
+    for i in range(n):
+        ws.column_dimensions[get_column_letter(j0 + i)].width = 11
+        ws.column_dimensions[get_column_letter(fort0 + i)].width = 11
+    for spalte, breite in zip("ABCD", (12, 22, 18, 14)):
+        ws.column_dimensions[spalte].width = breite
+    ws.freeze_panes = "E3"
 
 
 def _blatt_prognose(wb) -> None:
@@ -996,14 +1096,14 @@ SCHRITTE = [
 ]
 # Blattreiter: gelb Eingabe, grau Rechnung, blau Ausgabe, grün Kontrolle
 REITER = {"Start": "305496", "Parameter": "FFC000", "Objekte": "FFC000", "Anlagen": "FFC000",
-          "AfA-Plan": "FFC000",
+          "AfA-Plan": "FFC000", "Neukauf-KSt": "FFC000",
           "Verkäufe": "FFC000",
           "Neuobjekte": "FFC000", "Prognose": "A5A5A5", "Rücklagen": "A5A5A5",
           "Liquidität": "A5A5A5", "Prüfung": "70AD47", "Varianten": "70AD47",
           "BWA-Zuordnung": "FFC000"}
 FARBE_AUSGABE = "5B9BD5"
 # im Schnellcheck ausgeblendet; über Rechtsklick auf einen Reiter wieder einblendbar
-SCHNELL_AUSGEBLENDET = ("AfA-Plan", "Prognose", "Rücklagen", "Liquidität", "Auswertung")
+SCHNELL_AUSGEBLENDET = ("AfA-Plan", "Neukauf-KSt", "Prognose", "Rücklagen", "Liquidität", "Auswertung")
 
 
 def _link(zelle, blatt: str) -> None:
@@ -1143,6 +1243,7 @@ def erstelle_mappe(modell: Modell) -> Workbook:
     _blatt_objekte(wb, modell)
     _blatt_anlagen(wb, modell)
     _blatt_afa_plan(wb, modell)
+    _blatt_neukauf(wb, modell)
     _blatt_verkaeufe(wb, modell)
     _blatt_neuobjekte(wb, modell)
     _blatt_prognose(wb)

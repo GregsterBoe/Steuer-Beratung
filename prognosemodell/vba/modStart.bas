@@ -35,6 +35,8 @@ Private Function Schaltflaechen() As Variant
         Array("Objekt duplizieren", "ObjektDuplizierenStarten"), _
         Array("Objekt entfernen", "ObjektEntfernenStarten"), _
         Array("Annahmen wiederherstellen (leere Felder)", "AnnahmenWiederherstellenStarten"), _
+        Array("Objekte -> Kostenstellen ({ue}berschriebene Werte)", _
+              "InKostenstelleUebernehmenStarten"), _
         Array("Leere Prognosebl{oe}cke aus-/einblenden", "LeereBloeckeUmschaltenStarten"))
 End Function
 
