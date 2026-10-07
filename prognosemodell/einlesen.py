@@ -10,13 +10,14 @@ gesucht wird über die BWA-Nummer, nie über die Zeilenposition.
 import dataclasses
 import re
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 
 from openpyxl import load_workbook
 
-from .modelle import Objekt
+from .modelle import (AFA_DEGRESSIV, AFA_LINEAR, ART_BGA, ART_FINANZ, ART_GEBAEUDE, ART_GUB,
+                      ART_IM_BAU, ART_SONSTIGE, METHODE_KEINE, Anlage, Objekt)
 
 # Feste Stellen im Blatt
 ZELLE_ID = "B2"        # Kostenstelle, z. B. "KSt 1"
@@ -38,6 +39,16 @@ BWA_AUSGABEN = (1100, 1120, 1140, 1150, 1160, 1180, 1200, 1220, 1260)
 BWA_ABSCHREIBUNG = (1240,)  # nur Abgleich mit der AfA-Fortschreibung
 
 
+# Aufschlüsselung der Abschreibungen unter der BWA (ohne BWA-Nr., Beschriftung in Spalte C):
+# Block „Buchwert, JE“ mit einer Zeile je Anlagengruppe, Block „Abschreibungen JW“ mit der
+# Jahres-AfA je Gruppe; „Abschreibungen MW“ (Monatswerte) beendet die Blöcke.
+# Gelesen wird die Spalte des Jahres Stand Anlagenverzeichnis (Wj-Ende, im Muster F).
+SPALTE_TEXT = 3        # C
+BLOCK_BUCHWERT = "buchwert"
+BLOCK_AFA_JAHR = "abschreibungen jw"
+BLOCK_ENDE = "abschreibungen mw"
+
+
 class EinleseFehler(ValueError):
     pass
 
@@ -56,6 +67,8 @@ class LaufendeWerte:
     # Ist-Werte je BWA-Nr. und Spalte im Ausgabelayout (vorlagen: F, G Vorjahre,
     # H–S Monate, T Basisjahr); für das BWA-Blatt der Mappe
     ist: dict = field(default_factory=dict)
+    # Aufschlüsselung der Abschreibungen je Anlagengruppe (Buchwert Stand, Jahres-AfA)
+    anlagen: list = field(default_factory=list)
 
 
 def _kopfjahr(wert) -> Optional[int]:
@@ -153,13 +166,73 @@ def _formatfehler(ws, basisjahr: int) -> Optional[str]:
     return None
 
 
-def lese_kostenstellen(pfad, basisjahr: int) -> tuple:
+def _zahl(wert) -> Optional[float]:
+    if isinstance(wert, bool) or not isinstance(wert, (int, float)):
+        return None
+    return float(wert)
+
+
+def _abschreibungsbloecke(ws, objekt_id: str, stand: int) -> list:
+    """Anlagengruppen aus der Aufschlüsselung unter der BWA; leer, wenn sie fehlt.
+
+    Buchwert und Jahres-AfA einer Gruppe werden über die Beschriftung verbunden: gleich,
+    sonst eine Beschriftung Anfang der anderen („TG“ zu „TG 24“), sonst die Reihenfolge.
+    Gruppen ohne Buchwert und ohne AfA (etwa „sonstige“ leer) entfallen.
+    """
+    spalte = _jahresspalte(ws, stand)
+    if spalte is None:
+        return []
+    bloecke, block = {BLOCK_BUCHWERT: [], BLOCK_AFA_JAHR: []}, None
+    for zeile in range(KOPFZEILE + 1, ws.max_row + 1):
+        text = ws.cell(row=zeile, column=SPALTE_TEXT).value
+        if not isinstance(text, str) or not text.strip():
+            continue  # Zwischensummen ohne Beschriftung
+        if ws.cell(row=zeile, column=SPALTE_NR).value not in (None, ""):
+            block = None  # BWA-Zeile
+            continue
+        kennung = text.strip().lower()
+        if kennung.startswith(BLOCK_ENDE):
+            block = None
+        elif kennung.startswith(BLOCK_AFA_JAHR):
+            block = BLOCK_AFA_JAHR
+        elif kennung.startswith(BLOCK_BUCHWERT):
+            block = BLOCK_BUCHWERT
+        elif block:
+            bloecke[block].append((text.strip(), _zahl(ws.cell(row=zeile, column=spalte).value)))
+    buchwerte, afas = bloecke[BLOCK_BUCHWERT], list(bloecke[BLOCK_AFA_JAHR])
+
+    def partner(i, name):
+        for kriterium in (lambda a: a.lower() == name.lower(),
+                          lambda a: name.lower().startswith(a.lower())
+                          or a.lower().startswith(name.lower())):
+            treffer = [j for j, (a, _) in enumerate(afas) if a is not None and kriterium(a)]
+            if len(treffer) == 1:
+                return treffer[0]
+        return i if i < len(afas) and afas[i][0] is not None else None
+
+    gruppen = []
+    for i, (name, buchwert) in enumerate(buchwerte):
+        j = partner(i, name)
+        afa = afas[j][1] if j is not None else None
+        if j is not None:
+            afas[j] = (None, None)   # jede AfA-Zeile nur einmal
+        if not buchwert and not afa:
+            continue
+        gruppen.append(Anlage(
+            nr=f"{objekt_id} {name}", bezeichnung=name, objekt_id=objekt_id, art=ART_GEBAEUDE,
+            methode=AFA_LINEAR, bw_stand=buchwert or 0.0, afa=afa or 0.0))
+    return gruppen
+
+
+def lese_kostenstellen(pfad, basisjahr: int, stand: int = None) -> tuple:
     """Liest alle Kostenstellenblätter der Kanzlei-Excel.
 
     Blätter mit anderem Format (etwa Annahmen oder Übersichten) werden übersprungen.
+    stand: Jahr der Aufschlüsselung der Abschreibungen (Wj-Ende), Standard Basisjahr − 1.
     Rückgabe: (je Kostenstellenblatt eine LaufendeWerte-Zeile,
     Liste (Blatttitel, Grund) der übersprungenen Blätter).
     """
+    stand = basisjahr - 1 if stand is None else stand
     pfad = Path(pfad)
     werte_wb = load_workbook(pfad, data_only=True)   # berechnete Werte
     formel_wb = load_workbook(pfad, data_only=False)  # nur für Fehlermeldungen
@@ -193,6 +266,7 @@ def lese_kostenstellen(pfad, basisjahr: int) -> tuple:
             weitere_ausgaben=summe(BWA_AUSGABEN),
             abschreibung=summe(BWA_ABSCHREIBUNG),
             ist=_ist_werte(ws, zeilen, basisjahr),
+            anlagen=_abschreibungsbloecke(ws, objekt_id, stand),
         ))
     if not ergebnis:
         gruende = "; ".join(f"{t!r}: {g}" for t, g in uebersprungen)
@@ -220,3 +294,177 @@ def zusammenfuehren(stammdaten: list, laufende: list) -> list:
         else:
             ergebnis.append(Objekt(objekt_id=lw.objekt_id, name=lw.name, **felder))
     return ergebnis
+
+
+# --- Anlagenverzeichnis (DATEV-Export „Inventarübersicht“, Projektplan Abschnitt 21) ---
+#
+# Eine Zeile je Anlagegut, Spalten über die Kopfzeile gesucht. Die Kostenstelle steht in
+# KOST1; sie verweist auf das Kostenstellenblatt (KOST1 1 = „KSt 1“).
+
+INVENTAR_SPALTEN = {
+    "konto": "Konto", "nr": "Inventar", "bezeichnung": "Inventarbezeichnung",
+    "datum": "AHK-Datum", "ahk": "AHK Wj-Ende", "bw_stand": "Buchw. Wj-Ende",
+    "afa_ende": "N-AfA Wj-Ende", "afa_beginn": "N-AfA Wj-Beginn",
+    "sonder_ende": "S-Abschr. Wj-Ende", "sonder_beginn": "S-Abschr. Wj-Beginn",
+    "afa_art": "AfA-Art", "satz": "AfA-%", "kost1": "KOST1", "abgang": "Abgang",
+}
+INVENTAR_PFLICHT = ("nr", "bw_stand", "kost1")
+# Art je Kontenbereich (SKR04, 3- oder 4-stellig ohne führende Null); im Blatt änderbar
+KONTEN_ART = [(200, 239, ART_GUB), (240, 399, ART_GEBAEUDE), (400, 699, ART_BGA),
+              (700, 799, ART_IM_BAU), (800, 999, ART_FINANZ)]
+# AfA-Art lt. DATEV geht vor dem Konto
+AFA_ART_ART = [("lin.geb", ART_GEBAEUDE), ("anlag./bau", ART_IM_BAU), ("finanzanl", ART_FINANZ)]
+AFA_ART_OHNE = ("keine afa", "anlag./bau", "finanzanl")
+KST_PRAEFIX = "KSt "
+STAND_IM_NAMEN = re.compile(r"(?<!\d)(20\d\d)(?!\d)")
+
+
+def art_aus(konto, afa_art) -> str:
+    text = (afa_art or "").strip().lower()
+    for anfang, art in AFA_ART_ART:
+        if text.startswith(anfang):
+            return art
+    if isinstance(konto, (int, float)):
+        for von, bis, art in KONTEN_ART:
+            if von <= konto <= bis:
+                return art
+    return ART_SONSTIGE
+
+
+def methode_aus(afa_art, satz) -> str:
+    text = (afa_art or "").strip().lower()
+    if not text or text.startswith(AFA_ART_OHNE) or not satz:
+        return METHODE_KEINE
+    return AFA_DEGRESSIV if "degr" in text else AFA_LINEAR
+
+
+def _datum(wert) -> Optional[date]:
+    if isinstance(wert, datetime):
+        return wert.date()
+    if isinstance(wert, date):
+        return wert
+    if isinstance(wert, str) and wert.strip():
+        try:
+            return datetime.strptime(wert.strip(), "%d.%m.%Y").date()
+        except ValueError:
+            raise EinleseFehler(f"Datum nicht lesbar: {wert!r}") from None
+    return None
+
+
+def _text(wert) -> Optional[str]:
+    if wert is None:
+        return None
+    if isinstance(wert, float) and wert.is_integer():
+        wert = int(wert)
+    text = str(wert).strip()
+    return text or None
+
+
+def stand_aus_dateiname(pfad) -> Optional[int]:
+    """Jahr im Dateinamen, etwa Inventar_2025.xlsx; None, wenn keins oder mehrere."""
+    treffer = set(STAND_IM_NAMEN.findall(Path(pfad).stem))
+    return int(treffer.pop()) if len(treffer) == 1 else None
+
+
+def lese_inventar(pfad) -> tuple:
+    """Liest das Anlagenverzeichnis. Rückgabe: (Anlagen, Anzahl abgegangener Anlagen).
+
+    Abgegangene Anlagen (Datum in Abgang) entfallen. KOST1 bleibt zunächst roh;
+    die ObjektID setzt ordne_anlagen_zu.
+    """
+    pfad = Path(pfad)
+    wb = load_workbook(pfad, data_only=True)
+    for ws in wb.worksheets:
+        for kopf in range(1, min(ws.max_row, 10) + 1):
+            texte = {str(c.value).strip(): c.column for c in ws[kopf] if c.value is not None}
+            spalten = {k: texte.get(v) for k, v in INVENTAR_SPALTEN.items()}
+            if all(spalten[k] for k in INVENTAR_PFLICHT):
+                break
+        else:
+            continue
+        break
+    else:
+        pflicht = ", ".join(INVENTAR_SPALTEN[k] for k in INVENTAR_PFLICHT)
+        raise EinleseFehler(f"{pfad.name}: keine Inventarübersicht (Kopf mit {pflicht})")
+
+    def wert(zeile, key):
+        spalte = spalten[key]
+        return ws.cell(row=zeile, column=spalte).value if spalte else None
+
+    def zahl(zeile, key):
+        w = wert(zeile, key)
+        if w in (None, ""):
+            return None
+        if not isinstance(w, (int, float)) or isinstance(w, bool):
+            raise EinleseFehler(f"{pfad.name}, Zeile {zeile}, {INVENTAR_SPALTEN[key]}: "
+                                f"kein Zahlenwert ({w!r})")
+        return float(w)
+
+    anlagen, abgang, gesehen = [], 0, {}
+    for zeile in range(kopf + 1, ws.max_row + 1):
+        nr = _text(wert(zeile, "nr"))
+        if nr is None:
+            continue
+        if nr in gesehen:
+            raise EinleseFehler(f"{pfad.name}: Inventar {nr} doppelt (Zeilen {gesehen[nr]} "
+                                f"und {zeile})")
+        gesehen[nr] = zeile
+        if _text(wert(zeile, "abgang")):
+            abgang += 1
+            continue
+        konto = zahl(zeile, "konto")
+        afa_art = _text(wert(zeile, "afa_art"))
+        satz = zahl(zeile, "satz")
+        satz = satz / 100 if satz is not None else None
+        afa_stand = sum(v or 0.0 for v in (zahl(zeile, "afa_ende"), zahl(zeile, "sonder_ende"))) \
+            - sum(v or 0.0 for v in (zahl(zeile, "afa_beginn"), zahl(zeile, "sonder_beginn")))
+        anlagen.append(Anlage(
+            nr=nr, bezeichnung=_text(wert(zeile, "bezeichnung")),
+            konto=int(konto) if konto is not None else None,
+            kost1=_text(wert(zeile, "kost1")), datum=_datum(wert(zeile, "datum")),
+            ahk=zahl(zeile, "ahk"), bw_stand=zahl(zeile, "bw_stand") or 0.0,
+            afa_art=afa_art, satz=satz, art=art_aus(konto, afa_art),
+            methode=methode_aus(afa_art, satz), afa_stand=round(afa_stand, 2)))
+    return anlagen, abgang
+
+
+def ordne_anlagen_zu(anlagen: list, objekt_ids) -> list:
+    """ObjektID aus KOST1: die ObjektID mit derselben Endnummer (1 zu „KSt 1“),
+    sonst „KSt <KOST1>“. Ohne KOST1 bleibt die Anlage ohne Objekt."""
+    nach_nummer = {}
+    for oid in objekt_ids:
+        treffer = re.search(r"(\d+)\s*$", str(oid or ""))
+        if treffer:
+            nach_nummer.setdefault(int(treffer.group(1)), []).append(oid)
+    ergebnis = []
+    for a in anlagen:
+        oid = a.objekt_id
+        if oid is None and a.kost1:
+            kost = int(a.kost1) if a.kost1.isdigit() else None
+            kandidaten = nach_nummer.get(kost, []) if kost is not None else []
+            oid = kandidaten[0] if len(kandidaten) == 1 else (
+                f"{KST_PRAEFIX}{kost}" if kost is not None else a.kost1)
+        ergebnis.append(dataclasses.replace(a, objekt_id=oid))
+    return ergebnis
+
+
+def anlagen_zusammenfuehren(inventar: list, laufende: list) -> tuple:
+    """Anlagen für das Blatt Anlagen: das Anlagenverzeichnis, dazu für Kostenstellen ohne
+    Anlage darin die Gruppen aus der Aufschlüsselung im Kostenstellenblatt.
+
+    Rückgabe: (Anlagen, Abgleich je Kostenstelle mit beiden Quellen als Liste
+    (ObjektID, Buchwert lt. Verzeichnis, lt. Kostenstelle, AfA p. a. lt. Kostenstelle)).
+    """
+    mit_inventar = {a.objekt_id for a in inventar if a.objekt_id}
+    ergebnis, abgleich = list(inventar), []
+    for lw in laufende:
+        if not lw.anlagen:
+            continue
+        if lw.objekt_id in mit_inventar:
+            bw = sum(a.bw_stand or 0.0 for a in inventar if a.objekt_id == lw.objekt_id
+                     and a.art in (ART_GEBAEUDE, ART_BGA, ART_IM_BAU))
+            abgleich.append((lw.objekt_id, bw, sum(g.bw_stand for g in lw.anlagen),
+                             sum(g.afa for g in lw.anlagen)))
+        else:
+            ergebnis.extend(lw.anlagen)
+    return ergebnis, abgleich

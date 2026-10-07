@@ -69,6 +69,9 @@ PARAMETER = [
               "vereinfacht: Verkäufe innerhalb dieses Zeitraums; fachlich prüfen"),
     Parameter("par_StatusPruefung", "Plausibilitätsprüfung", "=pr_Gesamt", FMT_TEXT,
               "berechnet; Einzelheiten im Blatt Prüfung"),
+    Parameter("par_AnlStand", "Stand Anlagenverzeichnis (Wj-Ende)", "=par_Basisjahr-1", FMT_JAHR,
+              "Jahr der Buchwerte im Blatt Anlagen; die AfA bis zum Ende des Basisjahrs "
+              "rechnet das Blatt fort"),
     # Auffülllogik: stehen als Formel (blau) in leeren Eingabezellen, überschreibbar
     Parameter("par_AnnVervielfaeltiger", "Verkehrswert = Jahresmiete ×", 20, "0.0",
               "Vervielfältiger, 20 = Bruttomietrendite 5 %; Platzhalter",
@@ -129,7 +132,7 @@ CODENAMEN = {
     "Objekte": "wsObjekte", "Verkäufe": "wsVerkaeufe", "Neuobjekte": "wsNeuobjekte",
     "Prognose": "wsPrognose", "Rücklagen": "wsRuecklagen", "Liquidität": "wsLiquiditaet",
     "Auswertung": "wsAuswertung", "Prüfung": "wsPruefung", "Varianten": "wsVarianten",
-    "BWA-Zuordnung": "wsBWAZuordnung",
+    "BWA-Zuordnung": "wsBWAZuordnung", "Anlagen": "wsAnlagen",
 }
 
 
@@ -179,22 +182,26 @@ OBJEKT_FELDER = [
          annahme=True, kritisch=True, hinweis="leer: AfA-Satz Bestand (Parameter)"),
     Feld("kaufjahr", "Kaufjahr", "obj_Kaufjahr", FMT_JAHR, False, 10,
          minimum=1900, maximum=2100, ganzzahl=True, annahme=True, kritisch=True,
-         hinweis="leer: Basisjahr − Jahre seit Kauf (Parameter); zählt für die § 6b-Vorbesitzzeit"),
+         hinweis="leer: frühester Zugang G+B oder Gebäude im Blatt Anlagen, sonst Basisjahr − "
+                 "Jahre seit Kauf (Parameter); zählt für die § 6b-Vorbesitzzeit"),
     Feld("ak_gebaeude", "AK Gebäude", "obj_AKGebaeude", FMT_EURO, False, minimum=0,
          annahme=True, kritisch=True,
-         hinweis="leer: AfA lt. Buchhaltung / AfA-Satz, sonst Verkehrswert × Gebäudeanteil, "
-                 "abgezinst mit der Wertsteigerung bis zum Kaufjahr"),
+         hinweis="leer: Summe AHK der abnutzbaren Anlagen (Blatt Anlagen), sonst AfA lt. "
+                 "Buchhaltung / AfA-Satz, sonst Verkehrswert × Gebäudeanteil, abgezinst bis "
+                 "zum Kaufjahr"),
     Feld("ak_gub", "AK G+B", "obj_AKGuB", FMT_EURO, False, minimum=0, annahme=True,
-         kritisch=True, hinweis="leer: AK Gebäude × G+B-Anteil / Gebäudeanteil"),
+         kritisch=True, hinweis="leer: Buchwert G+B im Blatt Anlagen, sonst AK Gebäude × "
+                                "G+B-Anteil / Gebäudeanteil"),
     Feld("restbuchwert", "Restbuchwert Gebäude Basisjahr", "obj_Restbuchwert", FMT_EURO, False,
          minimum=0, annahme=True, kritisch=True,
-         hinweis="leer: AK Gebäude − AfA je Jahr seit Kauf bis Ende Basisjahr; "
-                 "0, wenn die Buchhaltung keine AfA mehr zeigt"),
+         hinweis="leer: Buchwert der abnutzbaren Anlagen Ende Basisjahr (Blatt Anlagen), sonst "
+                 "AK Gebäude − AfA je Jahr seit Kauf; 0, wenn die Buchhaltung keine AfA mehr zeigt"),
     # die AfA der Buchhaltung läuft in der Prognose weiter, bis der Restbuchwert verbraucht ist
     Feld("afa_jahr", "AfA je Jahr (Prognose)", "obj_AfAJahr", FMT_EURO, False, minimum=0,
          annahme=True, abgeleitet=True,
-         hinweis="leer: AfA lt. Buchhaltung (auch 0), ohne Buchhaltung AK Gebäude × AfA-Satz; "
-                 "läuft bis der Restbuchwert verbraucht ist"),
+         hinweis="leer: AfA im ersten Prognosejahr lt. Blatt Anlagen (die Prognose folgt dann "
+                 "je Anlage deren Buchwert), sonst AfA lt. Buchhaltung (auch 0), sonst AK Gebäude "
+                 "× AfA-Satz; läuft bis der Restbuchwert verbraucht ist"),
     # Erhaltung nach Alter; die Großmaßnahme zählt als sofort abziehbarer Erhaltungsaufwand
     Feld("baujahr", "Baujahr", "obj_Baujahr", FMT_JAHR, False, 10, minimum=1800, maximum=2100,
          ganzzahl=True, annahme=True,
@@ -225,6 +232,75 @@ class Spalte:
     name: str            # benannter Bereich über die Spalte
     format: str
     breite: int = 14
+
+
+# Blatt Anlagen (Anlagenverzeichnis, Projektplan Abschnitt 21): eine Zeile je Anlagegut,
+# zugeordnet über die ObjektID. Liefert AK, Buchwert, Kaufjahr und die AfA je Jahr.
+MIN_ANLAGEN = 300          # Zeilen mindestens; mehr, wenn mehr eingelesen werden
+ART_GUB, ART_GEBAEUDE, ART_BGA, ART_IM_BAU = "G+B", "Gebäude", "BGA", "im Bau"
+ART_FINANZ, ART_SONSTIGE = "Finanzanlage", "sonstige"
+ANLAGE_ARTEN = (ART_GUB, ART_GEBAEUDE, ART_BGA, ART_IM_BAU, ART_FINANZ, ART_SONSTIGE)
+# gehören zum Gebäudebuchwert des Objekts (abnutzbar, im Bau noch ohne AfA)
+ARTEN_ABNUTZBAR = (ART_GEBAEUDE, ART_BGA, ART_IM_BAU)
+GRUPPE_ABNUTZBAR = "abnutzbar"
+METHODE_KEINE = "keine"
+AFA_LINEAR = "linear"
+AFA_DEGRESSIV = "degressiv"
+ANLAGE_METHODEN = (AFA_LINEAR, AFA_DEGRESSIV, METHODE_KEINE)
+ANLAGE_FELDER = [
+    Feld("nr", "Inventar-Nr.", "anl_Nr", FMT_TEXT, True, 14,
+         hinweis="eindeutig je Anlage; bei Gruppen aus dem Kostenstellenblatt Kostenstelle "
+                 "und Bezeichnung"),
+    Feld("bezeichnung", "Bezeichnung", "anl_Bez", FMT_TEXT, False, 24),
+    Feld("konto", "Konto", "anl_Konto", FMT_ZAHL, False, 8),
+    Feld("kost1", "KOST1", "anl_KOST1", FMT_TEXT, False, 8,
+         hinweis="Kostenstelle lt. Anlagenverzeichnis; nur zur Information"),
+    Feld("objekt_id", "ObjektID", "anl_ID", FMT_TEXT, False, 12,
+         hinweis="ObjektID im Blatt Objekte; beim Einlesen aus KOST1 (1 = KSt 1). Leer: "
+                 "die Anlage zählt zu keinem Objekt"),
+    Feld("art", "Art", "anl_Art", FMT_TEXT, True, 12, auswahl=ANLAGE_ARTEN,
+         hinweis="G+B: Grund und Boden, keine AfA. Gebäude, BGA, im Bau: abnutzbar, bilden den "
+                 "Gebäudebuchwert. Finanzanlage, sonstige: nicht im Modell"),
+    Feld("datum", "AHK-Datum", "anl_Datum", "DD.MM.YYYY", False, 11,
+         hinweis="Zugang; der früheste Zugang G+B oder Gebäude ist das Kaufjahr des Objekts"),
+    Feld("ahk", "AHK", "anl_AHK", FMT_EURO, False, minimum=0),
+    Feld("bw_stand", "Buchwert Stand (Wj-Ende)", "anl_BWStand", FMT_EURO, True, minimum=0,
+         hinweis="Buchwert am Ende des Jahres Stand Anlagenverzeichnis (Parameterblatt)"),
+    Feld("afa_art", "AfA-Art lt. Inventar", "anl_AfAArt", FMT_TEXT, False, 12),
+    Feld("methode", "AfA-Methode", "anl_Methode", FMT_TEXT, True, 11, auswahl=ANLAGE_METHODEN,
+         hinweis="linear: AfA p. a. bis der Buchwert verbraucht ist; degressiv: AfA-Satz vom "
+                 "Buchwert; keine: G+B, im Bau, Finanzanlagen"),
+    Feld("satz", "AfA-Satz", "anl_Satz", FMT_PROZENT, False, 9, minimum=0, maximum=1),
+    Feld("afa", "AfA p. a.", "anl_AfA", FMT_EURO, False, minimum=0, annahme=True,
+         abgeleitet=True,
+         hinweis="leer: linear AHK × AfA-Satz, auf volle Euro aufgerundet wie DATEV; degressiv "
+                 "Buchwert Stand × Satz. Eintippen ersetzt die Formel"),
+    Feld("afa_stand", "AfA im Stand-Jahr lt. Inventar", "anl_AfAStand", FMT_EURO, False,
+         hinweis="nur zur Kontrolle; enthält zeitanteilige AfA bei Zugang im Jahr"),
+]
+ANLAGE_SPALTEN = [
+    Spalte("gruppe", "Gruppe", "anl_Gruppe", FMT_TEXT, 11),
+    Spalte("zugang", "Zugangsjahr G+B/Gebäude", "anl_Zugang", FMT_JAHR, 10),
+    Spalte("bw_basis", "Buchwert Ende Basisjahr", "anl_BWBasis", FMT_EURO, 15),
+    Spalte("afa_basis", "AfA Basisjahr", "anl_AfABasis", FMT_EURO),
+]
+ANLAGE_STATUS_NAME = "anl_Status"
+# berechnete Spalten im Blatt Objekte nach dem Status: was das Blatt Anlagen je Objekt liefert
+OBJEKT_ANLAGEN_SPALTEN = [
+    Spalte("anl_abn", "Anlagen abnutzbar", "obj_AnlAbn", FMT_ZAHL, 10),
+    Spalte("anl_ak", "davon mit AHK", "obj_AnlAK", FMT_ZAHL, 9),
+    Spalte("anl_gub", "Anlagen G+B", "obj_AnlGuB", FMT_ZAHL, 9),
+    Spalte("anl_kauf", "Anlagen mit Zugangsjahr", "obj_AnlKauf", FMT_ZAHL, 10),
+    Spalte("anl_afa", "AfA Basisjahr lt. Anlagen", "obj_AnlAfA", FMT_EURO, 14),
+    Spalte("anl_diff", "Abweichung zur AfA lt. Buchhaltung", "obj_AnlDiff", FMT_EURO, 14),
+]
+# Spalten nach den Eingabefeldern: Status, Annahmen, kritische Annahmen, dann die obigen
+OBJEKT_ERSTE_ANLAGEN_SPALTE = 3
+ANLAGE_JAHRE_NAME = "anl_AfAJahre"   # AfA je Prognosejahr, eine Spalte je Jahr
+# Statustexte; nur OK zählt in die Objekte
+ANL_NICHT_IM_MODELL = "nicht im Modell (Art)"
+ANL_OHNE_OBJEKT = "ohne ObjektID"
+ANL_OBJEKT_FEHLT = "ObjektID fehlt im Blatt Objekte"
 
 
 # Blatt Prognose: eine Zeile je Objekt und Jahr (Long-Format, Projektplan Abschnitt 8)
@@ -259,6 +335,9 @@ PROGNOSE_SPALTEN = [
     Spalte("erhaltung_halten", "Erhaltung bei Halten", "prg_ErhaltungHalten", FMT_EURO),
     # Sonderbereich Verkauf und Kauf: RücklageID, aus der das Neuobjekt gekauft ist
     Spalte("quelle", "Quelle RücklageID", "prg_Quelle", FMT_TEXT, 14),
+    # AfA, als würde das Objekt nie verkauft: je Anlage aus dem Blatt Anlagen, sonst AfA je
+    # Jahr bis zum Restbuchwert; der Plan nimmt sie bis zum Verkaufsjahr
+    Spalte("afa_halten", "AfA bei Halten", "prg_AfAHalten", FMT_EURO),
 ]
 
 # Blatt Verkäufe (Etappe 4, Projektplan Abschnitt 11): Eingaben, dann berechnete Spalten
@@ -329,9 +408,6 @@ RUECKLAGE_JAHR_SPALTEN = [
     Spalte("bestand", "Rücklagenbestand Ende", "rls_Bestand", FMT_EURO, 15),
 ]
 
-
-AFA_LINEAR = "linear"
-AFA_DEGRESSIV = "degressiv"
 
 # Blatt Neuobjekte (Etappe 6, Projektplan Abschnitt 13): Kauf zum Jahresende,
 # Miete und AfA ab dem Folgejahr
@@ -507,6 +583,25 @@ class Objekt:
 
 
 @dataclass
+class Anlage:
+    """Eine Zeile des Anlagenverzeichnisses. None = Feld leer lassen."""
+    nr: str
+    bw_stand: Optional[float]
+    art: Optional[str] = None
+    methode: Optional[str] = None
+    bezeichnung: Optional[str] = None
+    konto: Optional[int] = None
+    kost1: Optional[str] = None
+    objekt_id: Optional[str] = None
+    datum: Optional[object] = None       # datetime.date
+    ahk: Optional[float] = None
+    afa_art: Optional[str] = None
+    satz: Optional[float] = None
+    afa: Optional[float] = None          # leer = Formel aus AHK × Satz
+    afa_stand: Optional[float] = None
+
+
+@dataclass
 class Verkauf:
     """Geplanter Verkauf zum Ende des Verkaufsjahrs. None = Feld leer lassen."""
     objekt_id: str
@@ -582,6 +677,12 @@ PRUEFUNGEN = [
              "Blatt BWA-Zuordnung, Spalte BWA-Nr. und Kontrolle"),
     Pruefung("annahmen", "Objekte mit Annahmen (blau): Werte aus der Auffülllogik des "
              "Parameterblatts", HINWEIS, "Blatt Objekte, Spalte Annahmen"),
+    Pruefung("anlagen", "Anlagen G+B, Gebäude, BGA oder im Bau ohne Objekt (keine oder unbekannte "
+             "ObjektID) oder mit fehlender Angabe: AK und Buchwert fehlen im Modell",
+             HINWEIS, "Blatt Anlagen, Spalte Status"),
+    Pruefung("anlagen_afa", "Objekte, deren AfA im Basisjahr lt. Blatt Anlagen von der AfA lt. "
+             "Buchhaltung (BWA 1240) um mehr als 1 € abweicht: Zuordnung der Anlagen prüfen",
+             HINWEIS, "Blatt Objekte, Spalten AfA Basisjahr lt. Anlagen und lt. Buchhaltung"),
 ]
 
 # Blatt Varianten: je Makrolauf eine Zeile mit festen Werten (Projektplan Abschnitt 19)
@@ -598,6 +699,8 @@ class Modell:
     neuobjekte: list = field(default_factory=list)
     # abweichende Parameterwerte, z. B. {"par_Alternativrendite": 0}
     parameter: dict = field(default_factory=dict)
+    # Anlagenverzeichnis (Blatt Anlagen), je Zeile eine Anlage
+    anlagen: list = field(default_factory=list)
     # Ist-Werte aus den Kostenstellenblättern je ObjektID (einlesen.LaufendeWerte);
     # ohne Eintrag zeigt das BWA-Blatt im Basisjahr die Werte des Objektblatts
     kostenstellen: dict = field(default_factory=dict)

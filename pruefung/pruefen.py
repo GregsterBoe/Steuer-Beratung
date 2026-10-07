@@ -17,14 +17,15 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
-from prognosemodell.einlesen import lese_kostenstellen, zusammenfuehren
+from prognosemodell.einlesen import (anlagen_zusammenfuehren, lese_inventar, lese_kostenstellen,
+                                     ordne_anlagen_zu, zusammenfuehren)
 from prognosemodell.makros import LibreOffice, speichere_mit_makros
 from prognosemodell.mappe import erstelle_mappe
 from prognosemodell.modelle import (FEHLER, HINWEIS, MAX_OBJEKTE, PRUEFUNGEN,
                                     STATUS_ANNAHME_GELOESCHT, WARNUNG, Modell, Neuobjekt,
                                     Objekt, Verkauf, prognosejahre)
 from prognosemodell.testdaten import testobjekt
-from prognosemodell.vorlagen import erstelle_vorlage
+from prognosemodell.vorlagen import erstelle_inventar_vorlage, erstelle_vorlage
 
 TOLERANZ = 0.01  # ein Cent
 # Fälle vor der Alterslogik: Sollwerte ohne Alterung, Anlaufminderung und Großmaßnahmen.
@@ -170,6 +171,22 @@ def vorlage_eingelesen() -> Modell:
     stamm = [dataclasses.replace(testobjekt(), objekt_id="KSt 1", name=None)]
     return Modell(objekte=zusammenfuehren(stamm, laufende),
                   kostenstellen={lw.objekt_id: lw for lw in laufende})
+
+
+def anlagen_eingelesen(inventar: bool = True, **parameter) -> Modell:
+    """Modell nur aus den Vorlagen: BWA je Kostenstelle, Anlagenverzeichnis (KSt 1 = Daten des
+    Testobjekts, KSt 2 mit auslaufender Außenanlage und Anlage im Bau). Ohne Inventar zählt
+    die Aufschlüsselung der Abschreibungen aus den Kostenstellenblättern."""
+    with tempfile.TemporaryDirectory() as tmp:
+        bwa, inv = Path(tmp) / "bwa.xlsx", Path(tmp) / "inventar.xlsx"
+        erstelle_vorlage().save(bwa)
+        erstelle_inventar_vorlage().save(inv)
+        laufende, _ = lese_kostenstellen(bwa, 2026)
+        anlagen = lese_inventar(inv)[0] if inventar else []
+    objekte = zusammenfuehren([], laufende)
+    anlagen = ordne_anlagen_zu(anlagen, [o.objekt_id for o in objekte])
+    return Modell(objekte=objekte, kostenstellen={lw.objekt_id: lw for lw in laufende},
+                  anlagen=anlagen_zusammenfuehren(anlagen, laufende)[0], parameter=parameter)
 
 
 def faelle():
@@ -1227,6 +1244,99 @@ def faelle():
             ("modRechnen", "NeuBerechnen", (), FEHLT),
         ]),
         # ohne Miete bleiben Erhaltung und AfA: Liquidität in allen 20 Jahren negativ
+        # Anlagenverzeichnis (Abschnitt 21): KSt 1 trifft die Stammdaten des Testobjekts,
+        # KSt 2: Gebäude 24.000 p. a., Außenanlage 6.000 p. a. mit Buchwert 15.000 Ende 2025
+        # (Rest 3.000 in 2028), im Bau 50.000 ohne AfA; Restbuchwert Ende 2026 =
+        # 852.000 + 9.000 + 50.000 = 911.000. Zeilen im Blatt Anlagen in der Reihenfolge der
+        # Vorlage ohne den Abgang: 6 G+B ohne KOST1, 7 KOST1 9 ohne Objekt, 8 degressiv, 9 Wertpapiere
+        ("Anlagen: Stammdaten und AfA je Anlage aus dem Anlagenverzeichnis",
+         anlagen_eingelesen(), [
+            ("obj_ID", 0, "KSt 1"),
+            ("obj_AKGebaeude", 0, 800_000),
+            ("obj_AKGuB", 0, 200_000),
+            ("obj_Kaufjahr", 0, 2007),
+            ("obj_AfASatz", 0, 0.02),
+            ("obj_Restbuchwert", 0, 480_000),
+            ("obj_AfAJahr", 0, 16_000),
+            ("obj_Status", 0, "OK"),
+            # nur noch Verkehrswert, Anteil, Baujahr, Großmaßnahme Jahr und Betrag
+            ("obj_Annahmen", 0, 5),
+            ("obj_AnlAbn", 0, 1),
+            ("obj_AnlAfA", 0, 16_000),
+            ("obj_AnlDiff", 0, 0),
+            ("prg_AfA", prg(1, 2027), 16_000),
+            ("prg_Buchwert", prg(1, 2046), 160_000),
+            ("obj_ID", 1, "KSt 2"),
+            ("obj_AKGebaeude", 1, 1_310_000),
+            ("obj_AKGuB", 1, 400_000),
+            ("obj_Kaufjahr", 1, 2012),        # Außenanlage 2018 und Anbau 2025 sind später
+            ("obj_AfASatz", 1, 30_000 / 1_310_000),
+            ("obj_Restbuchwert", 1, 911_000),
+            ("obj_AfAJahr", 1, 30_000),
+            ("obj_AnlAbn", 1, 3),
+            ("obj_AnlAK", 1, 3),
+            ("obj_AnlGuB", 1, 1),
+            ("obj_AnlKauf", 1, 3),
+            ("obj_AnlAfA", 1, 30_000),
+            ("prg_AfA", prg(2, 2027), 30_000),
+            ("prg_Buchwert", prg(2, 2027), 881_000),
+            ("prg_AfA", prg(2, 2028), 27_000),   # Außenanlage nur noch 3.000
+            ("prg_AfA", prg(2, 2029), 24_000),
+            ("prg_Buchwert", prg(2, 2046), 911_000 - 30_000 - 27_000 - 18 * 24_000),
+            ("prg_AfAHalten", prg(2, 2028), 27_000),
+            ("anl_Status", 0, "OK"),
+            ("anl_AfA", 3, 24_000),
+            ("anl_BWBasis", 3, 852_000),
+            ("anl_AfABasis", 4, 6_000),
+            ("anl_AfAJahre", 4, 6_000),           # 2027
+            ("anl_Gruppe", 5, "abnutzbar"),
+            ("anl_AfA", 5, 0),                    # im Bau
+            ("anl_Zugang", 5, None),
+            ("anl_Status", 6, "ohne ObjektID"),
+            ("anl_Status", 7, "ObjektID fehlt im Blatt Objekte"),
+            ("anl_AfA", 8, 200),                  # degressiv 25 % von 800
+            ("anl_BWBasis", 8, 600),
+            ("anl_AfAJahre", 8, 150),
+            ("anl_Status", 9, "nicht im Modell (Art)"),
+            ("anl_Status", 10, None),
+        ] + befund(annahmen=2, anlagen=3)),
+        ("Anlagen: Verkauf mit Buchwert aus dem Anlagenverzeichnis",
+         Modell(objekte=anlagen_eingelesen().objekte, anlagen=anlagen_eingelesen().anlagen,
+                verkaeufe=[Verkauf("KSt 2", 2028, preis=2_000_000, nutzung_6b="nein")]), [
+            ("vk_BuchwertGeb", 0, 854_000),
+            ("vk_AKGuB", 0, 400_000),
+            ("vk_Gewinn", 0, 2_000_000 - 854_000 - 400_000),
+            ("vk_Vorbesitz", 0, 16),
+            ("prg_AfA", prg(2, 2028), 27_000),
+            ("prg_AfA", prg(2, 2029), 0),            # nach dem Verkauf
+            ("prg_AfAHalten", prg(2, 2029), 24_000),  # Baseline hält weiter
+            ("prg_BuchwertHalten", prg(2, 2029), 830_000),
+            ("obj_Kritisch", 1, 1),                    # nur noch der Verkehrswertanteil
+        ] + befund(annahmen=2, anlagen=3, kritisch=1)),
+        ("Anlagen: nur Aufschlüsselung der Abschreibungen aus dem Kostenstellenblatt",
+         anlagen_eingelesen(inventar=False), [
+            ("anl_Status", 0, "OK"),
+            ("anl_Status", 4, None),                  # vier Gruppen
+            ("obj_Restbuchwert", 1, 911_000),
+            ("obj_AnlAK", 1, 0),
+            ("obj_AKGebaeude", 1, 1_500_000),         # Annahme AfA lt. BWA / 2 %
+            ("obj_Kaufjahr", 1, 2011),                # Annahme
+            ("obj_Annahmen", 1, 9),                   # Restbuchwert kommt aus den Gruppen
+            ("prg_AfA", prg(2, 2027), 30_000),
+            ("prg_AfA", prg(2, 2028), 27_000),
+            ("prg_AfA", prg(2, 2029), 24_000),
+            ("prg_AfA", prg(1, 2027), 16_000),
+        ]),
+        ("Anlagen: Stand des Anlagenverzeichnisses gleich Basisjahr",
+         anlagen_eingelesen(par_AnlStand=2026), [
+            ("obj_Restbuchwert", 0, 496_000),
+            ("obj_AnlAfA", 0, 16_000),                # AfA im Stand-Jahr lt. Inventar
+            ("prg_AfA", prg(1, 2027), 16_000),
+            ("prg_Buchwert", prg(1, 2027), 480_000),
+            ("obj_Restbuchwert", 1, 941_000),
+            ("prg_AfA", prg(2, 2028), 30_000),
+            ("prg_AfA", prg(2, 2029), 27_000),
+        ]),
         ("Etappe 9: Makro Prüfung meldet Fehler und Hinweis", Modell(objekte=[ohne_miete]), [
             ("pr_Gesamt", 0, "1 Fehler"),
         ], [

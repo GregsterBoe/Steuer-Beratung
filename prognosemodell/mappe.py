@@ -14,7 +14,9 @@ from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from . import bwa, formeln
-from .modelle import (CODENAME_MAPPE, CODENAMEN, FEHLER, OBJEKT_EINGELESEN, FMT_EURO, FMT_JAHR, FMT_PROZENT,
+from .modelle import (ANLAGE_FELDER, ANLAGE_JAHRE_NAME, ANLAGE_SPALTEN, ANLAGE_STATUS_NAME,
+                      MIN_ANLAGEN, OBJEKT_ANLAGEN_SPALTEN,
+                      CODENAME_MAPPE, CODENAMEN, FEHLER, OBJEKT_EINGELESEN, FMT_EURO, FMT_JAHR, FMT_PROZENT,
                       FMT_TEXT, FMT_ZAHL, HINWEIS, MAX_NEUOBJEKTE, MAX_VARIANTEN, PRUEFUNGEN,
                       VARIANTEN_KOPF, WARNUNG,
                       MAX_OBJEKTE, MAX_VERKAEUFE, NEU_FELDER, NEU_SPALTEN, NEU_STATUS_NAME, OBJEKT_FELDER,
@@ -43,7 +45,8 @@ FARBEN = [
      "§ 6b-Rücklage, möglichst durch echten Wert ersetzen"),
     (FILL_ANNAHME, "blau", "Annahme aus den zentralen Annahmen (Parameterblatt); "
      "Eintippen ersetzt sie"),
-    (FILL_EINGELESEN, "grün", "aus der Buchhaltung eingelesen, unverändert"),
+    (FILL_EINGELESEN, "grün", "aus der Buchhaltung eingelesen, unverändert, oder aus dem "
+     "Anlagenverzeichnis (Blatt Anlagen)"),
     (FILL_EINGABE, "gelb", "händisch eingetragen bzw. Eingabefeld"),
 ]
 ISF = formeln.ISFORMEL
@@ -91,14 +94,17 @@ def _validierung(ws, f, bereich: str) -> None:
 
 
 def _farblogik(ws, spalte: str, erste: int, letzte: int, f, id_spalte: str = "A",
-               verkauft: str = None, eingelesen: str = None) -> None:
+               verkauft: str = None, eingelesen: str = None, anlagen: str = None) -> None:
     """Bedingte Formate einer Eingabespalte, in dieser Reihenfolge (erste Regel gewinnt):
-    rot Pflicht/Annahme fehlt, orange kritische Annahme, blau Annahme, grün eingelesen."""
+    rot Pflicht/Annahme fehlt, grün aus dem Blatt Anlagen, orange kritische Annahme,
+    blau Annahme, grün eingelesen."""
     bereich = f"{spalte}{erste}:{spalte}{letzte}"
     z, id_ = f"{spalte}{erste}", f"${id_spalte}{erste}"
     regeln = []
     if f.pflicht or f.annahme:
         regeln.append((f'AND({id_}<>"",{z}="")', FILL_PFLICHT))
+    if anlagen:
+        regeln.append((f'AND({id_}<>"",{ISF}({z}),{anlagen})', FILL_EINGELESEN))
     if f.annahme and f.kritisch:
         bedingung = f",{verkauft}" if verkauft else ""
         regeln.append((f'AND({id_}<>"",{ISF}({z}){bedingung})', FILL_KRITISCH))
@@ -174,6 +180,10 @@ def _blatt_objekte(wb, modell: Modell) -> None:
              ("Annahmen (blau)", "obj_Annahmen", 11, formeln.annahmen_objekt),
              ("kritische Annahmen (orange)", "obj_Kritisch", 11,
               lambda z: formeln.annahmen_objekt(z, nur_kritisch=True))]
+    # was das Blatt Anlagen je Objekt liefert (formeln.hspalte kennt die Lage)
+    hilfe += [(s_.ueberschrift, s_.name, s_.breite,
+               lambda z, k=s_.key: formeln.objekt_anlagen(k, z)) for s_ in OBJEKT_ANLAGEN_SPALTEN]
+    formate = {s_.name: s_.format for s_ in OBJEKT_ANLAGEN_SPALTEN}
     # eingelesene Werte, ausgeblendet: grün, solange die Eingabe ihnen gleicht
     import_start = status_spalte + len(hilfe) + 1
     eingelesen = [f for f in OBJEKT_FELDER if f.key in OBJEKT_EINGELESEN]
@@ -191,7 +201,7 @@ def _blatt_objekte(wb, modell: Modell) -> None:
         _validierung(ws, f, f"{bst}{erste}:{bst}{letzte}")
         _farblogik(ws, bst, erste, letzte, f, verkauft=f"COUNTIF(vk_ID,$A{erste})>0",
                    eingelesen=f"${import_spalte[f.key]}{erste}" if f.key in import_spalte
-                   else None)
+                   else None, anlagen=formeln.deckung_anlagen(f.key, erste))
 
     for j, (_, name, breite, _) in enumerate(hilfe):
         bst = get_column_letter(status_spalte + j)
@@ -211,9 +221,11 @@ def _blatt_objekte(wb, modell: Modell) -> None:
 
     for zeile in range(erste, letzte + 1):
         annahmen(zeile)
-        for j, (_, _, _, formel) in enumerate(hilfe):
+        for j, (_, name, _, formel) in enumerate(hilfe):
             c = ws.cell(row=zeile, column=status_spalte + j, value=formel(zeile))
             c.fill = FILL_BERECHNET
+            if name in formate:
+                c.number_format = formate[name]
     st = get_column_letter(status_spalte)
     _status_rot(ws, f"{st}{erste}:{st}{letzte}", f"{st}{erste}")
 
@@ -240,6 +252,11 @@ def _blatt_objekte(wb, modell: Modell) -> None:
     for i, f in enumerate(eingelesen):
         bst = get_column_letter(import_start + i)
         ws.column_dimensions[bst].hidden = True
+    # Anlagen je Objekt als zuklappbare Gruppe
+    anl_erste = status_spalte + len(hilfe) - len(OBJEKT_ANLAGEN_SPALTEN)
+    ws.column_dimensions.group(get_column_letter(anl_erste),
+                               get_column_letter(status_spalte + len(hilfe) - 1),
+                               hidden=modell.schnellcheck, outline_level=1)
     # Steuerliche Stammdaten als Gruppe; im Schnellcheck zugeklappt
     details = [i for i, f in enumerate(OBJEKT_FELDER, start=1)
                if f.key not in ("objekt_id", "name", "miete", "erhaltung", "verkehrswert")
@@ -248,8 +265,73 @@ def _blatt_objekte(wb, modell: Modell) -> None:
                                hidden=modell.schnellcheck, outline_level=1)
     ws.freeze_panes = "B2"
     ws["A" + str(vorlage + 2)] = ("Farben: rot = Pflicht fehlt, orange = Annahme bei verkauftem "
-                                  "Objekt, blau = Annahme, grün = eingelesen, gelb = händisch. "
-                                  "Annahmen stellt das Parameterblatt ein.")
+                                  "Objekt, blau = Annahme, grün = eingelesen oder aus dem Blatt "
+                                  "Anlagen, gelb = händisch. Annahmen stellt das Parameterblatt "
+                                  "ein.")
+
+
+def _blatt_anlagen(wb, modell: Modell) -> None:
+    """Anlagenverzeichnis: je Anlage Buchwert und AfA je Jahr, Zuordnung über die ObjektID."""
+    ws = wb.create_sheet("Anlagen")
+    jahre = prognosejahre()
+    erste = 3
+    letzte = erste + max(MIN_ANLAGEN, len(modell.anlagen) + 50) - 1
+    status_spalte = len(ANLAGE_FELDER) + len(ANLAGE_SPALTEN) + 1
+    jahr_spalte = status_spalte + 1
+    ws["A1"] = ("Anlagenverzeichnis: gelb Eingabe (beim Einlesen aus dem DATEV-Export bzw. der "
+                "Aufschlüsselung im Kostenstellenblatt), grau Formel. Es zählen nur Zeilen mit "
+                "Status OK. Buchwert Stand = Ende des Jahres")
+    ws["A1"].font = Font(italic=True)
+    c = ws.cell(row=1, column=12, value="=par_AnlStand")
+    c.number_format, c.fill = FMT_JAHR, FILL_BERECHNET
+    ws.cell(row=1, column=13, value="(Parameterblatt).").font = Font(italic=True)
+    kopf = ([f.ueberschrift for f in ANLAGE_FELDER] + [s_.ueberschrift for s_ in ANLAGE_SPALTEN]
+            + [STATUS_UEBERSCHRIFT])
+    _kopf(ws, 2, kopf)
+    for i in range(jahre):
+        c = ws.cell(row=2, column=jahr_spalte + i, value=f'="AfA "&(par_Startjahr+{i})')
+        c.font, c.fill = FONT_KOPF, FILL_KOPF
+    ws.row_dimensions[2].height = 45
+
+    for i, f in enumerate(ANLAGE_FELDER, start=1):
+        bst = get_column_letter(i)
+        ws.column_dimensions[bst].width = f.breite
+        _name(wb, f.name, f"Anlagen!${bst}${erste}:${bst}${letzte}")
+        _validierung(ws, f, f"{bst}{erste}:{bst}{letzte}")
+        _farblogik(ws, bst, erste, letzte, f)
+    for i, s_ in enumerate(ANLAGE_SPALTEN, start=len(ANLAGE_FELDER) + 1):
+        bst = get_column_letter(i)
+        ws.column_dimensions[bst].width = s_.breite
+        _name(wb, s_.name, f"Anlagen!${bst}${erste}:${bst}${letzte}")
+    st = get_column_letter(status_spalte)
+    ws.column_dimensions[st].width = 30
+    _name(wb, ANLAGE_STATUS_NAME, f"Anlagen!${st}${erste}:${st}${letzte}")
+    _name(wb, ANLAGE_JAHRE_NAME,
+          f"Anlagen!${get_column_letter(jahr_spalte)}${erste}:"
+          f"${get_column_letter(jahr_spalte + jahre - 1)}${letzte}")
+
+    for zeile in range(erste, letzte + 1):
+        for i, f in enumerate(ANLAGE_FELDER, start=1):
+            c = ws.cell(row=zeile, column=i, value=formeln.annahme_anlage(f.key, zeile))
+            c.number_format, c.fill = f.format, FILL_EINGABE
+        berechnet = formeln.anlage_zeile(zeile)
+        werte = [berechnet[s_.key] for s_ in ANLAGE_SPALTEN] + [berechnet["status"]] \
+            + berechnet["jahre"]
+        formate = [s_.format for s_ in ANLAGE_SPALTEN] + [FMT_TEXT] + [FMT_EURO] * jahre
+        for j, (formel, fmt) in enumerate(zip(werte, formate)):
+            c = ws.cell(row=zeile, column=len(ANLAGE_FELDER) + 1 + j, value=formel)
+            c.number_format, c.fill = fmt, FILL_BERECHNET
+    ws.conditional_formatting.add(
+        f"{st}{erste}:{st}{letzte}",
+        FormulaRule(formula=[f'AND({st}{erste}<>"",{st}{erste}<>"OK")'], fill=FILL_WARNUNG))
+
+    for zeile, anlage in enumerate(modell.anlagen, start=erste):
+        for i, f in enumerate(ANLAGE_FELDER, start=1):
+            wert = getattr(anlage, f.key)
+            if wert is not None:      # leer = Formel bleibt stehen
+                ws.cell(row=zeile, column=i, value=wert)
+    ws.freeze_panes = "B3"
+    ws.auto_filter.ref = f"A2:{get_column_letter(jahr_spalte + jahre - 1)}{letzte}"
 
 
 def _blatt_prognose(wb) -> None:
@@ -828,6 +910,8 @@ SCHRITTE = [
      "fehlenden Daten (blau)."),
     ("Objekte", "Je Objekt mindestens ObjektID und Miete (Pflicht, rot wenn leer). Alles "
      "Weitere füllen die Annahmen; echte Werte einfach darübertippen."),
+    ("Anlagen", "Anlagenverzeichnis: AK, Buchwert und AfA je Anlage ersetzen die Annahmen zu "
+     "AK, Kaufjahr und Restbuchwert (grün). Anlagen ohne Objekt dort zuordnen."),
     ("Verkäufe", "Geplanten Verkauf erfassen: Objekt, Verkaufsjahr; Preis leer = Verkehrswert; "
      "§ 6b nutzen und reinvestieren mit ja/nein."),
     ("Neuobjekte", "Reinvestitionen: entstehen bei „reinvestieren = ja“ automatisch (blau), "
@@ -836,7 +920,8 @@ SCHRITTE = [
     ("Vergleich", "Ergebnis: Szenarien über 20 Jahre; Details in Verkauf und Kauf."),
 ]
 # Blattreiter: gelb Eingabe, grau Rechnung, blau Ausgabe, grün Kontrolle
-REITER = {"Start": "305496", "Parameter": "FFC000", "Objekte": "FFC000", "Verkäufe": "FFC000",
+REITER = {"Start": "305496", "Parameter": "FFC000", "Objekte": "FFC000", "Anlagen": "FFC000",
+          "Verkäufe": "FFC000",
           "Neuobjekte": "FFC000", "Prognose": "A5A5A5", "Rücklagen": "A5A5A5",
           "Liquidität": "A5A5A5", "Prüfung": "70AD47", "Varianten": "70AD47",
           "BWA-Zuordnung": "FFC000"}
@@ -923,6 +1008,10 @@ def _blatt_start(wb, modell: Modell) -> None:
     for text, formel, fmt, name in [
         ("Objekte im Modell", "=ueb_Objekte", FMT_ZAHL, None),
         ("davon mit Annahmen (blau)", '=COUNTIF(obj_Annahmen,">0")', FMT_ZAHL, None),
+        ("davon mit Anlagen aus dem Anlagenverzeichnis", '=COUNTIF(obj_AnlAbn,">0")', FMT_ZAHL,
+         None),
+        ("Anlagen ohne Objekt oder unvollständig (Blatt Anlagen)",
+         formeln.pruefung_anzahl()["anlagen"], FMT_ZAHL, None),
         ("kritische Annahmen bei Verkäufen (orange)", f"={kritisch}", FMT_ZAHL,
          "start_Kritisch"),
         ("Plausibilitätsprüfung", "=pr_Gesamt", FMT_TEXT, None),
@@ -976,6 +1065,7 @@ def erstelle_mappe(modell: Modell) -> Workbook:
     wb = Workbook()
     _blatt_parameter(wb, modell)
     _blatt_objekte(wb, modell)
+    _blatt_anlagen(wb, modell)
     _blatt_verkaeufe(wb, modell)
     _blatt_neuobjekte(wb, modell)
     _blatt_prognose(wb)

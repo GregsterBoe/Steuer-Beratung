@@ -11,9 +11,12 @@ from pathlib import Path
 
 from openpyxl import Workbook
 
-from prognosemodell.einlesen import EinleseFehler, lese_kostenstellen, zusammenfuehren
+from prognosemodell.einlesen import (EinleseFehler, anlagen_zusammenfuehren, lese_inventar,
+                                     lese_kostenstellen, ordne_anlagen_zu, stand_aus_dateiname,
+                                     zusammenfuehren)
 from prognosemodell.testdaten import testobjekt
-from prognosemodell.vorlagen import erstelle_vorlage
+from prognosemodell.vorlagen import (INVENTAR_BEISPIELE, erstelle_inventar_vorlage,
+                                     erstelle_vorlage)
 
 TOLERANZ = 0.01
 
@@ -144,6 +147,75 @@ def main() -> int:
         pruefe("Zusammenführen: Stammdaten bleiben", objekte[0].ak_gebaeude, 800_000)
         pruefe("Zusammenführen: Objekt ohne Blatt unverändert", objekte[1].miete, 60_000)
         pruefe("Zusammenführen: neue Kostenstelle ohne AK", objekte[2].ak_gebaeude, None)
+
+        # Aufschlüsselung der Abschreibungen unter der BWA (Stand Spalte "Jahr 2025")
+        gruppen = {g.bezeichnung: g for g in v2.anlagen}
+        pruefe("Aufschlüsselung: Gruppen ohne Buchwert und AfA entfallen", sorted(gruppen),
+               ["Anbau im Bau", "Außenanlagen 7", "Wohnbau 7"])
+        pruefe("Aufschlüsselung: Buchwert Stand", gruppen["Wohnbau 7"].bw_stand, 876_000.0)
+        pruefe("Aufschlüsselung: AfA über Beschriftungsanfang (Wohnbau zu Wohnbau 7)",
+               gruppen["Wohnbau 7"].afa, 24_000.0)
+        pruefe("Aufschlüsselung: Zwischensumme ohne Beschriftung übersprungen",
+               gruppen["Außenanlagen 7"].afa, 6_000.0)
+        pruefe("Aufschlüsselung: ObjektID und eindeutige Nr.",
+               (gruppen["Wohnbau 7"].objekt_id, gruppen["Wohnbau 7"].nr),
+               ("KSt 2", "KSt 2 Wohnbau 7"))
+        pruefe("Aufschlüsselung fehlt: keine Gruppen", lw1.anlagen, [])
+        (_, ohne_stand), _ = lese_kostenstellen(vorlage, 2026, stand=2019)
+        pruefe("Aufschlüsselung: Stand ohne Spalte, keine Gruppen", ohne_stand.anlagen, [])
+
+        # Anlagenverzeichnis im Format des DATEV-Exports
+        inventar_pfad = tmp / "Inventar_2025.xlsx"
+        erstelle_inventar_vorlage().save(inventar_pfad)
+        pruefe("Stand aus dem Dateinamen", stand_aus_dateiname(inventar_pfad), 2025)
+        pruefe("Stand fehlt im Dateinamen", stand_aus_dateiname(tmp / "Anlagen.xlsx"), None)
+        anlagen, abgang = lese_inventar(inventar_pfad)
+        pruefe("Inventar: Abgang entfällt", (len(anlagen), abgang),
+               (len(INVENTAR_BEISPIELE) - 1, 1))
+        nach_nr = {a.nr: a for a in anlagen}
+        geb = nach_nr["300002"]
+        pruefe("Inventar: Gebäude", (geb.art, geb.methode, geb.satz, geb.ahk, geb.bw_stand),
+               ("Gebäude", "linear", 0.02, 1_200_000.0, 876_000.0))
+        pruefe("Inventar: Datum aus Text", str(geb.datum), "2012-07-01")
+        pruefe("Inventar: AfA im Stand-Jahr = N-AfA Ende − Beginn", geb.afa_stand, 24_000.0)
+        pruefe("Inventar: Art und Methode je Konto bzw. AfA-Art",
+               [(nach_nr[n].art, nach_nr[n].methode) for n in
+                ("100002", "310002", "750002", "690003", "910001")],
+               [("G+B", "keine"), ("Gebäude", "linear"), ("im Bau", "keine"),
+                ("BGA", "degressiv"), ("Finanzanlage", "keine")])
+        pruefe("Inventar: AfA p. a. bleibt leer (Formel in der Mappe)", geb.afa, None)
+        zugeordnet = {a.nr: a.objekt_id for a in ordne_anlagen_zu(anlagen, ["KSt 1", "KSt 2"])}
+        pruefe("KOST1 zu ObjektID", [zugeordnet[n] for n in ("300001", "300002", "300009",
+                                                             "100009")],
+               ["KSt 1", "KSt 2", "KSt 9", None])
+        andere = {a.nr: a.objekt_id for a in ordne_anlagen_zu(anlagen, ["Haus 2", "Haus 12"])}
+        pruefe("KOST1 zu ObjektID mit gleicher Endnummer", andere["300002"], "Haus 2")
+        mit_inventar = ordne_anlagen_zu(anlagen, ["KSt 1", "KSt 2"])
+        zusammen, abgleich = anlagen_zusammenfuehren(mit_inventar, [v1, v2])
+        pruefe("Anlagenverzeichnis geht vor der Aufschlüsselung", len(zusammen),
+               len(mit_inventar))
+        pruefe("Abgleich Buchwert je Kostenstelle", abgleich,
+               [("KSt 1", 496_000.0, 496_000.0, 16_000.0),
+                ("KSt 2", 941_000.0, 941_000.0, 30_000.0)])
+        nur_kst1 = [a for a in mit_inventar if a.objekt_id != "KSt 2"]
+        zusammen, _ = anlagen_zusammenfuehren(nur_kst1, [v1, v2])
+        pruefe("Kostenstelle ohne Inventar: Gruppen aus der Aufschlüsselung",
+               len(zusammen), len(nur_kst1) + 3)
+
+        kein_inventar = tmp / "kein.xlsx"
+        Workbook().save(kein_inventar)
+        try:
+            lese_inventar(kein_inventar)
+            pruefe("Inventar ohne Kopf meldet Fehler", "kein Fehler", "EinleseFehler")
+        except EinleseFehler:
+            pruefe("Inventar ohne Kopf meldet Fehler", "EinleseFehler", "EinleseFehler")
+        doppelt_inv = tmp / "doppelt_inv.xlsx"
+        erstelle_inventar_vorlage(INVENTAR_BEISPIELE + INVENTAR_BEISPIELE[:1]).save(doppelt_inv)
+        try:
+            lese_inventar(doppelt_inv)
+            pruefe("Inventar-Nr. doppelt meldet Fehler", "kein Fehler", "EinleseFehler")
+        except EinleseFehler:
+            pruefe("Inventar-Nr. doppelt meldet Fehler", "EinleseFehler", "EinleseFehler")
 
     print(f"\n{fehler} Abweichung(en)" if fehler else "\nAlle Prüfungen bestanden.")
     return 1 if fehler else 0
