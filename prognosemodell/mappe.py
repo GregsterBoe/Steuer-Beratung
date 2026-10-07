@@ -435,16 +435,17 @@ def _blatt_neukauf(wb, modell: Modell) -> None:
     Jahr für Neuobjekte, die im Blatt Neuobjekte auf die Kostenstelle verweisen. Jahre ohne
     Wert schreibt das Blatt vom letzten Wert mit der Steigerung des Parameterblatts fort."""
     ws = wb.create_sheet("Neukauf-KSt")
-    n = prognosejahre() + 1            # Basisjahr bis Endjahr
+    # Jahresspalten ab E (Basisjahr bis Endjahr), fortgeschrieben (Formeln), ausgeblendete
+    # Kopie der eingelesenen Werte; mit eigenem Blatt verknüpft bwa.verknuepfe_neukauf
+    j0, fort0, import0, n = formeln.nk_spalten()
     je = len(NEUKAUF_POSITIONEN)
-    erste, letzte = 3, 3 + MAX_NEUKAUF * je - 1
-    j0 = 5                             # erste Jahresspalte (E)
-    fort0 = j0 + n + 1                 # fortgeschrieben (Formeln)
-    import0 = fort0 + n + 1            # ausgeblendete Kopie der eingelesenen Werte
+    erste = formeln.NK_ERSTE
+    letzte = erste + MAX_NEUKAUF * je - 1
     schluessel = get_column_letter(import0 + n)
     ws["A1"] = ("Neukauf-Kostenstellen: Planwerte je Jahr für Neuobjekte (Blatt Neuobjekte, "
-                "Spalte Kostenstelle Neukauf). Gelb = Eingabe, grün = aus der Kostenstellen-"
-                "Datei (Blätter hinter KSt 9999). Jahre ohne Wert schreibt das Modell vom "
+                "Spalte Kostenstelle Neukauf). Grün = verknüpft mit dem Kostenstellenblatt der "
+                "Mappe (eingelesen hinter KSt 9999), Werte dort ändern; gelb = Eingabe für "
+                "weitere Kostenstellen. Jahre ohne Wert schreibt das Modell vom "
                 "letzten Wert mit der Steigerung fort (rechts); ab dem Jahr nach dem Kauf "
                 "ersetzen sie Mietrendite und Erhaltungsquote des Neuobjekts.")
     ws["A1"].font = Font(italic=True)

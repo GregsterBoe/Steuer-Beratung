@@ -392,6 +392,58 @@ def _blatt_objekt(wb, titel: str, objekt_id: str, name, ist, basisjahr: int,
     return ws
 
 
+def _blatt_neukauf_kst(wb, titel: str, lw, basisjahr: int, planjahre: int):
+    """Neukauf-Kostenstelle (hinter „KSt 9999“) als eigenes Blatt: Datenbasis der Neuobjekte,
+    die auf sie verweisen. Basisjahr und Planjahre sind Eingabe (gelb), Summen als Formel."""
+    ws = wb.create_sheet(titel)
+    z = bwa_kopf(ws, lw.objekt_id, lw.name or "", basisjahr, planjahre)
+    _jahreszeile(ws, planjahre)
+    for nr, werte in lw.ist.items():
+        if nr in z:
+            for spalte, wert in werte.items():
+                ws.cell(row=z[nr], column=spalte, value=wert)
+    for nr, jahre in lw.plan.items():
+        if nr in z and nr not in SUMMENZEILEN:
+            for jahr, wert in jahre.items():
+                i = jahr - basisjahr - 1
+                if 0 <= i < planjahre:
+                    ws.cell(row=z[nr], column=SPALTE_PLAN + i, value=wert)
+    for spalte in range(SPALTE_JAHR, SPALTE_PLAN + planjahre):
+        sp = get_column_letter(spalte)
+        for nr, bez in BWA_ZEILEN:
+            if bez and nr not in SUMMENZEILEN and nr != 1094:
+                ws.cell(row=z[nr], column=spalte).fill = FILL_EINGABE
+        for nr, formel in _summenformeln(z, sp).items():
+            ws.cell(row=z[nr], column=spalte, value=formel)
+    ws["E2"] = ("Neukauf-Kostenstelle: Planwerte für ein Neuobjekt (Blatt Neuobjekte, Spalte "
+                "Kostenstelle Neukauf). Gelb ändern: Miete 1020, weitere Einnahmen 1090, "
+                "Erhaltung 1250 und weitere Ausgaben 1100–1220, 1260 gehen über das Blatt "
+                "Neukauf-KSt in die Prognose; leere Jahre werden fortgeschrieben. Nicht in "
+                f"„{SUMMENBLATT}“, das Ergebnis steht im Blatt des Neuobjekts.")
+    ws["E2"].font = Font(italic=True)
+    return ws
+
+
+def verknuepfe_neukauf(wb, block: int, titel: str) -> None:
+    """Zeilen der Neukauf-Kostenstelle im Blatt Neukauf-KSt verweisen auf ihr Blatt:
+    Jahr mit mindestens einem Wert = Summe der BWA-Zeilen, sonst leer (Fortschreibung)."""
+    from . import formeln
+    from .einlesen import NEUKAUF_POSITIONEN as ZEILEN_JE_POSITION
+    from .modelle import NEUKAUF_POSITIONEN
+    ws = wb["Neukauf-KSt"]
+    j0, _, import0, n = formeln.nk_spalten()
+    blatt = titel.replace("'", "''")
+    kopf = formeln.NK_ERSTE + block * len(NEUKAUF_POSITIONEN)
+    for k, (key, *_) in enumerate(NEUKAUF_POSITIONEN):
+        for i in range(n):
+            sp = get_column_letter(SPALTE_JAHR if i == 0 else SPALTE_PLAN + i - 1)
+            refs = ",".join(f"'{blatt}'!${sp}${ZEILEN[nr]}" for nr in ZEILEN_JE_POSITION[key]
+                            if nr in ZEILEN)
+            formel = f'=IF(COUNT({refs})=0,"",SUM({refs}))'
+            ws.cell(row=kopf + k, column=j0 + i, value=formel)
+            ws.cell(row=kopf + k, column=import0 + i, value=formel)
+
+
 def _bezug(titel: str, nr: int, z: dict) -> str:
     blatt = titel.replace("'", "''")
     return f"'{blatt}'!${get_column_letter(SPALTE_JAHR)}${z[nr]}"
@@ -449,6 +501,13 @@ def blaetter_bwa(wb, modell: Modell) -> list:
         if obj_zeile is not None:
             verknuepfe_objekt(wb, obj_zeile, t, ZEILEN)
         titel.append(t)
+    from .modelle import MAX_NEUKAUF
+    neukauf = []
+    for block, lw in enumerate(list(modell.neukauf.values())[:MAX_NEUKAUF]):
+        t = blattname(lw.blatt or lw.objekt_id, wb.sheetnames)
+        _blatt_neukauf_kst(wb, t, lw, basisjahr, planjahre)
+        verknuepfe_neukauf(wb, block, t)
+        neukauf.append(t)
 
     z = bwa_kopf(summe, "KSt", SUMMENBLATT, basisjahr, planjahre)
     _jahreszeile(summe, planjahre)
@@ -477,7 +536,7 @@ def blaetter_bwa(wb, modell: Modell) -> list:
     for zeile, posten in zip(range(HERLEITUNG_ERSTE, HERLEITUNG_LETZTE + 1), POSTEN):
         _name(wb, f"bwah_{posten[0]}", f"'{summe.title}'!${anfang}${zeile}:${ende}${zeile}")
     zuordnung = blatt_zuordnung(wb, summe, z, planjahre, modell.bwa_zuordnung)
-    return [zuordnung, summe.title] + titel
+    return [zuordnung, summe.title] + titel + neukauf
 
 
 def blatt_zuordnung(wb, summe, z: dict, planjahre: int, vorgabe: dict) -> str:

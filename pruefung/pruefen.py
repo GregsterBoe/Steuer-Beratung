@@ -24,7 +24,11 @@ from prognosemodell.mappe import erstelle_mappe
 from prognosemodell.modelle import (FEHLER, HINWEIS, MAX_OBJEKTE, PRUEFUNGEN, Anlage,
                                     STATUS_ANNAHME_GELOESCHT, WARNUNG, Modell, Neuobjekt,
                                     Objekt, Verkauf, prognosejahre)
+from openpyxl.utils import get_column_letter
+
+from prognosemodell.bwa import ZEILEN
 from prognosemodell.formeln import spalte
+from prognosemodell.vorlagen import SPALTE_PLAN
 from prognosemodell.testdaten import testobjekt
 from prognosemodell.vorlagen import erstelle_inventar_vorlage, erstelle_vorlage
 
@@ -1062,7 +1066,24 @@ def faelle():
             ("prg_AfA", prg_neu(1, 2028), 16_000),   # AK Gebäude 800.000 × 2 %
             ("prg_Miete", prg_neu(2, 2028), 20_400),
             ("BWA:NEU-1:1020", 2028, 52_000),
+            ("BWA:KSt 31:1020", 2026, 50_000),     # eigenes Blatt, Datenbasis
+            ("BWA:KSt 31:1020", 2028, 52_000),
+            ("BWA:KSt 31:1280", 2026, 3_000),      # Summenzeile als Formel
+            ("BWA:Alle Objekte:1020", 2026, 180_000),   # Neukauf zählt nicht zum Bestand
             ("pr_Anzahl", pr("neukauf_kst"), 1),
+        ]),
+        # im Blatt KSt 31 der Mappe getippt: Miete 2030 60.000, ab 2031 × 1,02
+        ("Neuobjekte: Änderung im Blatt der Neukauf-Kostenstelle",
+         Getippt(vorlage_eingelesen(
+             neukauf=[("KSt 31", "Neubau Nord", {1020: 50_000})],
+             neuobjekte=[Neuobjekt("NEU-1", 2027, kaufpreis=1_000_000, anteil_gub=0.2,
+                                   afa_satz=0.02, mietrendite=0.04, erhaltungsquote=0.005,
+                                   kst="KSt 31")]),
+             {("KSt 31", f"{get_column_letter(SPALTE_PLAN + 3)}{ZEILEN[1020]}"): 60_000}), [
+            ("prg_Miete", prg_neu(1, 2029), 53_060.40),   # 50.000 × 1,02³ fortgeschrieben
+            ("prg_Miete", prg_neu(1, 2030), 60_000),
+            ("prg_Miete", prg_neu(1, 2031), 61_200),
+            ("BWA:NEU-1:1020", 2030, 60_000),
         ]),
         # AfA-Plan aus BWA 1240 der Kostenstellen-Datei: 2027 15.000, 2028 14.000, 2030 0;
         # 2029 und ab 2031 schreibt das Modell fort (AfA lt. Buchhaltung 16.000)

@@ -82,6 +82,8 @@ class LaufendeWerte:
     # für ein Neuobjekt; jahre = {Position: {Jahr: Wert}} ab dem Basisjahr, siehe NEUKAUF_POSITIONEN
     neukauf: bool = False
     jahre: dict = field(default_factory=dict)
+    # Neukauf: alle BWA-Zeilen der Planspalten {BWA-Nr.: {Jahr: Wert}} für das Blatt der Mappe
+    plan: dict = field(default_factory=dict)
 
 
 def _kopfjahr(wert) -> Optional[int]:
@@ -307,8 +309,11 @@ def lese_kostenstellen(pfad, basisjahr: int, stand: int = None) -> tuple:
                 miete=summe(BWA_MIETE), weitere_einnahmen=summe(BWA_EINNAHMEN),
                 erhaltung=summe(BWA_ERHALTUNG), weitere_ausgaben=summe(BWA_AUSGABEN),
                 abschreibung=summe(BWA_ABSCHREIBUNG), neukauf=True,
+                ist=_ist_werte(ws, zeilen, basisjahr),
                 jahre={pos: _plan_werte(ws, zeilen, nummern, basisjahr - 1)
-                       for pos, nummern in NEUKAUF_POSITIONEN.items()}))
+                       for pos, nummern in NEUKAUF_POSITIONEN.items()},
+                plan={nr: w for nr in zeilen
+                      if (w := _plan_werte(ws, zeilen, (nr,), basisjahr))}))
             continue
         neukauf = marke
         ergebnis.append(LaufendeWerte(
