@@ -59,6 +59,18 @@ def aus_kostenstelle(key: str, zeile: int):
     return f'${ispalte(key)}{zeile}<>""'
 
 
+NK_ERSTE = 3   # erste Datenzeile im Blatt Neukauf-KSt
+
+
+def nk_spalten() -> tuple:
+    """Blatt Neukauf-KSt: (erste Jahresspalte, erste Spalte fortgeschrieben, erste Spalte der
+    ausgeblendeten Kopie, Anzahl Jahre Basisjahr bis Endjahr), Spalten als Zahl."""
+    from .modelle import prognosejahre as _jahre
+    n = _jahre() + 1
+    j0 = 5
+    return j0, j0 + n + 1, j0 + 2 * n + 2, n
+
+
 ISFORMEL = "_xlfn.ISFORMULA"   # Excel 2013+, in der Datei mit Präfix
 MINIFS = "_xlfn.MINIFS"        # Excel 2019+, LibreOffice ab 5.2
 
