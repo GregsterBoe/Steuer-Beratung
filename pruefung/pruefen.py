@@ -21,7 +21,7 @@ from prognosemodell.einlesen import (anlagen_zusammenfuehren, lese_inventar, les
                                      ordne_anlagen_zu, zusammenfuehren)
 from prognosemodell.makros import LibreOffice, speichere_mit_makros
 from prognosemodell.mappe import erstelle_mappe
-from prognosemodell.modelle import (FEHLER, HINWEIS, MAX_OBJEKTE, PRUEFUNGEN,
+from prognosemodell.modelle import (FEHLER, HINWEIS, MAX_OBJEKTE, PRUEFUNGEN, Anlage,
                                     STATUS_ANNAHME_GELOESCHT, WARNUNG, Modell, Neuobjekt,
                                     Objekt, Verkauf, prognosejahre)
 from prognosemodell.testdaten import testobjekt
@@ -173,10 +173,11 @@ def vorlage_eingelesen() -> Modell:
                   kostenstellen={lw.objekt_id: lw for lw in laufende})
 
 
-def anlagen_eingelesen(inventar: bool = True, **parameter) -> Modell:
+def anlagen_eingelesen(inventar: bool = True, ohne_kost1=(), **parameter) -> Modell:
     """Modell nur aus den Vorlagen: BWA je Kostenstelle, Anlagenverzeichnis (KSt 1 = Daten des
     Testobjekts, KSt 2 mit auslaufender Außenanlage und Anlage im Bau). Ohne Inventar zählt
-    die Aufschlüsselung der Abschreibungen aus den Kostenstellenblättern."""
+    die Aufschlüsselung der Abschreibungen aus den Kostenstellenblättern. ohne_kost1: weitere
+    Anlagen ohne KOST1, zugeordnet über die Bezeichnung."""
     with tempfile.TemporaryDirectory() as tmp:
         bwa, inv = Path(tmp) / "bwa.xlsx", Path(tmp) / "inventar.xlsx"
         erstelle_vorlage().save(bwa)
@@ -184,7 +185,7 @@ def anlagen_eingelesen(inventar: bool = True, **parameter) -> Modell:
         laufende, _ = lese_kostenstellen(bwa, 2026)
         anlagen = lese_inventar(inv)[0] if inventar else []
     objekte = zusammenfuehren([], laufende)
-    anlagen = ordne_anlagen_zu(anlagen, [o.objekt_id for o in objekte])
+    anlagen = ordne_anlagen_zu(anlagen + list(ohne_kost1), objekte)
     return Modell(objekte=objekte, kostenstellen={lw.objekt_id: lw for lw in laufende},
                   anlagen=anlagen_zusammenfuehren(anlagen, laufende)[0], parameter=parameter)
 
@@ -1327,6 +1328,17 @@ def faelle():
             ("prg_AfA", prg(2, 2029), 24_000),
             ("prg_AfA", prg(1, 2027), 16_000),
         ]),
+        # G+B ohne KOST1, über die Bezeichnung („Beispielweg 7“) KSt 2 zugeordnet
+        ("Anlagen: Zuordnung über die Bezeichnung ohne KOST1",
+         anlagen_eingelesen(ohne_kost1=[Anlage(nr="100020", bw_stand=10_000, art="G+B",
+                                               methode="keine",
+                                               bezeichnung="Stellplätze Beispielweg")]), [
+            ("anl_ID", 10, "KSt 2"),
+            ("anl_Zuordnung", 10, "Bezeichnung: beispielweg"),
+            ("anl_Zuordnung", 0, "KOST1"),
+            ("anl_Status", 10, "OK"),
+            ("obj_AKGuB", 1, 410_000),
+        ] + befund(annahmen=2, anlagen=3, anlagen_bez=1)),
         ("Anlagen: Stand des Anlagenverzeichnisses gleich Basisjahr",
          anlagen_eingelesen(par_AnlStand=2026), [
             ("obj_Restbuchwert", 0, 496_000),

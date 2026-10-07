@@ -177,7 +177,7 @@ Der **Schnellcheck** (`--schnellcheck`) ist dieselbe Rechnung mit schlanker Ansi
 **Anlagenverzeichnis (Blatt Anlagen)**
 
 Zwei Quellen füllen das Blatt, je Kostenstelle gilt die genauere:
-- **Anlagenverzeichnis** (`--inventar`, DATEV-Export „Inventarübersicht“): eine Zeile je Anlage mit Konto, AHK-Datum, AHK, Buchwert Wj-Ende, AfA-Art, AfA-% und KOST1. KOST1 verweist auf die Kostenstelle (1 = „KSt 1“). Abgegangene Anlagen entfallen.
+- **Anlagenverzeichnis** (`--inventar`, DATEV-Export „Inventarübersicht“): eine Zeile je Anlage mit Konto, AHK-Datum, AHK, Buchwert Wj-Ende, AfA-Art, AfA-% und KOST1. KOST1 verweist auf die Kostenstelle (1 = „KSt 1“). Fehlt KOST1, wird die Inventarbezeichnung unscharf mit ObjektID und Name der Kostenstelle verglichen, Wort für Wort („Musterstr.“ passt zu „Musterstraße 1“). Solche Treffer sind im Blatt Anlagen orange und in der Spalte Zuordnung gekennzeichnet, bitte prüfen. Passen mehrere Objekte gleich gut, bleibt die ObjektID leer. Abgegangene Anlagen entfallen.
 - **Aufschlüsselung im Kostenstellenblatt:** unter der BWA die Blöcke „Buchwert, JE“ und „Abschreibungen JW“ (Spalte des Vorjahrs, im Muster F). Je Gruppe entsteht eine Anlage mit Buchwert und Jahres-AfA, aber ohne AHK und Datum. Sie zählt nur für Kostenstellen, die das Anlagenverzeichnis nicht abdeckt; sonst gleicht die Ausgabe beim Einlesen beide Buchwerte ab.
 
 Je Anlage rechnet das Blatt den Buchwert am Ende des Basisjahrs und die AfA je Prognosejahr. Linear gilt AHK × Satz, auf volle Euro aufgerundet wie bei DATEV, bis der Buchwert verbraucht ist; degressiv gilt Satz × Buchwert. Die Art kommt aus Konto (SKR04) und AfA-Art und lässt sich je Zeile ändern:
@@ -185,7 +185,7 @@ Je Anlage rechnet das Blatt den Buchwert am Ende des Basisjahrs und die AfA je P
 - **Gebäude, BGA, im Bau:** abnutzbar, ergeben AK Gebäude und Restbuchwert. Im Bau ohne AfA, bis Art und Methode nach Fertigstellung umgestellt werden.
 - **Finanzanlage, sonstige:** nicht im Modell.
 
-Es zählen nur Zeilen mit Status OK. Anlagen ohne Objekt (keine KOST1, oder ihre Kostenstelle hat keine Zeile im Blatt Objekte) meldet das Prüfungsblatt als Hinweis. Im Muster betrifft das vor allem Grund und Boden: Ohne KOST1 bleibt AK G+B eine Annahme, bis die ObjektID eingetragen ist. Ein zweiter Hinweis meldet Objekte, deren AfA lt. Anlagen von BWA 1240 abweicht. Die BWA-Blätter je Kostenstelle zeigen unter der Herleitung die Aufschlüsselung „Buchwert, JE“ und „Abschreibungen JW“ je Anlage und Jahr, wie im Kostenstellenblatt der Kanzlei.
+Es zählen nur Zeilen mit Status OK. Anlagen ohne Objekt (keine KOST1 und keine passende Bezeichnung, oder ihre Kostenstelle hat keine Zeile im Blatt Objekte) meldet das Prüfungsblatt als Hinweis. Im Muster betrifft das vor allem Grund und Boden: Ohne KOST1 bleibt AK G+B eine Annahme, bis die ObjektID eingetragen ist. Ein zweiter Hinweis meldet Objekte, deren AfA lt. Anlagen von BWA 1240 abweicht. Die BWA-Blätter je Kostenstelle zeigen unter der Herleitung die Aufschlüsselung „Buchwert, JE“ und „Abschreibungen JW“ je Anlage und Jahr, wie im Kostenstellenblatt der Kanzlei.
 
 Details, Formeln und Testfälle stehen in [docs/Projektplan.md](docs/Projektplan.md).
 

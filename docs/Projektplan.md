@@ -1127,7 +1127,16 @@ Vorher lief die AfA eines Objekts als ein Betrag (BWA 1240) weiter, bis der Rest
 | AfA im Stand-Jahr | N-AfA und S-Abschr., jeweils Wj-Ende − Wj-Beginn (nur Kontrolle) |
 | Art | AfA-Art Lin.Geb. = Gebäude, Anlag./Bau = im Bau, Finanzanl. = Finanzanlage; sonst nach Konto (SKR04): 200–239 G+B, 240–399 Gebäude, 400–699 BGA, 700–799 im Bau, 800–999 Finanzanlage |
 | Methode | Keine AfA, Anlag./Bau, Finanzanl. oder ohne Satz: keine; Geom.degr.: degressiv; sonst linear |
-| ObjektID | ObjektID im Blatt Objekte mit derselben Endnummer wie KOST1, sonst „KSt <KOST1>“; ohne KOST1 leer |
+| ObjektID | ObjektID im Blatt Objekte mit derselben Endnummer wie KOST1, sonst „KSt <KOST1>“; ohne KOST1 über die Inventarbezeichnung (siehe unten), sonst leer |
+| Zuordnung | Herkunft der ObjektID: „KOST1“, „Bezeichnung: <passende Wörter>“ oder „mehrdeutig: <Objekte>“ |
+
+**Zuordnung über die Inventarbezeichnung (ohne KOST1)**
+
+- Die Bezeichnung wird in Wörter zerlegt: klein, Umlaute ausgeschrieben, „straße“ zu „str“. Wörter für die Art der Anlage (Grund und Boden, Gebäude, Außenanlagen, Haus, Wohnbau …) und Füllwörter zählen nicht.
+- Jedes Wort wird mit ObjektID und Name der Kostenstelle (C2 im Kostenstellenblatt) verglichen. Gleich zählt 1, Wortanfang 0,9 („Musterstr“ zu „Musterstraße“), ähnlich ab 80 % nach difflib (Tippfehler). Kürzel unter 4 Zeichen nur exakt („KC“). Gleiche Zahlen (Hausnummer) zählen je 0,5, aber nur zusammen mit einem passenden Wort.
+- Zugeordnet wird das Objekt mit den meisten Punkten, wenn es mindestens 0,5 vor dem nächsten liegt. Sonst bleibt die ObjektID leer, Zuordnung „mehrdeutig“ nennt die Kandidaten.
+- Steht „KSt n“ in der Bezeichnung, gilt diese Kostenstelle.
+- Im Blatt Anlagen sind ObjektID und Zuordnung orange, solange Zuordnung mit „Bezeichnung“ oder „mehrdeutig“ beginnt. Ein Hinweis im Prüfungsblatt zählt diese Zeilen. Nach der Prüfung „geprüft“ eintragen oder die ObjektID korrigieren.
 
 Abgegangene Anlagen (Datum in Abgang) entfallen. Abbruch mit Meldung bei doppelter Inventar-Nr., fehlender Kopfzeile oder Text statt Zahl.
 
@@ -1186,24 +1195,25 @@ Ohne Anlagen ergibt das dieselben Werte wie vorher.
 - Jedes BWA-Blatt einer Kostenstelle mit Anlagen zeigt unter der Herleitung die Blöcke „Buchwert, JE“ und „Abschreibungen JW“ je Anlage. Spalten: Vorjahr = Stand, Basisjahr, Planjahre. Die Inventar-Nr. steht in Spalte D. Die Werte gelten bei Halten.
 - Prüfung, Hinweis: Anlagen G+B, Gebäude, BGA oder im Bau ohne Objekt oder unvollständig.
 - Prüfung, Hinweis: AfA lt. Anlagen weicht um mehr als 1 € von BWA 1240 ab.
+- Prüfung, Hinweis: Anlagen über die Bezeichnung zugeordnet (ungeprüft) oder mehrdeutig.
 - Startblatt: Objekte mit Anlagen und Anlagen ohne Objekt.
 
 **Muster der Kanzlei (Inventar 2025, KSt 1)**
 
 - 204 Anlagen, eine abgegangen. KSt 1 hat sechs abnutzbare Anlagen: TG 305001, Außenanlagen 306001, 310001 und 311001 (abgeschrieben), Wohnbauten 360010 und 360012.
 - Restbuchwert Ende 2026: 928.630 €. AfA 42.375 € je Jahr, gleich BWA 1240. Buchwert Ende 2046: 81.130 €. Das trifft die Fortschreibung im Kostenstellenblatt (S50, AM50).
-- Grund und Boden 200001 (30.12.1998) trägt keine KOST1. AK G+B von KSt 1 bleibt daher eine Annahme, bis die ObjektID im Blatt Anlagen eingetragen ist.
+- Grund und Boden 200001 (30.12.1998) trägt keine KOST1. Im Muster ist die Bezeichnung anonymisiert, deshalb greift die Zuordnung über die Bezeichnung dort nicht. Mit echter Bezeichnung wird sie über den Namen der Kostenstelle gefunden, sonst bleibt AK G+B von KSt 1 eine Annahme.
 
 **Prüfung im Prüfskript**
 
-- `pruefen_einlesen`: Inventarvorlage (Art, Methode, Satz, Datum, Abgang, KOST1-Zuordnung, Fehler), Aufschlüsselung (Beschriftungsabgleich, Zwischensumme, leere Gruppe), Vorrang des Anlagenverzeichnisses.
-- `pruefen`, Fälle „Anlagen“: KSt 1 reproduziert die Stammdaten des Testobjekts aus dem Verzeichnis. KSt 2 mit auslaufender Außenanlage (AfA 30.000, 27.000, 24.000), Anlage im Bau, degressiver Anlage und Statusfällen. Dazu ein Verkauf mit Buchwert aus den Anlagen, nur die Aufschlüsselung ohne Verzeichnis und der Stand gleich Basisjahr.
+- `pruefen_einlesen`: Inventarvorlage (Art, Methode, Satz, Datum, Abgang, KOST1-Zuordnung, Fehler), Aufschlüsselung (Beschriftungsabgleich, Zwischensumme, leere Gruppe), Vorrang des Anlagenverzeichnisses, Zuordnung über die Bezeichnung (abgekürzte Straße, Tippfehler, Kürzel mit Hausnummer, mehrdeutig, nur Füllwörter, „KSt n“, Vorrang KOST1).
+- `pruefen`, Fälle „Anlagen“: KSt 1 reproduziert die Stammdaten des Testobjekts aus dem Verzeichnis. KSt 2 mit auslaufender Außenanlage (AfA 30.000, 27.000, 24.000), Anlage im Bau, degressiver Anlage und Statusfällen. Dazu ein Verkauf mit Buchwert aus den Anlagen, nur die Aufschlüsselung ohne Verzeichnis und der Stand gleich Basisjahr. Dazu G+B ohne KOST1, über die Bezeichnung KSt 2 zugeordnet.
 
 Vorlagen: `vorlagen/Inventar_Vorlage.xlsx` (Format des DATEV-Exports, erfundene Werte), `vorlagen/Kostenstellen_BWA_Vorlage.xlsx` mit Aufschlüsselung unter der BWA.
 
 **Offen**
 
-- [ ] Grund und Boden ohne KOST1 zuordnen (im Muster 22 von 32 G+B-Anlagen), dann ist AK G+B keine Annahme mehr.
+- [ ] Grund und Boden ohne KOST1 (im Muster 22 von 32 G+B-Anlagen): Zuordnung über die Bezeichnung mit echten Bezeichnungen prüfen, Füllwörter und Schwellen ggf. anpassen.
 - [ ] Anlagen im Bau: Fertigstellung und AfA-Beginn erfassen (Art Gebäude, Methode linear, Satz).
 - [ ] BGA einer Kostenstelle beim Verkauf: geht sie mit ab oder bleibt sie? Derzeit geht sie mit.
 

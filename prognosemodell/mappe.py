@@ -23,7 +23,8 @@ from .modelle import (ANLAGE_FELDER, ANLAGE_JAHRE_NAME, ANLAGE_SPALTEN, ANLAGE_S
                       PARAMETER, PROGNOSE_SPALTEN, RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN,
                       STATUS_NAME, STATUS_UEBERSCHRIFT, SZ_A, SZ_BASELINE, SZENARIEN,
                       VERGLEICH_KENNZAHLEN, VERKAUF_FELDER, VERKAUF_SPALTEN, VERKAUF_STATUS_NAME, Modell,
-                      aus_spalten, liq_spalten, prognosejahre)
+                      ZUORDNUNG_BEZEICHNUNG, ZUORDNUNG_MEHRDEUTIG, aus_spalten, liq_spalten,
+                      prognosejahre)
 
 HINWEIS_FINANZIERUNG = "Alle Werte vor Finanzierung (ohne Zins und Tilgung)."
 
@@ -279,8 +280,9 @@ def _blatt_anlagen(wb, modell: Modell) -> None:
     status_spalte = len(ANLAGE_FELDER) + len(ANLAGE_SPALTEN) + 1
     jahr_spalte = status_spalte + 1
     ws["A1"] = ("Anlagenverzeichnis: gelb Eingabe (beim Einlesen aus dem DATEV-Export bzw. der "
-                "Aufschlüsselung im Kostenstellenblatt), grau Formel. Es zählen nur Zeilen mit "
-                "Status OK. Buchwert Stand = Ende des Jahres")
+                "Aufschlüsselung im Kostenstellenblatt), grau Formel, orange ObjektID über die "
+                "Bezeichnung gefunden (prüfen). Es zählen nur Zeilen mit Status OK. Buchwert "
+                "Stand = Ende des Jahres")
     ws["A1"].font = Font(italic=True)
     c = ws.cell(row=1, column=12, value="=par_AnlStand")
     c.number_format, c.fill = FMT_JAHR, FILL_BERECHNET
@@ -324,6 +326,14 @@ def _blatt_anlagen(wb, modell: Modell) -> None:
     ws.conditional_formatting.add(
         f"{st}{erste}:{st}{letzte}",
         FormulaRule(formula=[f'AND({st}{erste}<>"",{st}{erste}<>"OK")'], fill=FILL_WARNUNG))
+    # orange: ObjektID über die Bezeichnung gefunden oder mehrdeutig, bitte prüfen
+    zu, oid = formeln.aspalte("zuordnung"), formeln.aspalte("objekt_id")
+    ws.conditional_formatting.add(
+        f"{oid}{erste}:{zu}{letzte}",
+        FormulaRule(formula=[f'OR(LEFT(${zu}{erste},{len(ZUORDNUNG_BEZEICHNUNG)})='
+                             f'"{ZUORDNUNG_BEZEICHNUNG}",LEFT(${zu}{erste},'
+                             f'{len(ZUORDNUNG_MEHRDEUTIG)})="{ZUORDNUNG_MEHRDEUTIG}")'],
+                    fill=FILL_KRITISCH, stopIfTrue=True))
 
     for zeile, anlage in enumerate(modell.anlagen, start=erste):
         for i, f in enumerate(ANLAGE_FELDER, start=1):

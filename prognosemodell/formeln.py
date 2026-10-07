@@ -14,7 +14,7 @@ from .modelle import (AFA_DEGRESSIV, ANL_NICHT_IM_MODELL, ANLAGE_FELDER, ANLAGE_
                       RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN, STATUS_6B_UNZULAESSIG,
                       STATUS_OK, SZ_A, SZ_B, SZ_BASELINE, SZENARIEN, VERKAUF_FELDER,
                       VERKAUF_SPALTEN, WARNUNG, Szenario, aus_spalten, liq_spalten,
-                      prognosejahre)
+                      ZUORDNUNG_BEZEICHNUNG, ZUORDNUNG_MEHRDEUTIG, prognosejahre)
 
 
 def spalte(key: str) -> str:
@@ -918,6 +918,8 @@ def pruefung_anzahl() -> dict:
         "annahmen": '=COUNTIF(obj_Annahmen,">0")',
         "anlagen": (f'=SUMPRODUCT((anl_Status<>"")*(anl_Status<>"{STATUS_OK}")'
                     f'*(anl_Status<>"{ANL_NICHT_IM_MODELL}"))'),
+        "anlagen_bez": (f'=COUNTIF(anl_Zuordnung,"{ZUORDNUNG_BEZEICHNUNG}*")'
+                        f'+COUNTIF(anl_Zuordnung,"{ZUORDNUNG_MEHRDEUTIG}*")'),
         "anlagen_afa": '=COUNTIF(obj_AnlDiff,">1")+COUNTIF(obj_AnlDiff,"<-1")',
     }
 
