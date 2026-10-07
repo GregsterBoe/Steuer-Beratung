@@ -190,6 +190,13 @@ def anlagen_eingelesen(inventar: bool = True, ohne_kost1=(), **parameter) -> Mod
                   anlagen=anlagen_zusammenfuehren(anlagen, laufende)[0], parameter=parameter)
 
 
+def baujahr_bestaetigt() -> Modell:
+    """Wie anlagen_eingelesen, aber für KSt 1 ein eingetipptes Baujahr (Bestandsgebäude)."""
+    modell = anlagen_eingelesen()
+    modell.objekte[0] = dataclasses.replace(modell.objekte[0], baujahr=1990)
+    return modell
+
+
 def faelle():
     obj = testobjekt()
     ohne_miete = dataclasses.replace(obj, miete=None)
@@ -1260,8 +1267,13 @@ def faelle():
             ("obj_Restbuchwert", 0, 480_000),
             ("obj_AfAJahr", 0, 16_000),
             ("obj_Status", 0, "OK"),
-            # nur noch Verkehrswert, Anteil, Baujahr, Großmaßnahme Jahr und Betrag
-            ("obj_Annahmen", 0, 5),
+            # nur noch Verkehrswert, Anteil, Großmaßnahme Jahr und Betrag
+            ("obj_Annahmen", 0, 4),
+            # Baujahr = frühester Gebäudezugang, orange und Warnung bis zur Bestätigung
+            ("obj_Baujahr", 0, 2007),
+            ("obj_AnlBau", 0, 2007),
+            ("obj_AnlBauOffen", 0, 1),
+            ("obj_Baujahr", 1, 2012),           # Außenanlage 2018 ist später
             ("obj_AnlAbn", 0, 1),
             ("obj_AnlAfA", 0, 16_000),
             ("obj_AnlDiff", 0, 0),
@@ -1300,7 +1312,7 @@ def faelle():
             ("anl_AfAJahre", 8, 150),
             ("anl_Status", 9, "nicht im Modell (Art)"),
             ("anl_Status", 10, None),
-        ] + befund(annahmen=2, anlagen=3)),
+        ] + befund(annahmen=2, anlagen=3, baujahr=2)),
         ("Anlagen: Verkauf mit Buchwert aus dem Anlagenverzeichnis",
          Modell(objekte=anlagen_eingelesen().objekte, anlagen=anlagen_eingelesen().anlagen,
                 verkaeufe=[Verkauf("KSt 2", 2028, preis=2_000_000, nutzung_6b="nein")]), [
@@ -1313,7 +1325,7 @@ def faelle():
             ("prg_AfAHalten", prg(2, 2029), 24_000),  # Baseline hält weiter
             ("prg_BuchwertHalten", prg(2, 2029), 830_000),
             ("obj_Kritisch", 1, 1),                    # nur noch der Verkehrswertanteil
-        ] + befund(annahmen=2, anlagen=3, kritisch=1)),
+        ] + befund(annahmen=2, anlagen=3, kritisch=1, baujahr=2)),
         ("Anlagen: nur Aufschlüsselung der Abschreibungen aus dem Kostenstellenblatt",
          anlagen_eingelesen(inventar=False), [
             ("anl_Status", 0, "OK"),
@@ -1322,6 +1334,8 @@ def faelle():
             ("obj_AnlAK", 1, 0),
             ("obj_AKGebaeude", 1, 1_500_000),         # Annahme AfA lt. BWA / 2 %
             ("obj_Kaufjahr", 1, 2011),                # Annahme
+            ("obj_AnlBau", 1, None),                  # Gruppen ohne AHK-Datum
+            ("obj_AnlBauOffen", 1, 0),
             ("obj_Annahmen", 1, 9),                   # Restbuchwert kommt aus den Gruppen
             ("prg_AfA", prg(2, 2027), 30_000),
             ("prg_AfA", prg(2, 2028), 27_000),
@@ -1338,7 +1352,12 @@ def faelle():
             ("anl_Zuordnung", 0, "KOST1"),
             ("anl_Status", 10, "OK"),
             ("obj_AKGuB", 1, 410_000),
-        ] + befund(annahmen=2, anlagen=3, anlagen_bez=1)),
+        ] + befund(annahmen=2, anlagen=3, anlagen_bez=1, baujahr=2)),
+        ("Anlagen: Baujahr eingetippt bestätigt, keine Warnung mehr", baujahr_bestaetigt(), [
+            ("obj_Baujahr", 0, 1990),
+            ("obj_AnlBauOffen", 0, 0),
+            ("obj_AnlBauOffen", 1, 1),
+        ] + befund(annahmen=2, anlagen=3, baujahr=1)),
         ("Anlagen: Stand des Anlagenverzeichnisses gleich Basisjahr",
          anlagen_eingelesen(par_AnlStand=2026), [
             ("obj_Restbuchwert", 0, 496_000),

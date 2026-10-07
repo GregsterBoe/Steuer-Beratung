@@ -26,6 +26,9 @@ from .modelle import (ANLAGE_FELDER, ANLAGE_JAHRE_NAME, ANLAGE_SPALTEN, ANLAGE_S
                       ZUORDNUNG_BEZEICHNUNG, ZUORDNUNG_MEHRDEUTIG, aus_spalten, liq_spalten,
                       prognosejahre)
 
+# Felder, deren Wert aus dem Blatt Anlagen nur eine Vermutung ist: orange statt grün
+ANLAGEN_PRUEFEN = ("baujahr",)
+
 HINWEIS_FINANZIERUNG = "Alle Werte vor Finanzierung (ohne Zins und Tilgung)."
 
 FONT_TITEL = Font(bold=True, size=14)
@@ -43,7 +46,8 @@ FILL_EINGELESEN = PatternFill("solid", fgColor="C6E0B4")  # grün: aus der Buchh
 FARBEN = [
     (FILL_PFLICHT, "rot", "Pflichtwert fehlt oder Annahme gelöscht: bitte eintragen"),
     (FILL_KRITISCH, "orange", "Annahme bei einem verkauften Objekt: bestimmt Gewinn und "
-     "§ 6b-Rücklage, möglichst durch echten Wert ersetzen"),
+     "§ 6b-Rücklage, möglichst durch echten Wert ersetzen. Baujahr aus dem AHK-Datum des "
+     "Gebäudes bzw. ObjektID über die Inventarbezeichnung: prüfen"),
     (FILL_ANNAHME, "blau", "Annahme aus den zentralen Annahmen (Parameterblatt); "
      "Eintippen ersetzt sie"),
     (FILL_EINGELESEN, "grün", "aus der Buchhaltung eingelesen, unverändert, oder aus dem "
@@ -95,9 +99,10 @@ def _validierung(ws, f, bereich: str) -> None:
 
 
 def _farblogik(ws, spalte: str, erste: int, letzte: int, f, id_spalte: str = "A",
-               verkauft: str = None, eingelesen: str = None, anlagen: str = None) -> None:
+               verkauft: str = None, eingelesen: str = None, anlagen: str = None,
+               anlagen_fill=FILL_EINGELESEN) -> None:
     """Bedingte Formate einer Eingabespalte, in dieser Reihenfolge (erste Regel gewinnt):
-    rot Pflicht/Annahme fehlt, grün aus dem Blatt Anlagen, orange kritische Annahme,
+    rot Pflicht/Annahme fehlt, grün aus dem Blatt Anlagen (anlagen_fill, orange = prüfen), orange kritische Annahme,
     blau Annahme, grün eingelesen."""
     bereich = f"{spalte}{erste}:{spalte}{letzte}"
     z, id_ = f"{spalte}{erste}", f"${id_spalte}{erste}"
@@ -105,7 +110,7 @@ def _farblogik(ws, spalte: str, erste: int, letzte: int, f, id_spalte: str = "A"
     if f.pflicht or f.annahme:
         regeln.append((f'AND({id_}<>"",{z}="")', FILL_PFLICHT))
     if anlagen:
-        regeln.append((f'AND({id_}<>"",{ISF}({z}),{anlagen})', FILL_EINGELESEN))
+        regeln.append((f'AND({id_}<>"",{ISF}({z}),{anlagen})', anlagen_fill))
     if f.annahme and f.kritisch:
         bedingung = f",{verkauft}" if verkauft else ""
         regeln.append((f'AND({id_}<>"",{ISF}({z}){bedingung})', FILL_KRITISCH))
@@ -202,7 +207,8 @@ def _blatt_objekte(wb, modell: Modell) -> None:
         _validierung(ws, f, f"{bst}{erste}:{bst}{letzte}")
         _farblogik(ws, bst, erste, letzte, f, verkauft=f"COUNTIF(vk_ID,$A{erste})>0",
                    eingelesen=f"${import_spalte[f.key]}{erste}" if f.key in import_spalte
-                   else None, anlagen=formeln.deckung_anlagen(f.key, erste))
+                   else None, anlagen=formeln.deckung_anlagen(f.key, erste),
+                   anlagen_fill=FILL_KRITISCH if f.key in ANLAGEN_PRUEFEN else FILL_EINGELESEN)
 
     for j, (_, name, breite, _) in enumerate(hilfe):
         bst = get_column_letter(status_spalte + j)

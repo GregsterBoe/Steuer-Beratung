@@ -150,6 +150,7 @@ Fehlende Daten füllt eine **Auffülllogik**: Die Annahme steht als Formel in de
 | Kaufjahr | Blatt Anlagen (frühester Zugang G+B oder Gebäude), sonst vor 15 Jahren |
 | AK Gebäude | Blatt Anlagen (AHK der abnutzbaren Anlagen), sonst AfA lt. Buchhaltung / Satz |
 | AK G+B | Blatt Anlagen (Buchwert G+B), sonst aus AK Gebäude und Gebäudeanteil |
+| Baujahr | Blatt Anlagen (frühestes AHK-Datum der Gebäude, gilt bei Neubau; orange und Warnung, bis das Jahr eingetippt ist), sonst Basisjahr − 40 |
 | Restbuchwert | Blatt Anlagen (Buchwert Ende Basisjahr), sonst aus AK und Kaufjahr; 0, wenn die Buchhaltung keine AfA mehr zeigt |
 | AfA je Jahr (Prognose) | Blatt Anlagen (je Anlage bis zu ihrem Buchwert), sonst AfA lt. Buchhaltung (auch 0), läuft bis der Restbuchwert verbraucht ist |
 | Erhaltung | 10 % der Miete |

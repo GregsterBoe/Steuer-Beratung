@@ -68,6 +68,7 @@ def deckung_anlagen(key: str, zeile: int):
         "afa_satz": mit_ak,
         "ak_gub": f"{h('anl_gub')}>0",
         "kaufjahr": f"{h('anl_kauf')}>0",
+        "baujahr": f"{h('anl_bau')}>0",
         "restbuchwert": abnutzbar,
         "afa_jahr": abnutzbar,
     }.get(key)
@@ -78,8 +79,15 @@ def objekt_anlagen(key: str, zeile: int) -> str:
     id_ = f"${spalte('objekt_id')}{zeile}"
     afa = f"${hspalte('anl_afa')}{zeile}"
     bwa = f"${spalte('afa_bwa')}{zeile}"
+    gebaeude = _anl(id_, f'anl_Art,"{ART_GEBAEUDE}"', 'anl_Zugang,">0"')
+    baujahr = f"${spalte('baujahr')}{zeile}"
     ausdruck = {
         "anl_abn": f"COUNTIFS({_anl(id_, ABNUTZBAR)})",
+        # Neubau angenommen: Zugang des Gebäudes = Fertigstellung
+        "anl_bau": f'IF(COUNTIFS({gebaeude})=0,"",{MINIFS}(anl_Zugang,{gebaeude}))',
+        # Baujahr steht noch als Formel und kommt aus den Anlagen: bitte prüfen
+        "anl_bau_offen": (f"IF(AND({ISFORMEL}({baujahr}),N(${hspalte('anl_bau')}{zeile})>0),"
+                          f"1,0)"),
         "anl_ak": f"COUNTIFS({_anl(id_, ABNUTZBAR, 'anl_AHK,\">0\"')})",
         "anl_gub": f"COUNTIFS({_anl(id_, GUB)})",
         "anl_kauf": f"COUNTIFS({_anl(id_, 'anl_Zugang,\">0\"')})",
@@ -144,6 +152,7 @@ def annahme_objekt(key: str, zeile: int):
         # Buchwert G+B; gleich den AK, solange nicht außerplanmäßig abgeschrieben
         "ak_gub": f"SUMIFS(anl_BWBasis,{_anl(id_, GUB)})",
         "kaufjahr": f"{MINIFS}(anl_Zugang,{_anl(id_)})",
+        "baujahr": f"${hspalte('anl_bau')}{zeile}",
         "restbuchwert": f"SUMIFS(anl_BWBasis,{_anl(id_, ABNUTZBAR)})",
         # nur zur Anzeige: die Prognose rechnet je Anlage (prg_AfAHalten)
         "afa_jahr": f"SUMIFS(INDEX(anl_AfAJahre,0,1),{_anl(id_, ABNUTZBAR)})",
@@ -920,6 +929,7 @@ def pruefung_anzahl() -> dict:
                     f'*(anl_Status<>"{ANL_NICHT_IM_MODELL}"))'),
         "anlagen_bez": (f'=COUNTIF(anl_Zuordnung,"{ZUORDNUNG_BEZEICHNUNG}*")'
                         f'+COUNTIF(anl_Zuordnung,"{ZUORDNUNG_MEHRDEUTIG}*")'),
+        "baujahr": "=SUM(obj_AnlBauOffen)",
         "anlagen_afa": '=COUNTIF(obj_AnlDiff,">1")+COUNTIF(obj_AnlDiff,"<-1")',
     }
 

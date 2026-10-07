@@ -1027,7 +1027,7 @@ Anlass: Halten lag im Abnahmefall vorn, unter anderem weil das Neuobjekt mehr Er
 | Baustein | Rechnung | Parameter (Standard) |
 | --- | --- | --- |
 | Alterung Bestand | Erhaltung × (1 + Alterung)^(Jahre über dem Schwellenalter seit dem Basisjahr), zusätzlich zur Erhaltungssteigerung | par\_ErhAlterungAb (30), par\_ErhAlterung (1,5 %) |
-| Baujahr | Eingabe; leer: Basisjahr − Gebäudealter | par\_AnnGebaeudealter (40) |
+| Baujahr | Eingabe; leer: frühestes AHK-Datum der Gebäude im Blatt Anlagen (orange, prüfen), sonst Basisjahr − Gebäudealter | par\_AnnGebaeudealter (40) |
 | Großmaßnahme Jahr | Eingabe (0 = keine); leer: Baujahr + Alter, bei schon älteren Gebäuden erstes Prognosejahr + Vorlauf; jenseits des Rasters 0 | par\_SanAlter (50), par\_SanVorlauf (2) |
 | Großmaßnahme Betrag | Eingabe in heutigen Preisen; leer: Verkehrswert × Gebäudeanteil × Quote; wächst mit der Erhaltungssteigerung | par\_SanQuote (15 %, 0 % schaltet die Annahme ab) |
 | Neuobjekt Anlauf | Erhaltung in den ersten Jahren nach dem Kauf × Faktor | par\_NeuErhAnlaufJahre (10), par\_NeuErhAnlaufFaktor (50 %) |
@@ -1168,17 +1168,20 @@ Jede Zelle rechnet in geschlossener Form für sich, ohne Kette über die Jahre. 
 
 **Objekte**
 
-Neue Hilfsspalten nach den Annahmen zählen je Objekt die Anlagen mit Status OK. Daneben stehen die AfA Basisjahr lt. Anlagen und ihre Abweichung zu BWA 1240 (obj\_AnlAbn, obj\_AnlAK, obj\_AnlGuB, obj\_AnlKauf, obj\_AnlAfA, obj\_AnlDiff). Die Annahmeformeln der Eingabezellen fragen zuerst das Blatt Anlagen:
+Neue Hilfsspalten nach den Annahmen zählen je Objekt die Anlagen mit Status OK. Daneben stehen die AfA Basisjahr lt. Anlagen und ihre Abweichung zu BWA 1240 (obj\_AnlAbn, obj\_AnlAK, obj\_AnlGuB, obj\_AnlKauf, obj\_AnlBau, obj\_AnlBauOffen, obj\_AnlAfA, obj\_AnlDiff). Die Annahmeformeln der Eingabezellen fragen zuerst das Blatt Anlagen:
 
 | Feld | aus dem Blatt Anlagen, wenn | Wert |
 | --- | --- | --- |
 | AK Gebäude, AfA-Satz | abnutzbare Anlagen da, alle mit AHK | Summe AHK; Satz = Summe AfA p. a. / AK |
 | AK G+B | Anlage G+B da | Summe Buchwert G+B Ende Basisjahr |
 | Kaufjahr | Zugangsjahr da | frühestes Zugangsjahr (MINIFS); spätere Zugänge gelten als nachträgliche AK |
+| Baujahr | Anlage der Art Gebäude mit AHK-Datum da | frühestes Zugangsjahr der Gebäude; orange statt grün, siehe unten |
 | Restbuchwert | abnutzbare Anlagen da | Summe Buchwert Ende Basisjahr |
 | AfA je Jahr | abnutzbare Anlagen da | AfA im ersten Prognosejahr (Anzeige) |
 
 Kommt ein Wert aus dem Blatt Anlagen, ist die Zelle grün und zählt nicht als Annahme (auch nicht als kritische). Ohne Anlagen bleibt die bisherige Annahme. Gruppen aus dem Kostenstellenblatt haben keine AHK. Dann kommen nur Restbuchwert und AfA aus dem Blatt, AK und Kaufjahr bleiben Annahmen.
+
+Das Baujahr aus den Anlagen setzt einen Neubau voraus: Zugang des Gebäudes = Fertigstellung. Bei einem gekauften Bestandsgebäude ist der Zugang das Kaufjahr, das echte Baujahr liegt davor, und die Großmaßnahme käme zu spät. Deshalb ist die Zelle orange und zählt in einer Warnung im Prüfungsblatt (obj\_AnlBauOffen = 1, solange die Zelle noch die Formel enthält). Wer das Jahr eintippt, bestätigt es, und die Warnung entfällt. Als Annahme zählt das Baujahr aus den Anlagen nicht.
 
 Restbuchwert und AfA umfassen auch BGA und Anlagen im Bau der Kostenstelle, so wie BWA 1240 alle Abschreibungen der Kostenstelle zeigt. Beim Verkauf gehen sie mit dem Gebäudebuchwert ab.
 
@@ -1196,6 +1199,7 @@ Ohne Anlagen ergibt das dieselben Werte wie vorher.
 - Prüfung, Hinweis: Anlagen G+B, Gebäude, BGA oder im Bau ohne Objekt oder unvollständig.
 - Prüfung, Hinweis: AfA lt. Anlagen weicht um mehr als 1 € von BWA 1240 ab.
 - Prüfung, Hinweis: Anlagen über die Bezeichnung zugeordnet (ungeprüft) oder mehrdeutig.
+- Prüfung, Warnung: Baujahr aus dem frühesten AHK-Datum der Gebäude, noch nicht bestätigt.
 - Startblatt: Objekte mit Anlagen und Anlagen ohne Objekt.
 
 **Muster der Kanzlei (Inventar 2025, KSt 1)**
