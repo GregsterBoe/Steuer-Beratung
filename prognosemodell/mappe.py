@@ -534,11 +534,11 @@ def _blatt_neukauf(wb, modell: Modell) -> None:
     letzte = erste + max_nk * je - 1
     schluessel = get_column_letter(import0 + n)
     ws["A1"] = ("Neukauf-Kostenstellen: Planwerte je Jahr für Neuobjekte (Blatt Neuobjekte, "
-                "Spalte Kostenstelle Neukauf). Grün = verknüpft mit dem Kostenstellenblatt der "
-                "Mappe (eingelesen hinter KSt 9999), Werte dort ändern; gelb = Eingabe für "
-                "weitere Kostenstellen. Jahre ohne Wert schreibt das Modell vom "
-                "letzten Wert mit der Steigerung fort (rechts); ab dem Jahr nach dem Kauf "
-                "ersetzen sie Mietrendite und Erhaltungsquote des Neuobjekts.")
+                "Spalte Kostenstelle Neukauf). Gelb = Eingabe, grün = eingelesen (hinter "
+                "KSt 9999); das Basisjahr verweist auf das Kostenstellenblatt der Mappe, dort "
+                "ändern. Jahre ohne Wert schreibt das Modell vom letzten Wert mit der "
+                "Steigerung fort (rechts), 0 vor dem ersten Wert gilt als leer; ab dem Jahr "
+                "nach dem Kauf ersetzen sie Mietrendite und Erhaltungsquote des Neuobjekts.")
     ws["A1"].font = Font(italic=True)
     c = ws.cell(row=1, column=fort0, value="fortgeschrieben (rechnet so im Neuobjekt)")
     c.font = Font(bold=True)
@@ -574,8 +574,11 @@ def _blatt_neukauf(wb, modell: Modell) -> None:
                 c.fill, c.number_format = FILL_EINGABE, FMT_EURO
                 wert = f"{get_column_letter(j0 + i)}{zeile}"
                 vor = f"{get_column_letter(fort0 + i - 1)}{zeile}"
-                formel = (f'=IF(ISNUMBER({wert}),{wert},"")' if i == 0 else
-                          f'=IF(ISNUMBER({wert}),{wert},IF(ISNUMBER({vor}),{vor}*(1+{satz}),""))')
+                # 0 vor dem ersten anderen Wert gilt als leer: Kostenstelle ohne Buchungen,
+                # das Neuobjekt rechnet dann mit Mietrendite und Erhaltungsquote
+                formel = (f'=IF(N({wert})<>0,{wert},"")' if i == 0 else
+                          f'=IF(AND(ISNUMBER({wert}),OR(N({wert})<>0,ISNUMBER({vor}))),{wert},'
+                          f'IF(ISNUMBER({vor}),{vor}*(1+{satz}),""))')
                 c = ws.cell(row=zeile, column=fort0 + i, value=formel)
                 c.fill, c.number_format = FILL_BERECHNET, FMT_EURO
             ws.cell(row=zeile, column=import0 + n,

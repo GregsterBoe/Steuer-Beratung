@@ -37,7 +37,7 @@ from prognosemodell.modelle import (FEHLER, HINWEIS, PRUEFUNGEN, Anlage, Kapazit
 from openpyxl.utils import get_column_letter
 
 from prognosemodell.bwa import ZEILEN
-from prognosemodell.formeln import spalte
+from prognosemodell.formeln import NK_ERSTE, nk_spalten, spalte
 from prognosemodell.vorlagen import SPALTE_PLAN
 from prognosemodell.testdaten import testobjekt
 from prognosemodell.vorlagen import erstelle_inventar_vorlage, erstelle_vorlage
@@ -1110,18 +1110,48 @@ def faelle():
             ("BWA:Alle Objekte:1020", 2026, 180_000),   # Neukauf zählt nicht zum Bestand
             ("pr_Anzahl", pr("neukauf_kst"), 1),
         ]),
-        # im Blatt KSt 31 der Mappe getippt: Miete 2030 60.000, ab 2031 × 1,02
-        ("Neuobjekte: Änderung im Blatt der Neukauf-Kostenstelle",
+        # im Blatt Neukauf-KSt getippt: Miete 2030 60.000, ab 2031 × 1,02; im Blatt KSt 31
+        # Basisjahr Miete 55.000 statt 50.000
+        ("Neuobjekte: Änderung der Planwerte einer Neukauf-Kostenstelle",
          Getippt(vorlage_eingelesen(
              neukauf=[("KSt 31", "Neubau Nord", {1020: 50_000})],
              neuobjekte=[Neuobjekt("NEU-1", 2027, kaufpreis=1_000_000, anteil_gub=0.2,
                                    afa_satz=0.02, mietrendite=0.04, erhaltungsquote=0.005,
                                    kst="KSt 31")]),
-             {("KSt 31", f"{get_column_letter(SPALTE_PLAN + 3)}{ZEILEN[1020]}"): 60_000}), [
-            ("prg_Miete", prg_neu(1, 2029), 53_060.40),   # 50.000 × 1,02³ fortgeschrieben
+             {("Neukauf-KSt", f"{get_column_letter(nk_spalten()[0] + 4)}{NK_ERSTE}"): 60_000,
+              ("KSt 31", f"T{ZEILEN[1020]}"): 55_000}), [
+            ("prg_Miete", prg_neu(1, 2029), 58_366.44),   # 55.000 × 1,02³ fortgeschrieben
             ("prg_Miete", prg_neu(1, 2030), 60_000),
             ("prg_Miete", prg_neu(1, 2031), 61_200),
+            ("BWA:KSt 31:1020", 2029, 58_366.44),
             ("BWA:KSt 31:1020", 2030, 60_000),
+            ("BWA:KSt 31:1020", 2031, 61_200),
+        ]),
+        # Neukauf-Kostenstelle ohne Buchungen (Miete und Erhaltung 0): Das Neuobjekt rechnet
+        # mit Mietrendite 3 % und Erhaltungsquote 0,5 %, das Blatt KSt 31 zeigt die Werte.
+        # Miete 2028 1 Mio × 3 % × 1,02 = 30.600; Erhaltung 5.000 × 1,025 = 5.125; weitere
+        # Ausgaben 1150 und 1260 je 1.000 im Basisjahr × 1,02² = 1.040,40 je Kostenart.
+        # KSt 32 ohne Neuobjekt zeigt ihre Planwerte: 10.000 × 1,02² = 10.404
+        ("Neuobjekte: Blatt der Neukauf-Kostenstelle zeigt Miete aus der Mietrendite",
+         Getippt(vorlage_eingelesen(
+             neukauf=[("KSt 31", "Neubau Nord", {1150: 1_000, 1260: 1_000}),
+                      ("KSt 32", "Neubau Süd", {1020: 10_000})],
+             neuobjekte=[Neuobjekt("NEU-1", 2027, kaufpreis=1_000_000, anteil_gub=0.2,
+                                   afa_satz=0.02, mietrendite=0.03, erhaltungsquote=0.005,
+                                   kst="KSt 31")]),
+             {("KSt 31", f"T{ZEILEN[1020]}"): 0, ("KSt 31", f"T{ZEILEN[1250]}"): 0}), [
+            ("prg_Miete", prg_neu(1, 2028), 30_600),
+            ("prg_Erhaltung", prg_neu(1, 2028), 5_125),
+            ("prg_Ausgaben", prg_neu(1, 2028), 2_080.80),
+            ("BWA:KSt 31:1020", 2027, 0),          # vor dem Kauf keine Miete
+            ("BWA:KSt 31:1020", 2028, 30_600),
+            ("BWA:KSt 31:1020", 2029, 31_212),
+            ("BWA:KSt 31:1250", 2028, 5_125),
+            ("BWA:KSt 31:1150", 2028, 1_040.40),
+            ("BWA:KSt 31:1260", 2028, 1_040.40),
+            ("BWA:KSt 31:1240", 2028, 16_000),
+            ("BWA:KSt 32:1020", 2028, 10_404),
+            ("zuo_Differenz", lj(2028), 0),
         ]),
         # Finanzierung: AK 2,1 Mio − Nettoerlös 1,4 Mio = Bedarf 700.000, ganz per Kredit.
         # Annuität 4 % + 2 % = 42.000: 2029 Zins 28.000, Tilgung 14.000, Restschuld 686.000;
