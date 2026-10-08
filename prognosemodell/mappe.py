@@ -656,16 +656,15 @@ def _blatt_verkaeufe(wb, modell: Modell) -> None:
         _name(wb, s.name, f"'Verkäufe'!${bst}${erste}:${bst}${letzte}")
     for i, f in enumerate(VERKAUF_FELDER, start=1):
         bst = get_column_letter(i)
-        _validierung(ws, f, f"{bst}{erste}:{bst}{letzte}")
+        # ObjektID als Auswahl aus dem Objektblatt, in derselben Überprüfung wie die
+        # Eingabehilfe: zwei Überprüfungen auf einer Zelle verwirft Excel beim Öffnen
+        _validierung(ws, f, f"{bst}{erste}:{bst}{letzte}",
+                     liste="obj_ID" if f.key == "objekt_id" else None)
         # Verkaufspreis als Annahme ist immer kritisch; § 6b und Reinvestition nur blau
         if f.annahme:
             _farblogik(ws, bst, erste, letzte, f)
         elif modell.schnellcheck and f.key in ("nutzung_6b", "reinvest"):
             _farblogik(ws, bst, erste, letzte, dataclasses.replace(f, annahme=True))
-    # ObjektID als Auswahl aus dem Objektblatt
-    dv = DataValidation(type="list", formula1="obj_ID", allow_blank=True)
-    ws.add_data_validation(dv)
-    dv.add(f"A{erste}:A{letzte}")
 
     ws.column_dimensions[st].width = 34
     _name(wb, VERKAUF_STATUS_NAME, f"'Verkäufe'!${st}${erste}:${st}${letzte}")
