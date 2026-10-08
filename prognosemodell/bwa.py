@@ -426,9 +426,16 @@ def _blatt_objekt(wb, titel: str, objekt_id: str, name, ist, basisjahr: int,
     return ws
 
 
-def _blatt_neukauf_kst(wb, titel: str, lw, basisjahr: int, planjahre: int):
-    """Neukauf-Kostenstelle (hinter „KSt 9999“) als eigenes Blatt: Datenbasis der Neuobjekte,
-    die auf sie verweisen. Basisjahr und Planjahre sind Eingabe (gelb), Summen als Formel."""
+# Position im Blatt Neukauf-KSt -> Spalte der Prognose, die das Neuobjekt damit rechnet
+PRG_JE_POSITION = {"miete": "prg_Miete", "einnahmen": "prg_Einnahmen",
+                   "erhaltung": "prg_Erhaltung", "ausgaben": "prg_Ausgaben"}
+
+
+def _blatt_neukauf_kst(wb, titel: str, lw, basisjahr: int, planjahre: int, block: int):
+    """Neukauf-Kostenstelle (hinter „KSt 9999“) als eigenes Blatt, zugleich Blatt des
+    Neuobjekts, das auf sie verweist. Basisjahr ist Eingabe (gelb), die Planjahre rechnen
+    wie im Blatt eines Bestandsobjekts aus dem Modell; block = Zeilenblock im Blatt
+    Neukauf-KSt, das die Planwerte je Jahr hält."""
     ws = wb.create_sheet(titel)
     z = bwa_kopf(ws, lw.objekt_id, lw.name or "", basisjahr, planjahre, monate_einklappen=True)
     _jahreszeile(ws, planjahre)
@@ -449,6 +456,7 @@ def _blatt_neukauf_kst(wb, titel: str, lw, basisjahr: int, planjahre: int):
                 ws.cell(row=z[nr], column=spalte).fill = FILL_EINGABE
         for nr, formel in _summenformeln(z, sp).items():
             ws.cell(row=z[nr], column=spalte, value=formel)
+    _planjahre_neukauf(ws, z, planjahre, block)
     # Objektblatt des Neuobjekts, das auf die Kostenstelle verweist: AfA und Kreditzinsen
     # aus dem Modell; ohne Verweis bleibt der eingelesene Wert
     ws["C3"] = "Neuobjekt:"
@@ -465,33 +473,64 @@ def _blatt_neukauf_kst(wb, titel: str, lw, basisjahr: int, planjahre: int):
             c.fill = FILL_BERECHNET
     _finanzierung(ws, planjahre, "$D$3")
     ws["E2"] = ("Neukauf-Kostenstelle, zugleich Blatt des Neuobjekts in D3 (Blatt Neuobjekte, "
-                "Spalte Kostenstelle Neukauf). Gelb ändern: Miete 1020, weitere Einnahmen 1090, "
-                "Erhaltung 1250 und weitere Ausgaben 1100–1220, 1260 gehen über das Blatt "
-                "Neukauf-KSt in die Prognose ab dem Jahr nach dem Kauf; leere Jahre werden "
-                "fortgeschrieben. AfA 1240 und Kreditzinsen 1310 rechnet das Modell (grau). "
-                f"Das Neuobjekt zählt in „{SUMMENBLATT}“.")
+                "Spalte Kostenstelle Neukauf). Basisjahr gelb: Miete 1020, weitere Einnahmen "
+                "1090, Erhaltung 1250 und weitere Ausgaben 1100–1220, 1260 gehen über das Blatt "
+                "Neukauf-KSt in die Prognose. Planjahre grau aus dem Modell: mit Neuobjekt "
+                "dessen Werte ab dem Jahr nach dem Kauf (Planwert der Kostenstelle, sonst "
+                "Mietrendite und Erhaltungsquote), ohne Neuobjekt die Planwerte; Planwerte im "
+                f"Blatt Neukauf-KSt ändern. Das Neuobjekt zählt in „{SUMMENBLATT}“.")
     ws["E2"].font = Font(italic=True)
     return ws
 
 
+def _planjahre_neukauf(ws, z: dict, planjahre: int, block: int) -> None:
+    """Planspalten der Positionen des Blatts Neukauf-KSt: mit Neuobjekt in D3 dessen Prognose,
+    sonst die fortgeschriebenen Planwerte. Weitere Ausgaben nach dem Anteil der Kostenart im
+    Basisjahr, 1260 nimmt den Rest auf."""
+    from . import formeln
+    from .einlesen import NEUKAUF_POSITIONEN as ZEILEN_JE_POSITION
+    from .modelle import NEUKAUF_POSITIONEN
+    _, fort0, _, _ = formeln.nk_spalten()
+    kopf = formeln.NK_ERSTE + block * len(NEUKAUF_POSITIONEN)
+    t = get_column_letter(SPALTE_JAHR)
+    for k, (key, *_) in enumerate(NEUKAUF_POSITIONEN):
+        nummern = [nr for nr in ZEILEN_JE_POSITION[key] if nr in z]
+        rest = nummern[-1]
+        basis = "+".join(f"N(${t}${z[nr]})" for nr in nummern)
+        for i in range(planjahre):
+            sp = get_column_letter(SPALTE_PLAN + i)
+            plan = f"'Neukauf-KSt'!${get_column_letter(fort0 + i + 1)}${kopf + k}"
+            wert = (f'IF($D$3="",{plan},SUMIFS({PRG_JE_POSITION[key]},prg_ID,$D$3,'
+                    f"prg_Jahr,{sp}${ZEILE_JAHR}))")
+            for nr in nummern:
+                if nr == rest:
+                    andere = "+".join(f"{sp}{z[n]}" for n in nummern if n != rest)
+                    anteil = f"{wert}-({andere})" if andere else wert
+                else:
+                    anteil = f"IF(({basis})=0,0,{wert}*N(${t}${z[nr]})/({basis}))"
+                c = ws.cell(row=z[nr], column=SPALTE_PLAN + i,
+                            value=f'=IF(ISNUMBER({wert}),{anteil},"")')
+                c.number_format, c.fill = FMT_BWA, FILL_BERECHNET
+
+
 def verknuepfe_neukauf(wb, block: int, titel: str) -> None:
-    """Zeilen der Neukauf-Kostenstelle im Blatt Neukauf-KSt verweisen auf ihr Blatt:
-    Jahr mit mindestens einem Wert = Summe der BWA-Zeilen, sonst leer (Fortschreibung)."""
+    """Basisjahr der Neukauf-Kostenstelle im Blatt Neukauf-KSt verweist auf ihr Blatt: Summe
+    der BWA-Zeilen, leer ohne Wert. Die Planjahre bleiben Eingabe im Blatt Neukauf-KSt,
+    das Blatt der Kostenstelle zeigt sie an (_planjahre_neukauf)."""
     from . import formeln
     from .einlesen import NEUKAUF_POSITIONEN as ZEILEN_JE_POSITION
     from .modelle import NEUKAUF_POSITIONEN
     ws = wb["Neukauf-KSt"]
-    j0, _, import0, n = formeln.nk_spalten()
+    j0, _, import0, _ = formeln.nk_spalten()
     blatt = titel.replace("'", "''")
+    sp = get_column_letter(SPALTE_JAHR)
     kopf = formeln.NK_ERSTE + block * len(NEUKAUF_POSITIONEN)
     for k, (key, *_) in enumerate(NEUKAUF_POSITIONEN):
-        for i in range(n):
-            sp = get_column_letter(SPALTE_JAHR if i == 0 else SPALTE_PLAN + i - 1)
-            refs = ",".join(f"'{blatt}'!${sp}${ZEILEN[nr]}" for nr in ZEILEN_JE_POSITION[key]
-                            if nr in ZEILEN)
-            formel = f'=IF(COUNT({refs})=0,"",SUM({refs}))'
-            ws.cell(row=kopf + k, column=j0 + i, value=formel)
-            ws.cell(row=kopf + k, column=import0 + i, value=formel)
+        refs = ",".join(f"'{blatt}'!${sp}${ZEILEN[nr]}" for nr in ZEILEN_JE_POSITION[key]
+                        if nr in ZEILEN)
+        formel = f'=IF(COUNT({refs})=0,"",SUM({refs}))'
+        ws.cell(row=kopf + k, column=j0, value=formel)
+        ws.cell(row=kopf + k, column=import0, value=formel)
 
 
 def _bezug(titel: str, nr: int, z: dict) -> str:
@@ -555,7 +594,7 @@ def blaetter_bwa(wb, modell: Modell) -> list:
     neukauf = []
     for block, lw in enumerate(list(modell.neukauf.values())[:modell.kapazitaet.neukauf]):
         t = blattname(lw.blatt or lw.objekt_id, wb.sheetnames)
-        _blatt_neukauf_kst(wb, t, lw, basisjahr, planjahre)
+        _blatt_neukauf_kst(wb, t, lw, basisjahr, planjahre, block)
         verknuepfe_neukauf(wb, block, t)
         neukauf.append(t)
 
