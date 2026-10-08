@@ -22,6 +22,8 @@ from prognosemodell.einlesen import (anlagen_zusammenfuehren, lese_inventar, les
 from prognosemodell.makros import LibreOffice, speichere_mit_makros
 from prognosemodell.mappe import erstelle_mappe
 from prognosemodell.modelle import (FEHLER, HINWEIS, MAX_OBJEKTE, PRUEFUNGEN, Anlage,
+                                    LIQ_SPALTEN, NEU_FELDER, NEU_SPALTEN, VERKAUF_FELDER,
+                                    VERKAUF_SPALTEN,
                                     STATUS_ANNAHME_GELOESCHT, WARNUNG, Modell, Neuobjekt,
                                     Objekt, Verkauf, prognosejahre)
 from openpyxl.utils import get_column_letter
@@ -39,6 +41,13 @@ OHNE_ALTERUNG = {"par_ErhAlterung": 0, "par_NeuErhAnlaufFaktor": 1, "par_SanQuot
 FEHLT = object()        # Makro ohne Rückgabewert: nur prüfen, dass es fehlerfrei läuft
 AUSGEBLENDET = "Zeile ausgeblendet"  # statt Bereichsname: Zeilennummer im Blatt Prognose
 EINGEKLAPPT = "Spalte eingeklappt:"  # + Blattname; statt Zeile: Spaltennummer, Soll (Ebene, aus)
+ZEILE_EINGEKLAPPT = "Zeile eingeklappt:"  # + Blattname; statt Zeile: Zeilennummer, Soll (Ebene, aus)
+KOPF = "Kopf:"  # + Blatt:Zeile; statt Zeile: Spaltennummer, Soll Text, " [Tooltip]" mit Kommentar
+
+
+def nr(spalten, key: str, versatz: int = 0) -> int:
+    """Spaltennummer des Schlüssels key in einer Spaltenliste."""
+    return versatz + 1 + [s.key for s in spalten].index(key)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -1263,6 +1272,31 @@ def faelle():
         ]),
         # AfA-Plan aus BWA 1240 der Kostenstellen-Datei: 2027 15.000, 2028 14.000, 2030 0;
         # 2029 und ab 2031 schreibt das Modell fort (AfA lt. Buchhaltung 16.000)
+        ("Selbstdokumentation: Pflichtfelder, Tooltips, eingeklappte Parameter", [testobjekt()], [
+            (f"{KOPF}Verkäufe:1", 1, "ObjektID * [Tooltip]"),
+            (f"{KOPF}Verkäufe:1", nr(VERKAUF_FELDER, "kosten"), "Verkaufskosten [Tooltip]"),
+            (f"{KOPF}Verkäufe:1", nr(VERKAUF_SPALTEN, "nettoerloes", len(VERKAUF_FELDER)),
+             "Nettoerlös [Tooltip]"),
+            (f"{KOPF}Neuobjekte:1", nr(NEU_FELDER, "kaufpreis"), "Kaufpreis * [Tooltip]"),
+            (f"{KOPF}Neuobjekte:1", nr(NEU_FELDER, "kst"), "Kostenstelle Neukauf [Tooltip]"),
+            (f"{KOPF}Neuobjekte:1", nr(NEU_SPALTEN, "bedarf", len(NEU_FELDER)),
+             "Finanzierungsbedarf [Tooltip]"),
+            (f"{KOPF}Objekte:1", 1, "ObjektID * [Tooltip]"),
+            (f"{KOPF}Liquidität:2", nr(LIQ_SPALTEN, "zve"),
+             "Ergebnis vor Verlustvortrag [Tooltip]"),
+            (f"{KOPF}Liquidität:2", 1, "Jahr"),
+            (f"{KOPF}Rücklagen:1", 1, "RücklageID [Tooltip]"),
+            (f"{KOPF}Parameter:5", 1, "★ Basisjahr (Ist) [Tooltip]"),
+            (f"{KOPF}Parameter:13", 1, "Steigerung weitere Ausgaben p. a. [Tooltip]"),
+            # § 6b-Abschnitt eingeklappt, Annahmen bei fehlenden Daten (mit Kernparametern) offen
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 21, (0, False)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 22, (1, True)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 27, (1, True)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 30, (1, False)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 38, (1, True)),
+            ("par_6bFrist", 0, 4),
+            ("par_6bFristNeubau", 0, 6),
+        ]),
         ("AfA-Plan: geplante Jahre ersetzen die Fortschreibung",
          vorlage_eingelesen(plan={"KSt 1": {1240: {2027: 15_000, 2028: 14_000, 2030: 0}}}), [
             ("afp_ID", 0, "KSt 1"),
@@ -1730,6 +1764,13 @@ def pruefe(fall: str, wb, pruefungen) -> int:
             ist = bool(wb["Prognose"].row_dimensions[zeile].hidden)
         elif name.startswith(EINGEKLAPPT):
             ist = eingeklappt(wb[name[len(EINGEKLAPPT):]], zeile)
+        elif name.startswith(ZEILE_EINGEKLAPPT):
+            dim = wb[name[len(ZEILE_EINGEKLAPPT):]].row_dimensions[zeile]
+            ist = (dim.outline_level, bool(dim.hidden))
+        elif name.startswith(KOPF):
+            blatt, kopfzeile = name[len(KOPF):].rsplit(":", 1)
+            c = wb[blatt].cell(row=int(kopfzeile), column=zeile)
+            ist = f"{c.value}{' [Tooltip]' if c.comment else ''}"
         else:
             ist = wert(wb, name, zeile)
         if ist == "":

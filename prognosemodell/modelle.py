@@ -57,7 +57,13 @@ PARAMETER = [
     Parameter("par_Alternativrendite", "Rendite Alternativanlage p. a.", 0.03, FMT_PROZENT,
               "Zins auf die Liquidität des Vorjahresendes in allen Szenarien, voll steuerpflichtig; "
               "negative Liquidität kostet denselben Satz. Platzhalter"),
-    Parameter("par_6bVorbesitz", "§ 6b Mindest-Vorbesitzzeit (Jahre)", 6, FMT_ZAHL, ""),
+    Parameter("par_StatusPruefung", "Plausibilitätsprüfung", "=pr_Gesamt", FMT_TEXT,
+              "berechnet; Einzelheiten im Blatt Prüfung"),
+    Parameter("par_AnlStand", "Stand Anlagenverzeichnis (Wj-Ende)", "=par_Basisjahr-1", FMT_JAHR,
+              "Jahr der Buchwerte im Blatt Anlagen; die AfA bis zum Ende des Basisjahrs "
+              "rechnet das Blatt fort"),
+    Parameter("par_6bVorbesitz", "§ 6b Mindest-Vorbesitzzeit (Jahre)", 6, FMT_ZAHL, "",
+              abschnitt="§ 6b und Drei-Objekt-Grenze (gesetzliche Werte)"),
     Parameter("par_6bFrist", "§ 6b Reinvestitionsfrist (Jahre)", 4, FMT_ZAHL, ""),
     Parameter("par_6bFristNeubau", "§ 6b Frist bei Neubau (Jahre)", 6, FMT_ZAHL,
               "wenn mit dem Neubau vor Ende der Regelfrist begonnen wurde (§ 6b Abs. 3)"),
@@ -67,11 +73,6 @@ PARAMETER = [
               "mehr Verkäufe im Zeitraum: Warnung gewerblicher Grundstückshandel"),
     Parameter("par_DOJahre", "Zeitraum Drei-Objekt-Grenze (Jahre)", 5, FMT_ZAHL,
               "vereinfacht: Verkäufe innerhalb dieses Zeitraums; fachlich prüfen"),
-    Parameter("par_StatusPruefung", "Plausibilitätsprüfung", "=pr_Gesamt", FMT_TEXT,
-              "berechnet; Einzelheiten im Blatt Prüfung"),
-    Parameter("par_AnlStand", "Stand Anlagenverzeichnis (Wj-Ende)", "=par_Basisjahr-1", FMT_JAHR,
-              "Jahr der Buchwerte im Blatt Anlagen; die AfA bis zum Ende des Basisjahrs "
-              "rechnet das Blatt fort"),
     # Auffülllogik: stehen als Formel (blau) in leeren Eingabezellen, überschreibbar
     Parameter("par_AnnVervielfaeltiger", "Verkehrswert = Jahresmiete ×", 20, "0.0",
               "Vervielfältiger, 20 = Bruttomietrendite 5 %; Platzhalter",
@@ -364,22 +365,35 @@ PROGNOSE_SPALTEN = [
 # Blatt Verkäufe (Etappe 4, Projektplan Abschnitt 11): Eingaben, dann berechnete Spalten
 MAX_VERKAEUFE = 50
 VERKAUF_FELDER = [
-    Feld("objekt_id", "ObjektID", "vk_ID", FMT_TEXT, True, 14),
+    Feld("objekt_id", "ObjektID", "vk_ID", FMT_TEXT, True, 14,
+         hinweis="Objekt aus dem Blatt Objekte (Auswahlliste); je Objekt ein Verkauf"),
     Feld("jahr", "Verkaufsjahr", "vk_Jahr", FMT_JAHR, True, 12,
-         minimum=1900, maximum=2100, ganzzahl=True),
+         minimum=1900, maximum=2100, ganzzahl=True,
+         hinweis="Verkauf zum Jahresende: Miete und AfA laufen im Verkaufsjahr noch. Muss im "
+                 "Prognoseraster liegen"),
     Feld("preis", "Verkaufspreis", "vk_Preis", FMT_EURO, True, minimum=0, annahme=True,
-         kritisch=True, hinweis="leer: Verkehrswert, fortgeschrieben bis zum Verkaufsjahr"),
-    Feld("kosten", "Verkaufskosten", "vk_Kosten", FMT_EURO, False, minimum=0),
+         kritisch=True, hinweis="Bruttopreis ohne Abzug der Kosten. Leer: Verkehrswert, "
+                                "fortgeschrieben bis zum Verkaufsjahr (orange: bestimmt den "
+                                "Gewinn, möglichst echten Wert eintragen)"),
+    Feld("kosten", "Verkaufskosten", "vk_Kosten", FMT_EURO, False, minimum=0,
+         hinweis="Makler, Notar, Vorfälligkeit u. Ä.; mindern Nettoerlös und Gewinn. Leer = 0"),
     Feld("anteil_gub", "Anteil G+B lt. Kaufvertrag", "vk_AnteilGuBVertrag", FMT_PROZENT, False,
-         minimum=0, maximum=1),
-    Feld("nutzung_6b", "§ 6b nutzen", "vk_6b", FMT_TEXT, False, 10, auswahl=("ja", "nein")),
+         minimum=0, maximum=1,
+         hinweis="Anteil Grund und Boden am Preis, teilt Erlös und Gewinn auf Gebäude und G+B. "
+                 "Leer: 1 − Verkehrswertanteil Gebäude (Blatt Objekte)"),
+    Feld("nutzung_6b", "§ 6b nutzen", "vk_6b", FMT_TEXT, False, 10, auswahl=("ja", "nein"),
+         hinweis="ja: positive Gewinne gehen in eine § 6b-Rücklage (Blatt Rücklagen) statt "
+                 "sofort in die Steuer; nur bei Vorbesitzzeit ab der Mindestdauer. Leer = nein"),
     # verlängert die Reinvestitionsfrist auf par_6bFristNeubau
     Feld("neubau_6b", "§ 6b Neubau begonnen", "vk_6bNeubau", FMT_TEXT, False, 11,
-         auswahl=("ja", "nein")),
+         auswahl=("ja", "nein"),
+         hinweis="ja: mit einem Neubau wurde vor Ende der Regelfrist begonnen, die Rücklage "
+                 "läuft die längere Neubaufrist (Parameter). Leer = nein"),
     # ja = Neuobjekt in derselben Zeile des Blatts Neuobjekte aus den Annahmen (Reinvestition)
     Feld("reinvest", "reinvestieren", "vk_Reinvest", FMT_TEXT, False, 12,
          auswahl=("ja", "nein"),
-         hinweis="ja: Kauf eines Neuobjekts nach den Annahmen auf dem Parameterblatt"),
+         hinweis="ja: Kauf eines Neuobjekts nach den Annahmen auf dem Parameterblatt, in "
+                 "derselben Zeile des Blatts Neuobjekte (blau, überschreibbar). Leer = nein"),
 ]
 VERKAUF_SPALTEN = [
     Spalte("vorbesitz", "Vorbesitzzeit Jahre", "vk_Vorbesitz", FMT_ZAHL, 11),
@@ -437,22 +451,40 @@ FIN_EIGEN, FIN_KREDIT = "Eigenmittel", "Kredit"
 TILGUNG_ANNUITAET, TILGUNG_LINEAR, TILGUNG_ENDFAELLIG = "Annuität", "linear", "endfällig"
 TILGUNGSARTEN = (TILGUNG_ANNUITAET, TILGUNG_LINEAR, TILGUNG_ENDFAELLIG)
 NEU_FELDER = [
-    Feld("neu_id", "NeuID", "ne_ID", FMT_TEXT, True, 12),
+    Feld("neu_id", "NeuID", "ne_ID", FMT_TEXT, True, 12,
+         hinweis="eindeutige Kennung, nicht gleich einer ObjektID; unter ihr führen Prognose "
+                 "und BWA-Blatt das Neuobjekt"),
     Feld("name", "Name", "ne_Name", FMT_TEXT, False, 22),
     Feld("kaufjahr", "Kaufjahr", "ne_Kaufjahr", FMT_JAHR, True, 10,
-         minimum=1900, maximum=2100, ganzzahl=True),
-    Feld("kaufpreis", "Kaufpreis", "ne_Kaufpreis", FMT_EURO, True, minimum=0),
-    Feld("anteil_gub", "Anteil G+B", "ne_AnteilGuB", FMT_PROZENT, True, 10, minimum=0, maximum=1),
-    Feld("nebenkosten", "Kaufnebenkosten", "ne_Nebenkosten", FMT_EURO, False, minimum=0),
-    Feld("afa_satz", "AfA-Satz", "ne_AfASatz", FMT_PROZENT, True, 10, minimum=0, maximum=0.2),
+         minimum=1900, maximum=2100, ganzzahl=True,
+         hinweis="Kauf zum Jahresende: Übertragung und Kreditauszahlung im Kaufjahr, Miete, "
+                 "AfA, Zins und Tilgung ab dem Folgejahr. Mit Quelle: zwischen Bildungs- und "
+                 "Fristjahr der Rücklage"),
+    Feld("kaufpreis", "Kaufpreis", "ne_Kaufpreis", FMT_EURO, True, minimum=0,
+         hinweis="ohne Nebenkosten; Basis für Miete (Mietrendite), Erhaltung und Verkehrswert"),
+    Feld("anteil_gub", "Anteil G+B", "ne_AnteilGuB", FMT_PROZENT, True, 10, minimum=0, maximum=1,
+         hinweis="Anteil Grund und Boden an Kaufpreis und Nebenkosten; G+B wird nicht "
+                 "abgeschrieben"),
+    Feld("nebenkosten", "Kaufnebenkosten", "ne_Nebenkosten", FMT_EURO, False, minimum=0,
+         hinweis="Grunderwerbsteuer, Notar, Makler in Euro; anteilig auf G+B und Gebäude "
+                 "aktiviert. Leer = 0"),
+    Feld("afa_satz", "AfA-Satz", "ne_AfASatz", FMT_PROZENT, True, 10, minimum=0, maximum=0.2,
+         hinweis="AfA p. a. auf die AfA-Basis (AK Gebäude − übertragene Rücklage); "
+                 "Nutzungsdauer = 1 / Satz"),
     # leer = linear; degressiv: par_AfADegressiv vom Restbuchwert, Wechsel zur linearen AfA,
     # sobald Restbuchwert / Restnutzungsdauer höher ist; Nutzungsdauer = 1 / AfA-Satz
     Feld("afa_methode", "AfA-Methode", "ne_AfAMethode", FMT_TEXT, False, 11,
-         auswahl=(AFA_LINEAR, AFA_DEGRESSIV)),
+         auswahl=(AFA_LINEAR, AFA_DEGRESSIV),
+         hinweis="leer = linear. Degressiv: Satz „AfA degressiv“ (Parameter) vom Restbuchwert, "
+                 "Wechsel zur linearen AfA, sobald diese höher ist"),
     Feld("mietrendite", "Mietrendite auf Kaufpreis", "ne_Mietrendite", FMT_PROZENT, False, 11,
-         minimum=0, maximum=1),
+         minimum=0, maximum=1,
+         hinweis="Jahresmiete = Kaufpreis × Rendite ab dem Folgejahr, dann mit der "
+                 "Mietsteigerung. Leer = keine Miete; eine Kostenstelle Neukauf ersetzt sie"),
     Feld("erhaltungsquote", "Erhaltung auf Kaufpreis", "ne_ErhQuote", FMT_PROZENT, False, 11,
-         minimum=0, maximum=1),
+         minimum=0, maximum=1,
+         hinweis="Erhaltung = Kaufpreis × Quote, in den Anlaufjahren gemindert (Parameter). "
+                 "Leer = keine; eine Kostenstelle Neukauf ersetzt sie"),
     # bis zu drei Rücklagen je Neuobjekt, übertragen in dieser Reihenfolge (QUELLEN)
     Feld("quelle", "Quelle 1 RücklageID", "ne_Quelle", FMT_TEXT, False, 16,
          hinweis="Rücklage aus dem Blatt Rücklagen; ihr Gewinn mindert die AK, ihr "

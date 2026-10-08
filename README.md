@@ -8,6 +8,7 @@
 - **Rechnung in Zellformeln:** jeder Schritt ist im Blatt nachvollziehbar. VBA steuert nur Objekte, Szenarien, Prüfungen und Neuberechnung.
 - **Python als Generator:** openpyxl baut die Mappe einmalig beim Erstellen. Ein Prüfskript rechnet sie per LibreOffice headless durch und gleicht sie mit den Testfällen ab.
 - **Alle Annahmen auf dem Parameterblatt**, keine festen Zahlen in Formeln.
+- **Selbstdokumentierend:** Spaltenköpfe zeigen Pflichtfelder (rot, *), optionale Eingaben (blau) und berechnete Spalten (grau); ein Kommentar am Kopf erklärt das Feld bzw. die Herleitung. Auf dem Parameterblatt sind die Kernparameter mit ★ markiert, weniger wichtige Abschnitte eingeklappt, und jeder Parameter sagt, was er beeinflusst (Texte in `prognosemodell/erklaerungen.py`).
 - **Finanzierung nur bei Neuobjekten:** Kredite werden je Kauf im Blatt Neuobjekte festgelegt (Tilgungsplan im Blatt Darlehen); Bestandsobjekte rechnen ohne Zins und Tilgung.
 
 ## Blätter

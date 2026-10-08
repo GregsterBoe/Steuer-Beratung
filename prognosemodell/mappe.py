@@ -5,6 +5,7 @@ import dataclasses
 from openpyxl import Workbook
 from openpyxl.chart import LineChart, Reference
 from openpyxl.chart.text import RichText
+from openpyxl.comments import Comment
 from openpyxl.drawing.text import (CharacterProperties, Paragraph, ParagraphProperties,
                                    RichTextProperties)
 from openpyxl.formatting.rule import FormulaRule
@@ -13,7 +14,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.datavalidation import DataValidation
 
-from . import bwa, formeln
+from . import bwa, erklaerungen, formeln
 from .modelle import (ANLAGE_FELDER, ANLAGE_JAHRE_NAME, ANLAGE_SPALTEN, ANLAGE_STATUS_NAME,
                       MIN_ANLAGEN, OBJEKT_ANLAGEN_SPALTEN,
                       CODENAME_MAPPE, CODENAMEN, FEHLER, OBJEKT_EINGELESEN, FMT_EURO, FMT_JAHR, FMT_PROZENT,
@@ -22,7 +23,7 @@ from .modelle import (ANLAGE_FELDER, ANLAGE_JAHRE_NAME, ANLAGE_SPALTEN, ANLAGE_S
                       VARIANTEN_KOPF, WARNUNG,
                       MAX_OBJEKTE, MAX_VERKAEUFE, NEU_FELDER, NEU_SPALTEN, NEU_STATUS_NAME, OBJEKT_FELDER,
                       DARLEHEN_BLOECKE, DARLEHEN_ERSTE, DARLEHEN_SPALTEN, NEU_DETAIL_ERSTE, QUELLEN,
-                      PARAMETER, PROGNOSE_SPALTEN, RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN,
+                      PARAMETER, PROGNOSE_SPALTEN, Spalte, RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN,
                       STATUS_NAME, STATUS_UEBERSCHRIFT, SZ_A, SZ_BASELINE, SZENARIEN,
                       VERGLEICH_KENNZAHLEN, VERKAUF_FELDER, VERKAUF_SPALTEN, VERKAUF_STATUS_NAME, Modell,
                       ZUORDNUNG_BEZEICHNUNG, ZUORDNUNG_MEHRDEUTIG, aus_spalten, liq_spalten,
@@ -39,6 +40,9 @@ FONT_KOPF = Font(bold=True, color="FFFFFF")
 FILL_KOPF = PatternFill("solid", fgColor="305496")
 FILL_EINGABE = PatternFill("solid", fgColor="FFF2CC")   # gelb = hier wird getippt
 FILL_BERECHNET = PatternFill("solid", fgColor="E7E6E6")  # grau = Formel
+FILL_KOPF_PFLICHT = PatternFill("solid", fgColor="C00000")    # Pflichtfeld, Kopf mit *
+FILL_KOPF_BERECHNET = PatternFill("solid", fgColor="595959")  # berechnete Spalte
+FILL_KERN = PatternFill("solid", fgColor="FCE4A8")           # Kernparameter
 FILL_FEHLER = PatternFill("solid", fgColor="F8CBAD")
 FILL_WARNUNG = PatternFill("solid", fgColor="FFE699")
 # Farblogik der Eingabezellen (Legende auf dem Startblatt)
@@ -59,6 +63,13 @@ FARBEN = [
     (FILL_EINGABE, "gelb", "händisch eingetragen bzw. Eingabefeld"),
 ]
 ISF = formeln.ISFORMEL
+KOPF_LEGENDE = [
+    (FILL_KOPF_PFLICHT, "Kopf rot *", "Pflichtfeld: ohne Wert rechnet die Zeile nicht"),
+    (FILL_KOPF, "Kopf blau", "optionale Eingabe; leer gilt die Annahme bzw. der Standard"),
+    (FILL_KOPF_BERECHNET, "Kopf grau", "berechnete Spalte, nicht überschreiben"),
+]
+TOOLTIP_HINWEIS = ("Kopfzeilen mit rotem Dreieck: Maus darüber zeigt Erläuterung bzw. "
+                   "Herleitung der Spalte.")
 
 
 def _name(wb, name: str, ref: str) -> None:
@@ -71,6 +82,53 @@ def _kopf(ws, zeile: int, werte: list) -> None:
         c.font = FONT_KOPF
         c.fill = FILL_KOPF
         c.alignment = Alignment(wrap_text=True, vertical="center")
+
+
+def _tooltip(zelle, text: str) -> None:
+    """Kommentar als Tooltip (Maus über der Zelle); Größe nach Textlänge."""
+    if not text:
+        return
+    zeilen = sum(len(absatz) // 48 + 1 for absatz in text.split("\n"))
+    zelle.comment = Comment(text, "Prognosemodell", height=min(40 + 15 * zeilen, 400), width=320)
+
+
+def _feld_text(f) -> str:
+    """Tooltip eines Eingabefelds: Pflicht oder optional, dann die Eingabehilfe."""
+    if f.pflicht and f.annahme:
+        art = "Pflichtfeld; leer steht eine Annahme (blau/orange)."
+    elif f.pflicht:
+        art = "Pflichtfeld."
+    elif f.annahme:
+        art = "Optional; leer steht eine Annahme (blau)."
+    else:
+        art = "Optional."
+    teile = [art, f.hinweis]
+    if f.auswahl:
+        teile.append("Auswahl: " + ", ".join(f.auswahl))
+    return "\n".join(t for t in teile if t)
+
+
+def _kopf_felder(ws, zeile: int, felder, start: int = 1) -> None:
+    """Kopf der Eingabefelder: Pflichtfelder rot mit *, Tooltip je Feld."""
+    for i, f in enumerate(felder, start=start):
+        c = ws.cell(row=zeile, column=i)
+        if f.pflicht:
+            c.value = f"{f.ueberschrift} *"
+            c.fill = FILL_KOPF_PFLICHT
+        _tooltip(c, _feld_text(f))
+
+
+def _kopf_berechnet(ws, zeile: int, spalten, start: int = 1, texte: dict = None,
+                    grau: bool = True) -> None:
+    """Kopf berechneter Spalten: grau (in Blättern mit Eingaben), Herleitung als Tooltip."""
+    texte = erklaerungen.SPALTEN if texte is None else texte
+    for i, s_ in enumerate(spalten, start=start):
+        c = ws.cell(row=zeile, column=i)
+        if grau:
+            c.fill = FILL_KOPF_BERECHNET
+        text = texte.get(s_.name) or texte.get(s_.key, "")
+        if text:
+            _tooltip(c, "Berechnet: " + text)
 
 
 def _validierung(ws, f, bereich: str, liste: str = None) -> None:
@@ -99,7 +157,7 @@ def _validierung(ws, f, bereich: str, liste: str = None) -> None:
     if f.hinweis:
         dv.showInputMessage = True
         dv.promptTitle = f.ueberschrift[:32]
-        dv.prompt = f.hinweis[:255]
+        dv.prompt = f.hinweis if len(f.hinweis) <= 255 else f.hinweis[:250].rsplit(" ", 1)[0] + " …"
     ws.add_data_validation(dv)
     dv.add(bereich)
 
@@ -152,15 +210,30 @@ def _blatt_parameter(wb, modell: Modell) -> None:
     unbekannt = set(modell.parameter) - {p.name for p in PARAMETER}
     if unbekannt:
         raise ValueError(f"unbekannte Parameter: {sorted(unbekannt)}")
+    ws["A3"] = ("★ = Kernparameter, zuerst prüfen. Abschnitte ohne Kernparameter sind "
+                "eingeklappt: + am linken Rand öffnet sie. Maus über der Bezeichnung zeigt, was "
+                "der Parameter beeinflusst.")
+    ws["A3"].font = Font(italic=True)
     zeile = 4
     zeile_pruefung = None
+    abschnitte = []   # [erste Zeile, letzte Zeile, mit Kernparameter]
     for p in PARAMETER:
         zeile += 1
         if p.abschnitt:
             zeile += 1
             ws.cell(row=zeile, column=1, value=p.abschnitt).font = Font(bold=True)
             zeile += 1
-        ws.cell(row=zeile, column=1, value=p.bezeichnung)
+            abschnitte.append([zeile, zeile, False])
+        elif abschnitte:
+            abschnitte[-1][1] = zeile
+        kern = p.name in erklaerungen.KERNPARAMETER
+        if abschnitte and kern:
+            abschnitte[-1][2] = True
+        a = ws.cell(row=zeile, column=1, value=("★ " if kern else "") + p.bezeichnung)
+        _tooltip(a, erklaerungen.PARAMETER_WIRKUNG.get(p.name, ""))
+        if kern:
+            a.font = Font(bold=True)
+            a.fill = FILL_KERN
         c = ws.cell(row=zeile, column=2, value=modell.parameter.get(p.name, p.wert))
         c.number_format = p.format
         berechnet = isinstance(p.wert, str) and p.wert.startswith("=")
@@ -176,6 +249,10 @@ def _blatt_parameter(wb, modell: Modell) -> None:
         if p.name == "par_StatusPruefung":
             zeile_pruefung = zeile
 
+    ws.sheet_properties.outlinePr.summaryBelow = False
+    for von, bis, kern in abschnitte:
+        ws.row_dimensions.group(von, bis, hidden=not kern, outline_level=1)
+        ws.row_dimensions[von - 1].collapsed = not kern
     ws.conditional_formatting.add(
         f"B{zeile_pruefung}",
         FormulaRule(formula=[f'B{zeile_pruefung}<>"OK"'], fill=FILL_FEHLER))
@@ -206,6 +283,9 @@ def _blatt_objekte(wb, modell: Modell) -> None:
     import_spalte = {f.key: formeln.ispalte(f.key) for f in eingelesen}
     assert formeln.OBJEKT_HILFSSPALTEN == len(hilfe)
     _kopf(ws, 1, [f.ueberschrift for f in OBJEKT_FELDER] + [h[0] for h in hilfe])
+    _kopf_felder(ws, 1, OBJEKT_FELDER)
+    _kopf_berechnet(ws, 1, [Spalte(name, u, name, FMT_ZAHL) for u, name, _, _ in hilfe],
+                    start=status_spalte)
     for f in eingelesen:
         c = ws[f"{import_spalte[f.key]}1"]
         c.value = f"eingelesen: {f.ueberschrift}"
@@ -321,6 +401,9 @@ def _blatt_anlagen(wb, modell: Modell) -> None:
     kopf = ([f.ueberschrift for f in ANLAGE_FELDER] + [s_.ueberschrift for s_ in ANLAGE_SPALTEN]
             + [STATUS_UEBERSCHRIFT])
     _kopf(ws, 2, kopf)
+    _kopf_felder(ws, 2, ANLAGE_FELDER)
+    _kopf_berechnet(ws, 2, ANLAGE_SPALTEN + [Spalte("status", "", ANLAGE_STATUS_NAME, FMT_TEXT)],
+                    start=len(ANLAGE_FELDER) + 1)
     for i in range(jahre):
         c = ws.cell(row=2, column=jahr_spalte + i, value=f'="AfA "&(par_Startjahr+{i})')
         c.font, c.fill = FONT_KOPF, FILL_KOPF
@@ -525,6 +608,7 @@ def _blatt_prognose(wb) -> None:
     jahre = prognosejahre()
     erste, letzte = 2, (MAX_OBJEKTE + MAX_NEUOBJEKTE) * jahre + 1
     _kopf(ws, 1, [s.ueberschrift for s in PROGNOSE_SPALTEN])
+    _kopf_berechnet(ws, 1, PROGNOSE_SPALTEN, grau=False)
     ws.row_dimensions[1].height = 32
 
     for i, s in enumerate(PROGNOSE_SPALTEN, start=1):
@@ -555,6 +639,10 @@ def _blatt_verkaeufe(wb, modell: Modell) -> None:
     status_spalte = len(spalten) + 1
     st = get_column_letter(status_spalte)
     _kopf(ws, 1, [s.ueberschrift for s in spalten] + [STATUS_UEBERSCHRIFT])
+    _kopf_felder(ws, 1, VERKAUF_FELDER)
+    _kopf_berechnet(ws, 1, VERKAUF_SPALTEN + [
+        Spalte("status", "", VERKAUF_STATUS_NAME, FMT_TEXT),
+        Spalte("preis_annahme", "", "vk_PreisAnnahme", FMT_ZAHL)], start=len(VERKAUF_FELDER) + 1)
     ws.row_dimensions[1].height = 45
 
     for i, s in enumerate(spalten, start=1):
@@ -578,7 +666,6 @@ def _blatt_verkaeufe(wb, modell: Modell) -> None:
     _name(wb, VERKAUF_STATUS_NAME, f"'Verkäufe'!${st}${erste}:${st}${letzte}")
     pa = get_column_letter(status_spalte + 1)
     ws.cell(row=1, column=status_spalte + 1, value="Preis angenommen").font = FONT_KOPF
-    ws.cell(row=1, column=status_spalte + 1).fill = FILL_KOPF
     _name(wb, "vk_PreisAnnahme", f"'Verkäufe'!${pa}${erste}:${pa}${letzte}")
     for zeile in range(erste, letzte + 1):
         for i, f in enumerate(VERKAUF_FELDER, start=1):
@@ -610,6 +697,8 @@ def _blatt_verkaeufe(wb, modell: Modell) -> None:
                          "sonst 1 − Verkehrswertanteil Gebäude aus dem Objektblatt.")
     ws[f"{hinweis}3"] = ("§ 6b Neubau begonnen = ja: Mit dem Bau wurde vor Ende der Regelfrist "
                          "begonnen, die Rücklage läuft dann par_6bFristNeubau statt par_6bFrist Jahre.")
+    ws[f"{hinweis}4"] = "Kopf rot mit * = Pflichtfeld, blau = optional, grau = berechnet. " \
+        + TOOLTIP_HINWEIS
     ws.freeze_panes = "B2"
 
 
@@ -621,6 +710,9 @@ def _blatt_neuobjekte(wb, modell: Modell) -> None:
     status_spalte = len(spalten) + 1
     st = get_column_letter(status_spalte)
     _kopf(ws, 1, [s.ueberschrift for s in spalten] + [STATUS_UEBERSCHRIFT])
+    _kopf_felder(ws, 1, NEU_FELDER)
+    _kopf_berechnet(ws, 1, NEU_SPALTEN + [Spalte("status", "", NEU_STATUS_NAME, FMT_TEXT)],
+                    start=len(NEU_FELDER) + 1)
     ws.row_dimensions[1].height = 45
 
     for i, s in enumerate(spalten, start=1):
@@ -681,6 +773,8 @@ def _blatt_neuobjekte(wb, modell: Modell) -> None:
                          "Quell-Verkäufe (in Zeilenreihenfolge, soweit nicht schon eingesetzt). "
                          "Finanzierung Rest = Kredit: Kreditbetrag leer = ganzer Bedarf; der Rest "
                          "kommt aus Eigenmitteln (Liquidität). Tilgungsplan im Blatt Darlehen.")
+    ws[f"{hinweis}9"] = "Kopf rot mit * = Pflichtfeld, blau = optional, grau = berechnet. " \
+        + TOOLTIP_HINWEIS
     # Hilfsspalten je Quelle eingeklappt, Schalter über der Statusspalte
     von = len(NEU_FELDER) + 1 + [s.key for s in NEU_SPALTEN].index(NEU_DETAIL_ERSTE)
     ws.column_dimensions.group(get_column_letter(von), get_column_letter(status_spalte - 1),
@@ -702,6 +796,7 @@ def _blatt_darlehen(wb) -> None:
                 "Ist die Restschuld getilgt, entfallen Zins und Tilgung.")
     ws["A1"].font = Font(italic=True)
     _kopf(ws, 3, [s.ueberschrift for s in DARLEHEN_SPALTEN])
+    _kopf_berechnet(ws, 3, DARLEHEN_SPALTEN, grau=False)
     ws.row_dimensions[3].height = 45
     for i, s in enumerate(DARLEHEN_SPALTEN, start=1):
         bst = get_column_letter(i)
@@ -744,6 +839,7 @@ def _blatt_ruecklagen(wb) -> None:
 
     letzte = MAX_VERKAEUFE + 1
     _kopf(ws, 1, [s.ueberschrift for s in RUECKLAGE_SPALTEN])
+    _kopf_berechnet(ws, 1, RUECKLAGE_SPALTEN, grau=False)
     for i, s in enumerate(RUECKLAGE_SPALTEN, start=1):
         bst = get_column_letter(i)
         ws.column_dimensions[bst].width = s.breite
@@ -771,6 +867,7 @@ def _blatt_ruecklagen(wb) -> None:
             c = ws.cell(row=zeile, column=i, value=rechnung[s.key])
             c.number_format = s.format
             c.fill = FILL_BERECHNET
+    _kopf_berechnet(ws, 1, RUECKLAGE_JAHR_SPALTEN, start=versatz + 1, grau=False)
     ws.row_dimensions[1].height = 45
 
     hinweis = letzte + 2
@@ -790,7 +887,7 @@ TITEL_PLAN = SZ_A.kurz
 TITEL_BASELINE = SZ_BASELINE.kurz
 
 
-def _jahrestabellen(wb, ws, blatt: str, tabellen: list, hinweise: list) -> None:
+def _jahrestabellen(wb, ws, blatt: str, tabellen: list, hinweise: list, texte: dict) -> None:
     """Tabellen je Prognosejahr nebeneinander, je eine Spalte Abstand.
 
     tabellen: (Titel, Spalten, Formelfunktion(zeile, erstes_jahr)). Zeile 1 trägt
@@ -808,6 +905,7 @@ def _jahrestabellen(wb, ws, blatt: str, tabellen: list, hinweise: list) -> None:
             c.alignment = Alignment(wrap_text=True, vertical="center")
             ws.column_dimensions[bst].width = s.breite
             _name(wb, s.name, f"'{blatt}'!${bst}${erste}:${bst}${letzte}")
+        _kopf_berechnet(ws, kopf, spalten, start=versatz + 1, texte=texte, grau=False)
         for zeile in range(erste, letzte + 1):
             rechnung = formel(zeile, erstes_jahr=zeile == erste)
             for i, s in enumerate(spalten, start=versatz + 1):
@@ -841,7 +939,8 @@ def _blatt_liquiditaet(wb) -> None:
         "C: alle Neuobjekte werden gekauft, die AfA läuft von den vollen AK.",
         "Baseline: alle Bestandsobjekte werden über das ganze Raster gehalten, ohne Verkäufe und "
         "Neuobjekte.",
-    ])
+        TOOLTIP_HINWEIS,
+    ], erklaerungen.LIQUIDITAET)
 
 
 def _blatt_auswertung(wb) -> None:
@@ -857,7 +956,8 @@ def _blatt_auswertung(wb) -> None:
         "latente Steuer = (stille Reserven + Rücklagenbestand − Verlustvortrag) × Grenzsteuersatz, "
         "mindestens 0: die Steuer, wenn alle Objekte zum Verkehrswert verkauft würden.",
         "Gesamtvermögen = Verkehrswert Bestand + Liquidität kumuliert − Restschuld Kredite.",
-    ])
+        TOOLTIP_HINWEIS,
+    ], erklaerungen.AUSWERTUNG)
 
 
 def _blatt_vergleich(wb) -> None:
@@ -1153,8 +1253,8 @@ OPTIONEN = [
     ("Verkaufen, sofort versteuern, Erlös anlegen", "vg_B"),
 ]
 SCHRITTE = [
-    ("Parameter", "Zentrale Annahmen prüfen: Steuersatz, Steigerungen und die Annahmen bei "
-     "fehlenden Daten (blau)."),
+    ("Parameter", "Kernparameter (★) prüfen: Steuersatz, Steigerungen, Alternativrendite und "
+     "die Annahmen bei fehlenden Daten (blau); weitere Abschnitte mit + aufklappen."),
     ("Objekte", "Je Objekt mindestens ObjektID und Miete (Pflicht, rot wenn leer). Alles "
      "Weitere füllen die Annahmen; echte Werte einfach darübertippen."),
     ("Anlagen", "Anlagenverzeichnis: AK, Buchwert und AfA je Anlage ersetzen die Annahmen zu "
@@ -1292,6 +1392,13 @@ def _blatt_start(wb, modell: Modell) -> None:
         ws.cell(row=zeile, column=1, value=farbe).fill = fill
         ws.cell(row=zeile, column=2, value=text)
         zeile += 1
+    for fill, farbe, text in KOPF_LEGENDE:
+        c = ws.cell(row=zeile, column=1, value=farbe)
+        c.fill, c.font = fill, FONT_KOPF
+        ws.cell(row=zeile, column=2, value=text)
+        zeile += 1
+    ws.cell(row=zeile, column=1, value=TOOLTIP_HINWEIS).font = Font(italic=True)
+    zeile += 1
 
     zeile += 1
     ws.cell(row=zeile, column=1, value="Zentrale Annahmen").font = Font(bold=True, size=13)
@@ -1301,7 +1408,10 @@ def _blatt_start(wb, modell: Modell) -> None:
         if p.name.startswith(("par_Ann", "par_ErhAlterung", "par_NeuErh", "par_San")) \
                 or p.name in ("par_Steuersatz", "par_Mietsteig", "par_Erhaltsteig",
                                                       "par_Wertsteig", "par_Alternativrendite"):
-            ws.cell(row=zeile, column=1, value=p.bezeichnung)
+            kern = p.name in erklaerungen.KERNPARAMETER
+            a = ws.cell(row=zeile, column=1, value=("★ " if kern else "") + p.bezeichnung)
+            if kern:
+                a.font = Font(bold=True)
             c = ws.cell(row=zeile, column=4, value=f"={p.name}")
             c.number_format, c.fill = p.format, FILL_BERECHNET
             zeile += 1
