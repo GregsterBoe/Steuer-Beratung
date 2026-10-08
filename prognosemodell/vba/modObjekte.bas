@@ -114,7 +114,8 @@ Public Function InKostenstelleUebernehmen() As Long
                    Array("obj_ErhBasis", "obk_erhaltung", 1250), _
                    Array("obj_EinnBasis", "obk_weitere_einnahmen", 1090), _
                    Array("obj_AusgBasis", "obk_weitere_ausgaben", 1260), _
-                   Array("obj_AfABWA", "obk_afa_bwa", 1240))
+                   Array("obj_AfABWA", "obk_afa_bwa", 1240), _
+                   Array("obj_ZinsBasis", "obk_zinsen", 1310))
     Set blaetter = Bereich("obj_KStBlatt")
     For Each f In felder
         Set eingabe = Bereich(f(0))

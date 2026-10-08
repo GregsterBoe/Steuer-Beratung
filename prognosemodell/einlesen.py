@@ -41,6 +41,7 @@ BWA_EINNAHMEN = (1090,)
 BWA_ERHALTUNG = (1250,)
 BWA_AUSGABEN = (1100, 1120, 1140, 1150, 1160, 1180, 1200, 1220, 1260)
 BWA_ABSCHREIBUNG = (1240,)  # Basisjahr: Abgleich; Planjahre mit Wert: AfA-Plan
+BWA_ZINSEN = (1310,)        # Zinsaufwand der Darlehen des Objekts
 # Neukauf-Kostenstellen: Position im Blatt Neukauf-KSt -> BWA-Zeilen
 NEUKAUF_POSITIONEN = {"miete": BWA_MIETE, "einnahmen": BWA_EINNAHMEN,
                       "erhaltung": BWA_ERHALTUNG, "ausgaben": BWA_AUSGABEN}
@@ -71,6 +72,7 @@ class LaufendeWerte:
     erhaltung: float
     weitere_ausgaben: float
     abschreibung: float
+    zinsen: float = 0.0
     # Ist-Werte je BWA-Nr. und Spalte im Ausgabelayout (vorlagen: F, G Vorjahre,
     # H–S Monate, T Basisjahr); für das BWA-Blatt der Mappe
     ist: dict = field(default_factory=dict)
@@ -325,6 +327,7 @@ def lese_kostenstellen(pfad, basisjahr: int, stand: int = None) -> tuple:
             erhaltung=summe(BWA_ERHALTUNG),
             weitere_ausgaben=summe(BWA_AUSGABEN),
             abschreibung=summe(BWA_ABSCHREIBUNG),
+            zinsen=summe(BWA_ZINSEN),
             ist=_ist_werte(ws, zeilen, basisjahr),
             anlagen=_abschreibungsbloecke(ws, objekt_id, stand),
             afa_plan=_plan_werte(ws, zeilen, BWA_ABSCHREIBUNG, basisjahr),
@@ -349,7 +352,8 @@ def zusammenfuehren(stammdaten: list, laufende: list) -> list:
             continue
         felder = dict(miete=lw.miete, weitere_einnahmen=lw.weitere_einnahmen,
                       erhaltung=lw.erhaltung, weitere_ausgaben=lw.weitere_ausgaben,
-                      afa_bwa=lw.abschreibung)   # 0 = keine AfA mehr
+                      afa_bwa=lw.abschreibung,   # 0 = keine AfA mehr
+                      zinsen=lw.zinsen)
         if lw.objekt_id in nach_id:
             alt = nach_id[lw.objekt_id]
             neu = dataclasses.replace(alt, name=alt.name or lw.name, **felder)

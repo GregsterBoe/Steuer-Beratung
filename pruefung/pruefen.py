@@ -38,6 +38,7 @@ TOLERANZ = 0.01  # ein Cent
 # Fälle vor der Alterslogik: Sollwerte ohne Alterung, Anlaufminderung und Großmaßnahmen.
 # Gilt für jeden Fall, dessen Name nicht mit „Erhaltung“ beginnt.
 OHNE_ALTERUNG = {"par_ErhAlterung": 0, "par_NeuErhAnlaufFaktor": 1, "par_SanQuote": 0}
+KAPITALANLAGE = "Kapitalanlage (Nettoerlös − Reinvestition + Kredit − Steuer ca. − Ablösung)"
 FEHLT = object()        # Makro ohne Rückgabewert: nur prüfen, dass es fehlerfrei läuft
 AUSGEBLENDET = "Zeile ausgeblendet"  # statt Bereichsname: Zeilennummer im Blatt Prognose
 EINGEKLAPPT = "Spalte eingeklappt:"  # + Blattname; statt Zeile: Spaltennummer, Soll (Ebene, aus)
@@ -937,7 +938,7 @@ def faelle():
             ("SB1:Reinvestition (Kaufpreis und Nebenkosten der Neuobjekte)", 1, 1_200_000),
             ("SB1:Übertrag § 6b EStG", 1, -720_000),
             ("SB1:Steuer auf den Gewinn ca. (Verkaufsjahr, Auflösung im Fristjahr)", 1, 0),
-            ("SB1:Kapitalanlage (Nettoerlös − Reinvestition + Kredit − Steuer ca.)", 1, 200_000),
+            (f"SB1:{KAPITALANLAGE}", 1, 200_000),
             ("SB1:Mieten", 1, 63_672.48),
             ("SB1:Mieten", 2, 61_200),
             ("SB1:Zinsertrag Kapitalanlage", 2, 6_000),
@@ -1161,8 +1162,8 @@ def faelle():
             ("KAUF:./. Zinsen Kredit", 1, -28_000),
             ("KAUF:./. Tilgung Kredit", 1, -14_000),
             ("SB1:Kredit der Neuobjekte", 1, 700_000),
-            ("SB1:Kapitalanlage (Nettoerlös − Reinvestition + Kredit − Steuer ca.)", 1, 0),
-            ("SB1:./. Zinsen Kredite", 2, -28_000),
+            (f"SB1:{KAPITALANLAGE}", 1, 0),
+            ("SB1:./. Zinsen Darlehen", 2, -28_000),
             ("SB1:./. Tilgungen", 2, -14_000),
             ("pr_Anzahl", pr("restschuld"), 1),
             ("pr_Anzahl", pr("neuobjekte"), 0),
@@ -1253,6 +1254,74 @@ def faelle():
             ("pr_Anzahl", pr("teiluebertrag"), 0),
             ("KAUF:Quelle 2 RücklageID", 1, "RL-OBJ-002"),
             ("KAUF:davon Eigenmittel", 1, 50_000),
+        ]),
+        # Darlehen der Bestandsobjekte (Projektplan Abschnitt 28). OBJ-001: Restschuld 500.000,
+        # 4 %, Rate 40.000, Verkauf Ende 2029: 2027 Zins 20.000, Tilgung 20.000; 2028 Zins
+        # 19.200; 2029 Zins 18.368, Ablösung 459.200, bei Halten Tilgung 21.632, Rest
+        # 437.568. OBJ-002: nur Zinsaufwand 10.000, × 0,97 je Jahr. OBJ-003: Restschuld
+        # 300.000, Zinsaufwand 12.000: Satz 4 % und Rate 300.000 × 6 % = 18.000 als Annahme.
+        # OBJ-004: Zinsaufwand 5.000 ohne Restschuld, Verkauf Ende 2030: Ablösung fehlt
+        ("Bestandsdarlehen: Tilgungsplan, Fortschreibung und Ablösung beim Verkauf",
+         Modell(objekte=[dataclasses.replace(obj, restschuld=500_000, zinssatz=0.04,
+                                             rate=40_000),
+                         dataclasses.replace(obj2, zinsen=10_000),
+                         dataclasses.replace(obj, objekt_id="OBJ-003", zinsen=12_000,
+                                             restschuld=300_000),
+                         dataclasses.replace(obj, objekt_id="OBJ-004", zinsen=5_000)],
+                verkaeufe=[Verkauf("OBJ-001", 2029, preis=1_400_000),
+                           Verkauf("OBJ-004", 2030, preis=1_400_000)],
+                parameter=OHNE_ZINS), [
+            ("prg_KreditZins", prg(1, 2027), 20_000),
+            ("prg_Tilgung", prg(1, 2027), 20_000),
+            ("prg_Restschuld", prg(1, 2027), 480_000),
+            ("prg_KreditZins", prg(1, 2028), 19_200),
+            ("prg_KreditZins", prg(1, 2029), 18_368),
+            ("prg_Tilgung", prg(1, 2029), 459_200),          # Ablösung zum Verkauf
+            ("prg_Restschuld", prg(1, 2029), 0),
+            ("prg_KreditZins", prg(1, 2030), 0),
+            ("prg_Tilgung", prg(1, 2030), 0),
+            ("prg_TilgungHalten", prg(1, 2029), 21_632),
+            ("prg_RestschuldHalten", prg(1, 2029), 437_568),
+            ("prg_ZinsHalten", prg(1, 2030), 17_502.72),
+            ("prg_KreditZins", prg(2, 2027), 9_700),
+            ("prg_KreditZins", prg(2, 2028), 9_409),
+            ("prg_Tilgung", prg(2, 2028), 0),
+            ("prg_Restschuld", prg(2, 2028), 0),
+            ("obj_Zinssatz", 1, 0),                         # ohne Restschuld 0, keine Annahme
+            ("obj_Rate", 1, 0),
+            ("obj_Annahmen", 1, 0),
+            ("obj_Zinssatz", 2, 0.04),
+            ("obj_Rate", 2, 18_000),
+            ("obj_Annahmen", 2, 2),
+            ("prg_Tilgung", prg(3, 2027), 6_000),
+            ("prg_Restschuld", prg(3, 2029), 281_270.4),
+            ("prg_KreditZins", prg(4, 2030), 4_426.46405),  # 5.000 × 0,97⁴, Verkaufsjahr
+            ("prg_KreditZins", prg(4, 2031), 0),
+            ("prg_ZinsHalten", prg(4, 2031), 4_293.6701285),
+            ("liq_KreditZins", lj(2027), 46_550),
+            ("liq_Tilgung", lj(2027), 26_000),
+            ("liq_Restschuld", lj(2027), 774_000),
+            ("liq_Tilgung", lj(2029), 465_689.6),
+            ("liq_KreditZins", lj(2030), 24_530.20815),
+            ("lqb_Tilgung", lj(2029), 28_121.6),
+            ("lqb_KreditZins", lj(2030), 42_032.92815),
+            ("lvb_KreditZins", lj(2027), 46_550),
+            ("aus_Restschuld", lj(2029), 281_270.4),
+            ("asb_Restschuld", lj(2029), 718_838.4),
+            ("bwa_1310", lj(2027), 46_550),
+            *[(f"bwa_{nr}", lj(j), Wie(name, lj(j)))
+              for j in (2027, 2029, 2030) for nr, name in ((1345, "liq_ZvE"),)],
+            ("BWA:OBJ-001:1310", 2027, 20_000),
+            ("BWA:OBJ-002:1310", 2026, 10_000),
+            ("BWA:OBJ-002:1310", 2027, 9_700),
+            ("SB1:Ablösung Darlehen des Objekts (Restschuld Ende Verkaufsjahr)", 1, -437_568),
+            # Nettoerlös 1,4 Mio − Steuer 30 % auf 768.000 − Ablösung
+            (f"SB1:{KAPITALANLAGE}", 1, 732_032),
+            ("SB1:./. Zinsen Darlehen", 1, -17_502.72),
+            ("SB1:./. Zinsen Darlehen", 2, 0),
+            ("SB1:./. Tilgungen", 1, -22_497.28),
+            ("pr_Anzahl", pr("zins_verkauf"), 1),
+            ("pr_Anzahl", pr("zins_grob"), 2),
         ]),
         # Neuobjekt mit Neukauf-Kostenstelle: deren Blatt zeigt AfA und Kreditzinsen,
         # Kredit 400.000 zu 5 %: Zins 2028 20.000
@@ -1666,7 +1735,7 @@ def faelle():
             ("anl_AfAJahre", 8, 150),
             ("anl_Status", 9, "nicht im Modell (Art)"),
             ("anl_Status", 10, None),
-        ] + befund(annahmen=2, anlagen=3, baujahr=2)),
+        ] + befund(annahmen=2, anlagen=3, baujahr=2, zins_grob=2)),
         ("Anlagen: Verkauf mit Buchwert aus dem Anlagenverzeichnis",
          Modell(objekte=anlagen_eingelesen().objekte, anlagen=anlagen_eingelesen().anlagen,
                 verkaeufe=[Verkauf("KSt 2", 2028, preis=2_000_000, nutzung_6b="nein")]), [
@@ -1679,7 +1748,8 @@ def faelle():
             ("prg_AfAHalten", prg(2, 2029), 24_000),  # Baseline hält weiter
             ("prg_BuchwertHalten", prg(2, 2029), 830_000),
             ("obj_Kritisch", 1, 1),                    # nur noch der Verkehrswertanteil
-        ] + befund(annahmen=2, anlagen=3, kritisch=1, baujahr=2)),
+        ] + befund(annahmen=2, anlagen=3, kritisch=1, baujahr=2, zins_grob=2,
+                   zins_verkauf=1)),
         ("Anlagen: nur Aufschlüsselung der Abschreibungen aus dem Kostenstellenblatt",
          anlagen_eingelesen(inventar=False), [
             ("anl_Status", 0, "OK"),
@@ -1706,7 +1776,7 @@ def faelle():
             ("anl_Zuordnung", 0, "KOST1"),
             ("anl_Status", 10, "OK"),
             ("obj_AKGuB", 1, 410_000),
-        ] + befund(annahmen=2, anlagen=3, anlagen_bez=1, baujahr=2)),
+        ] + befund(annahmen=2, anlagen=3, anlagen_bez=1, baujahr=2, zins_grob=2)),
         # G+B als „Grund u. Boden Kostenstelle 2“ ohne KOST1: zählt zu AK G+B (400.000 + 10.000)
         # und mindert beim Verkauf den Gewinn auf G+B: 2 Mio × 30 % − 410.000 = 190.000
         ("Anlagen: G+B über „Kostenstelle“ in der Bezeichnung, wirkt im Verkauf",
@@ -1726,7 +1796,7 @@ def faelle():
             ("obj_Baujahr", 0, 1990),
             ("obj_AnlBauOffen", 0, 0),
             ("obj_AnlBauOffen", 1, 1),
-        ] + befund(annahmen=2, anlagen=3, baujahr=1)),
+        ] + befund(annahmen=2, anlagen=3, baujahr=1, zins_grob=2)),
         ("Anlagen: Stand des Anlagenverzeichnisses gleich Basisjahr",
          anlagen_eingelesen(par_AnlStand=2026), [
             ("obj_Restbuchwert", 0, 496_000),

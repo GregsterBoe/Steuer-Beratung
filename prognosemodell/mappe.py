@@ -32,8 +32,10 @@ from .modelle import (ANLAGE_FELDER, ANLAGE_JAHRE_NAME, ANLAGE_SPALTEN, ANLAGE_S
 # Felder, deren Wert aus dem Blatt Anlagen nur eine Vermutung ist: orange statt grün
 ANLAGEN_PRUEFEN = ("baujahr",)
 
-HINWEIS_FINANZIERUNG = ("Finanzierung: nur Kredite der Neuobjekte (Blatt Neuobjekte, "
-                        "Tilgungsplan im Blatt Darlehen); Bestandsobjekte ohne Zins und Tilgung.")
+HINWEIS_FINANZIERUNG = ("Finanzierung: Bestandsobjekte mit Zinsaufwand, Restschuld, Zinssatz und "
+                        "Rate aus dem Blatt Objekte (ohne Restschuld nur der Zins fortgeschrieben, "
+                        "beim Verkauf abgelöst); Kredite der Neuobjekte im Blatt Neuobjekte, "
+                        "Tilgungsplan im Blatt Darlehen.")
 
 FONT_TITEL = Font(bold=True, size=14)
 FONT_KOPF = Font(bold=True, color="FFFFFF")
@@ -352,7 +354,8 @@ def _blatt_objekte(wb, modell: Modell) -> None:
         if ist is not None:
             quelle = {"name": ist.name, "miete": ist.miete, "erhaltung": ist.erhaltung,
                       "weitere_einnahmen": ist.weitere_einnahmen,
-                      "weitere_ausgaben": ist.weitere_ausgaben, "afa_bwa": ist.abschreibung}
+                      "weitere_ausgaben": ist.weitere_ausgaben, "afa_bwa": ist.abschreibung,
+                      "zinsen": ist.zinsen}
             for key, bst in import_spalte.items():
                 ws[f"{bst}{zeile}"] = quelle[key]
 
@@ -375,8 +378,8 @@ def _blatt_objekte(wb, modell: Modell) -> None:
                                   "Anlagen, gelb = händisch. Annahmen stellt das Parameterblatt "
                                   "ein.")
     ws["A" + str(vorlage + 3)] = (
-        "Objekte mit Kostenstellenblatt: Miete, Erhaltung, weitere Einnahmen und Ausgaben und "
-        "AfA lt. Buchhaltung verweisen auf dessen Spalte Basisjahr (grün). Werte dort ändern, "
+        "Objekte mit Kostenstellenblatt: Miete, Erhaltung, weitere Einnahmen und Ausgaben, "
+        "AfA lt. Buchhaltung und Zinsaufwand verweisen auf dessen Spalte Basisjahr (grün). Werte dort ändern, "
         "dann folgen Objekte, Prognose und BWA Alle Objekte. Hier überschrieben (orange) "
         "rechnet nur die Prognose damit; das Makro „Objekte → Kostenstellen“ schreibt solche "
         "Werte ins Kostenstellenblatt und stellt die Verknüpfung wieder her.")
@@ -793,7 +796,8 @@ def _blatt_darlehen(wb) -> None:
                 "Auszahlung zum Ende des Kaufjahrs; Zins und Tilgung ab dem Folgejahr auf die "
                 "Restschuld am Vorjahresende. Annuität: gleiche Rate (Zins + anfängliche "
                 "Tilgung); linear: gleiche Tilgung; endfällig: Rückzahlung nach der Laufzeit. "
-                "Ist die Restschuld getilgt, entfallen Zins und Tilgung.")
+                "Ist die Restschuld getilgt, entfallen Zins und Tilgung. Die Darlehen der "
+                "Bestandsobjekte rechnet die Prognose je Objekt (Blatt Objekte).")
     ws["A1"].font = Font(italic=True)
     _kopf(ws, 3, [s.ueberschrift for s in DARLEHEN_SPALTEN])
     _kopf_berechnet(ws, 3, DARLEHEN_SPALTEN, grau=False)

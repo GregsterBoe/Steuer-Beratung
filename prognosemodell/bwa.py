@@ -33,9 +33,10 @@ KOSTENARTEN = AUSGABEN_ZEILEN + (1240, 1250, 1260)
 # (Feld -> BWA-Zeilen). Ohne eingelesene Kostenstelle umgekehrt: Basisjahr aus dem
 # Objektblatt (IST_AUS_OBJEKT), die Kostenarten 1100–1220 bleiben leer, 1260 nimmt den Rest auf
 OBJEKT_AUS_KST = {"miete": (1020,), "weitere_einnahmen": (1090,), "erhaltung": (1250,),
-                  "afa_bwa": (1240,), "weitere_ausgaben": (1260,) + AUSGABEN_ZEILEN}
+                  "afa_bwa": (1240,), "weitere_ausgaben": (1260,) + AUSGABEN_ZEILEN,
+                  "zinsen": (1310,)}
 IST_AUS_OBJEKT = {1020: "obj_MieteBasis", 1090: "obj_EinnBasis", 1240: "obj_AfABWA",
-                  1250: "obj_ErhBasis"}
+                  1250: "obj_ErhBasis", 1310: "obj_ZinsBasis"}
 AUSGABEN_AUS_OBJEKT = "obj_AusgBasis"
 # mindestens so viele Vorgänge und Neuobjekte im Sonderbereich, damit in Excel ergänzte passen
 MIN_VORGAENGE = 3
@@ -198,7 +199,7 @@ SPALTE_ZIEL = 4   # D: BWA-Nr. des Postens (Spalte B bleibt den BWA-Zeilen vorbe
 FINANZIERUNG = [
     ("Kreditauszahlung (Kauf zum Jahresende)",
      "SUMIFS(ne_Kredit,ne_ID,{id},ne_Kaufjahr,{j},ne_Gueltig,1)", "SUMIFS(liq_Kredit,liq_Jahr,{j})"),
-    ("Tilgung", "SUMIFS(prg_Tilgung,prg_ID,{id},prg_Jahr,{j})", "SUMIFS(liq_Tilgung,liq_Jahr,{j})"),
+    ("Tilgung (im Verkaufsjahr mit Ablösung)", "SUMIFS(prg_Tilgung,prg_ID,{id},prg_Jahr,{j})", "SUMIFS(liq_Tilgung,liq_Jahr,{j})"),
     ("Restschuld Ende", "SUMIFS(prg_Restschuld,prg_ID,{id},prg_Jahr,{j})",
      "SUMIFS(liq_Restschuld,liq_Jahr,{j})"),
 ]
@@ -275,6 +276,7 @@ def _planformeln_objekt(z: dict, sp: str) -> dict:
         1090: p("prg_Einnahmen"),
         1240: p("prg_AfA"),
         1250: p("prg_Erhaltung"),
+        1310: p("prg_KreditZins"),   # Bestandsdarlehen; Kredite der Neuobjekte über die Zuordnung
     }
     # Aufteilung der weiteren Ausgaben nach dem Anteil der Kostenart im Basisjahr
     ausg = "IFERROR(INDEX(obj_AusgBasis,MATCH($B$2,obj_ID,0)),0)"
@@ -298,6 +300,7 @@ def _planformeln_summe(z: dict, sp: str, bestand: list) -> dict:
         1090: p("prg_Einnahmen"),
         1240: p("prg_AfA"),
         1250: p("prg_Erhaltung"),
+        1310: p("prg_KreditZins"),
         1355: f"SUMIFS(liq_Steuer,liq_Jahr,{jahr})",
     }
     for nr in AUSGABEN_ZEILEN:
@@ -404,8 +407,7 @@ def _blatt_objekt(wb, titel: str, objekt_id: str, name, ist, basisjahr: int,
         _basisspalte(ws, z, obj)
     _planspalten(ws, z, planjahre, lambda sp: _planformeln_objekt(z, sp))
     _herleitung(ws, planjahre, objekt=True)
-    if neu:
-        _finanzierung(ws, planjahre, "$B$2")
+    _finanzierung(ws, planjahre, "$B$2")
     if anlagen:
         _abschreibungen(ws, anlagen, planjahre)
     if neu:
@@ -417,7 +419,8 @@ def _blatt_objekt(wb, titel: str, objekt_id: str, name, ist, basisjahr: int,
         basis = (" Basisjahr hellblau: aus dem Blatt Objekte (1260 = weitere Ausgaben "
                  "abzüglich 1100–1220).")
     ws["E2"] = (("Neuobjekt: Werte ab dem Jahr nach dem Kauf, Kreditzinsen in 1310. " if neu
-                 else "") + "Planspalten = Szenario A; Steuer und Zins der Alternativanlage nur "
+                 else "Zinsen der Darlehen in 1310 bis zum Verkauf, Tilgung und Restschuld "
+                      "unter der Herleitung. ") + "Planspalten = Szenario A; Steuer und Zins der Alternativanlage nur "
                 f"im Blatt „{SUMMENBLATT}“." + basis)
     ws["E2"].font = Font(italic=True)
     return ws
@@ -816,9 +819,13 @@ def _vorgang(b: _Block, n: int) -> None:
     b.zeile_("steuer", "Steuer auf den Gewinn ca. (Verkaufsjahr, Auflösung im Fristjahr)",
              ok(f"-(N({vk('vk_Gewinn')})-{rl('rl_Betrag')}+{rl('rl_Aufloesung')}"
                 f"+{rl('rl_Zuschlag')})*par_Steuersatz"))
-    b.zeile_("anlage", "Kapitalanlage (Nettoerlös − Reinvestition + Kredit − Steuer ca.)",
-             ok(f"N({vk('vk_Nettoerloes')})-{{reinvest}}+{{kredit}}+{{steuer}}"))
-    b.zeile_(None, "Restschuld Kredite im Vergleichsjahr (Bestand ohne Finanzierung)",
+    # Verkauf zum Jahresende: Restschuld nach der Rate des Verkaufsjahrs
+    b.zeile_("abloesung", "Ablösung Darlehen des Objekts (Restschuld Ende Verkaufsjahr)",
+             ok("-SUMIFS(prg_RestschuldHalten,prg_ID,{id},prg_Jahr,{jahr})"))
+    b.zeile_("anlage", "Kapitalanlage (Nettoerlös − Reinvestition + Kredit − Steuer ca. − "
+             "Ablösung)",
+             ok(f"N({vk('vk_Nettoerloes')})-{{reinvest}}+{{kredit}}+{{steuer}}+{{abloesung}}"))
+    b.zeile_(None, "Restschuld Kredite der Neuobjekte im Vergleichsjahr",
              ok(alt("prg_Restschuld")))
     b.leer()
     b.kopf(f'=IF({{ok}}=1,"Vergleich im Jahr "&{{x}},"Vergleich")', "Ausgangsfall (halten)",
@@ -827,7 +834,7 @@ def _vorgang(b: _Block, n: int) -> None:
            ("e_kapital", "Kapitalertrag", "{p_zins}"),
            ("e_aufwand", "Aufwand (Erhaltung, weitere Ausgaben, AfA; ohne Zinsen)",
             "{p_erh}+{p_ausg}+{p_afa}"),
-           ("e_zinsen", "Zinsen Kredite", "{p_zinsen}"),
+           ("e_zinsen", "Zinsen Darlehen", "{p_zinsen}"),
            ("e_ergebnis", "vorläufiges Ergebnis", "{p_ergebnis}"),
            ("e_vor", "liquider Überschuss vor Steuern", "{p_cashflow}"),
            ("e_steuer", "Steuern ca.", "-{p_ergebnis}*par_Steuersatz"),
@@ -872,10 +879,12 @@ def _vorgang(b: _Block, n: int) -> None:
         ("p_ausg", "./. weitere Ausgaben", "-" + halten("obj_AusgBasis", "par_Kostensteig"),
          "-" + alt("prg_Ausgaben")),
         ("p_afa", "./. Abschreibungen (Steuerbilanz)", f"-({afa_h})", "-" + alt("prg_AfA")),
-        ("p_zinsen", "./. Zinsen Kredite", "0", "-" + alt("prg_KreditZins")),
+        ("p_zinsen", "./. Zinsen Darlehen",
+         "-SUMIFS(prg_ZinsHalten,prg_ID,{id},prg_Jahr,{x})", "-" + alt("prg_KreditZins")),
         ("p_ergebnis", "= vorläufiges Ergebnis", "{p_miete}+{p_einn}+{p_zins}+{p_erh}+{p_ausg}"
          "+{p_afa}+{p_zinsen}", None),
-        ("p_tilgung", "./. Tilgungen", "0", "-" + alt("prg_Tilgung")),
+        ("p_tilgung", "./. Tilgungen", "-SUMIFS(prg_TilgungHalten,prg_ID,{id},prg_Jahr,{x})",
+         "-" + alt("prg_Tilgung")),
         ("p_afa_zurueck", "+ Abschreibungen", "-{p_afa}", None),
         ("p_cashflow", "= Cash Flow", "{p_ergebnis}+{p_tilgung}+{p_afa_zurueck}", None),
     ]
@@ -962,7 +971,9 @@ def blatt_sonderbereich(wb, modell: Modell) -> None:
     ws = wb.create_sheet(blattname(SONDERBEREICH, wb.sheetnames))
     ws["A1"] = "Sonderbereich Verkauf und Kauf"
     ws["A1"].font = FONT_TITEL
-    ws["A2"] = ("Steuerbilanz; Zins und Tilgung nur für Kredite der Neuobjekte. Neuobjekte "
+    ws["A2"] = ("Steuerbilanz; Ausgangsfall mit Zins und Tilgung der Darlehen des Objekts, "
+                "Alternative mit den Krediten der Neuobjekte, das Darlehen des verkauften "
+                "Objekts wird aus dem Erlös abgelöst. Neuobjekte "
                 "zählen beim Verkauf ihrer Quelle 1. Je Verkauf "
                 "eine Ergebnissicht und eine Detailsicht; Steuern ca. = Ergebnis × "
                 "Grenzsteuersatz, ohne Verlustvortrag. Die genaue Steuer je Jahr steht im "

@@ -9,7 +9,7 @@
 - **Python als Generator:** openpyxl baut die Mappe einmalig beim Erstellen. Ein Prüfskript rechnet sie per LibreOffice headless durch und gleicht sie mit den Testfällen ab.
 - **Alle Annahmen auf dem Parameterblatt**, keine festen Zahlen in Formeln.
 - **Selbstdokumentierend:** Spaltenköpfe zeigen Pflichtfelder (rot, *), optionale Eingaben (blau) und berechnete Spalten (grau); ein Kommentar am Kopf erklärt das Feld bzw. die Herleitung. Auf dem Parameterblatt sind die Kernparameter mit ★ markiert, weniger wichtige Abschnitte eingeklappt, und jeder Parameter sagt, was er beeinflusst (Texte in `prognosemodell/erklaerungen.py`).
-- **Finanzierung nur bei Neuobjekten:** Kredite werden je Kauf im Blatt Neuobjekte festgelegt (Tilgungsplan im Blatt Darlehen); Bestandsobjekte rechnen ohne Zins und Tilgung.
+- **Finanzierung:** Kredite der Neuobjekte werden je Kauf im Blatt Neuobjekte festgelegt (Tilgungsplan im Blatt Darlehen). Bestandsobjekte rechnen mit dem Zinsaufwand der Buchhaltung (BWA 1310); mit Restschuld, Zinssatz und Rate im Blatt Objekte als Tilgungsplan, beim Verkauf aus dem Erlös abgelöst.
 
 ## Blätter
 
@@ -97,10 +97,15 @@ Die AfA läuft von der geminderten AfA-Basis. Die Werte je Quelle stehen in eing
 
 **Finanzierung je Neuobjekt:** Finanzierungsbedarf = Kaufpreis + Nebenkosten − Nettoerlös der Quell-Verkäufe (in Zeilenreihenfolge, soweit nicht schon für ein Objekt darüber eingesetzt). Mit „Finanzierung Rest = Kredit“ deckt ein Kredit den Bedarf (Kreditbetrag leer) oder den eingetragenen Betrag, der Rest kommt aus Eigenmitteln (Liquidität). Eingaben: Zinssatz, Tilgungsart (Annuität mit anfänglicher Tilgung, linear, endfällig), Tilgung p. a. und optional die Laufzeit, nach der die Restschuld auf einmal getilgt wird. Das Blatt **Darlehen** rechnet je Kredit Zins, Tilgung und Restschuld je Jahr; Auszahlung zum Ende des Kaufjahrs, Zins und Tilgung ab dem Folgejahr, nach der vollen Tilgung entfällt beides. Der Zins mindert das Ergebnis (BWA 1310 im Blatt des Neuobjekts und in „Alle Objekte“), die Tilgung nur die Liquidität, die Restschuld das Gesamtvermögen. Szenario C finanziert gleich, in B entfällt mit dem Kauf auch der Kredit.
 
+**Darlehen der Bestandsobjekte:** Das Blatt Objekte hat die Spalten Zinsaufwand Basisjahr (BWA 1310, mit dem Kostenstellenblatt verknüpft), Restschuld Darlehen Ende Basisjahr, Zinssatz und Rate p. a. (Zins + Tilgung).
+- Ohne Restschuld wird nur der Zinsaufwand fortgeschrieben, mit „Zinsaufwand ohne Restschuld: Veränderung p. a.“ vom Parameterblatt (Standard −3 %), bis zum Verkaufsjahr. Tilgung und Ablösung fehlen dann; die Prüfung meldet solche Objekte (Hinweis, bei Verkauf Warnung).
+- Mit Restschuld: Zins = Restschuld am Vorjahresende × Zinssatz, Tilgung = Rate − Zins. Zinssatz leer: Zinsaufwand / Restschuld; Rate leer: Restschuld × (Zinssatz + Tilgung in % vom Parameterblatt). Im Verkaufsjahr wird die Restschuld aus dem Erlös abgelöst (Tilgung), eine Vorfälligkeitsentschädigung gehört in die Verkaufskosten.
+- Der Zins mindert Ergebnis und Steuer (BWA 1310 im Blatt des Objekts und in „Alle Objekte“), Tilgung und Ablösung die Liquidität, die Restschuld das Gesamtvermögen. Die Baseline rechnet die Darlehen weiter, als würde nie verkauft.
+
 Das Blatt **Liquidität** rechnet je Jahr die Steuer und den Geldfluss, je Szenario eine Tabelle:
 - Steuer = (laufendes Ergebnis + steuerwirksamer Betrag aus dem Rücklagenspiegel) × Grenzsteuersatz
 - Verluste werden vorgetragen und mit späteren Gewinnen verrechnet
-- freier Mittelzufluss = Mieten und Einnahmen − Erhaltung und Ausgaben + Zins − Kreditzinsen + Verkaufserlöse − Steuer − Kauf der Neuobjekte + Kreditauszahlung − Tilgung
+- freier Mittelzufluss = Mieten und Einnahmen − Erhaltung und Ausgaben + Zins − Zinsen Darlehen + Verkaufserlöse − Steuer − Kauf der Neuobjekte + Kreditauszahlung − Tilgung (mit Ablösung beim Verkauf)
 
 Die Liquidität liegt in einer Alternativanlage und wird mit der Rendite vom Parameterblatt verzinst (Standard 3 %); der Zins ist steuerpflichtig.
 
@@ -117,7 +122,8 @@ Das Blatt **Vergleich** stellt die Kennzahlen am Ende des Rasters nebeneinander,
 Das Blatt **Prüfung** rechnet alle Plausibilitätsprüfungen als Formeln, je mit Art und Anzahl betroffener Zeilen:
 - **Fehler:** Status ungleich OK in Objekten, Verkäufen oder Neuobjekten (darunter Fristverstoß), Steuerwelt nicht GmbH
 - **Warnung:** Vorbesitzzeit für § 6b zu kurz, Rücklage nur teilweise oder gar nicht übertragen, Drei-Objekt-Grenze überschritten
-- **Hinweis:** Frist nach Prognoseende, Liquidität negativ (Finanzierungsbedarf), Kredit am Ende des Rasters nicht getilgt, Verkehrswert fehlt
+- **Warnung** außerdem: verkauftes Objekt mit Zinsaufwand, aber ohne Restschuld (Ablösung fehlt)
+- **Hinweis:** Frist nach Prognoseende, Liquidität negativ (Finanzierungsbedarf), Kredit am Ende des Rasters nicht getilgt, Zinsaufwand ohne Restschuld grob fortgeschrieben, Verkehrswert fehlt
 
 Das Gesamtergebnis steht auch auf dem Parameterblatt und in der Übersicht.
 

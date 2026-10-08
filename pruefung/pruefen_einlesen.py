@@ -84,6 +84,7 @@ def main() -> int:
         pruefe("weitere Ausgaben = 1100–1220 + 1260, ohne AfA/Erhaltung/Zins",
                lw1.weitere_ausgaben, 20_000.0)
         pruefe("AfA lt. BWA 1240", lw1.abschreibung, 16_000.0)
+        pruefe("Zinsaufwand lt. BWA 1310", lw1.zinsen, 9_000.0)
         pruefe("fehlende BWA-Zeile zählt 0", lw2.weitere_einnahmen, 0.0)
 
         try:
@@ -176,6 +177,7 @@ def main() -> int:
         objekte = zusammenfuehren([stamm_kst1, stamm], [lw1, lw2])
         pruefe("Zusammenführen: Anzahl Objekte", len(objekte), 3)
         pruefe("Zusammenführen: Miete überschrieben", objekte[0].miete, 120_000.0)
+        pruefe("Zusammenführen: Zinsaufwand übernommen", objekte[0].zinsen, 9_000.0)
         pruefe("Zusammenführen: Stammdaten bleiben", objekte[0].ak_gebaeude, 800_000)
         pruefe("Zusammenführen: Objekt ohne Blatt unverändert", objekte[1].miete, 60_000)
         pruefe("Zusammenführen: neue Kostenstelle ohne AK", objekte[2].ak_gebaeude, None)
