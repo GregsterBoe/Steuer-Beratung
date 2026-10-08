@@ -22,6 +22,10 @@ Public Sub Einrichten()
             .Name = KNOPF_PREFIX & i
             .Caption = Txt(knoepfe(i)(0))
             .OnAction = knoepfe(i)(1)
+            ' frei schwebend: eingeklappte Parameterzeilen verschieben die Knoepfe nicht
+            On Error Resume Next
+            .Placement = 3
+            On Error GoTo 0
         End With
     Next i
 End Sub

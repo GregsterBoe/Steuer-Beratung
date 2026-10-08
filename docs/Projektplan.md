@@ -1329,3 +1329,24 @@ Das Blatt **Darlehen** hat je Zeile des Blatts Neuobjekte eine Zeile (dl\_ID lee
 - „Finanzierung: Annuitätenkredit über den Finanzierungsbedarf“: AK 2,1 Mio − Erlös 1,4 Mio = Kredit 700.000, 4 % + 2 %: 2029 Zins 28.000, Tilgung 14.000; Liquidität, Auswertung, Szenarien B und C, BWA 1310, Kontrolle, Sonderbereich, Restschuld 2046 340.964,22.
 - „Finanzierung: zwei Quellen, linearer und endfälliger Kredit, Statusfälle“: ü1 220.000 + 220.000, ü2 500.000 + 100.000, ü3 400.000 aus Quelle 2; Erlös 2,8 Mio, Kredit 150.000 linear getilgt 2032; endfällig 500.000 getilgt 2034; vier Statusfälle.
 - „Finanzierung: Kreditzinsen im Blatt der Neukauf-Kostenstelle“: KSt 31 zeigt 1240 und 1310 aus dem Modell.
+
+## 27. Selbstdokumentierende Mappe: Tooltips, Pflichtfelder, Kernparameter
+
+Ziel: Der prüfende Steuerberater versteht jede Spalte und jeden Parameter in der Mappe selbst, ohne Handbuch.
+
+**Pflicht und optional.** In den Eingabeblättern Objekte, Verkäufe, Neuobjekte und Anlagen ist der Spaltenkopf eines Pflichtfelds rot und trägt ein *, optionale Eingaben bleiben blau, berechnete Spalten sind grau. Bisher zeigte sich ein Pflichtfeld erst, wenn es in einer Zeile mit ID leer blieb (rote Zelle); die rote Zelle bleibt, der Kopf zeigt es jetzt vorher. Legende auf dem Startblatt und im Kopfbereich der Blätter Verkäufe und Neuobjekte.
+
+**Tooltips.** Kommentare an den Spaltenköpfen (rotes Dreieck, Maus darüber):
+
+- Eingabefelder: „Pflichtfeld.“ / „Optional.“ / „leer steht eine Annahme“, dann Feld.hinweis und die Auswahlwerte. Die Eingabehilfe beim Anklicken einer Zelle (Datenüberprüfung) bleibt; sie ist auf 255 Zeichen begrenzt und wird am Wortende gekürzt, der Kommentar trägt den vollen Text.
+- Berechnete Spalten: „Berechnet: …“ mit der Herleitung in Worten, für Objekte (Status, Annahmen, Anlagen-Spalten), Anlagen, Verkäufe, Neuobjekte (auch die eingeklappten Spalten je Quelle), Darlehen, Prognose, Rücklagen und Spiegel, Liquidität und Auswertung (in jeder Szenario-Tabelle). Die Texte stehen zentral in prognosemodell/erklaerungen.py, nach benanntem Bereich bzw. Spaltenschlüssel. Nicht jede Spalte hat einen Text (Jahr, IDs der Prognose); Ziel sind die nicht selbsterklärenden.
+
+Die Formel selbst bleibt in der Bearbeitungsleiste sichtbar; der Tooltip übersetzt sie, statt sie zu wiederholen. Überladen wird die Mappe dadurch nicht: der Kommentar erscheint nur beim Darüberfahren.
+
+**Kernparameter.** Im Blatt Parameter sind die Werte mit der größten Wirkung mit ★, fett und hinterlegt markiert (erklaerungen.KERNPARAMETER): Basisjahr, Prognosejahre, Grenzsteuersatz, Miet-, Erhaltungs- und Wertsteigerung, Alternativrendite, Plausibilitätsprüfung, Vervielfältiger und Gebäudeanteil. Die § 6b-Fristen und die Drei-Objekt-Grenze bilden einen eigenen Abschnitt „§ 6b und Drei-Objekt-Grenze (gesetzliche Werte)“. Jeder Abschnitt ist eine Zeilengruppe; Abschnitte ohne Kernparameter sind eingeklappt (Annahmen Reinvestition, Erhaltung nach Gebäudealter, § 6b), „Annahmen bei fehlenden Daten“ bleibt offen. Die Überschrift trägt das +. Je Parameter zeigt ein Kommentar an der Bezeichnung, was er beeinflusst (erklaerungen.PARAMETER_WIRKUNG). Das Startblatt markiert die Kernparameter in „Zentrale Annahmen“ ebenfalls.
+
+Die Schaltflächen auf dem Parameterblatt sind frei schwebend (Placement), damit Auf- und Zuklappen sie nicht verschiebt oder staucht.
+
+Hinweis aus der Durchsicht: par_GrESt wird derzeit nicht gerechnet; die Nebenkosten der Neuobjekte kommen aus der Eingabe bzw. „Kaufnebenkosten in % des Kaufpreises“. Der Tooltip sagt das.
+
+**Prüfung im Prüfskript:** „Selbstdokumentation: Pflichtfelder, Tooltips, eingeklappte Parameter“ prüft nach dem Durchrechnen in LibreOffice Kopftexte mit * und vorhandene Kommentare in Verkäufe, Neuobjekte, Objekte, Liquidität, Rücklagen und Parameter sowie Ebene und Ausblendung der Parameterzeilen.

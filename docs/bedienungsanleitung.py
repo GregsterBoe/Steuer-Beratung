@@ -95,8 +95,9 @@ punkte([
     "**Blatt Start öffnen:** Handlungsempfehlung, Belastbarkeit der Daten und Farblegende ansehen.",
     "**Kostenstellen prüfen:** Werte des Basisjahrs in den Kostenstellenblättern kontrollieren "
     "und dort korrigieren.",
-    "**Annahmen prüfen:** Blatt Parameter (Steuersatz, Steigerungen, Alternativrendite) und "
-    "blaue Zellen im Blatt Objekte. Wo bessere Werte bekannt sind, eintippen.",
+    "**Annahmen prüfen:** im Blatt Parameter zuerst die Kernparameter (★, fett: Steuersatz, "
+    "Steigerungen, Alternativrendite), dann die blauen Zellen im Blatt Objekte. Wo bessere "
+    "Werte bekannt sind, eintippen.",
     "**Planung erfassen:** geplante Verkäufe im Blatt Verkäufe, Käufe im Blatt Neuobjekte.",
     "**Prüfen und lesen:** „Plausibilität prüfen“ drücken, Fehler beheben, dann Start, "
     "Übersicht und Vergleich lesen.",
@@ -134,6 +135,12 @@ tabelle(["Farbe", "Bedeutung", "Was tun?"], [
 ], [2.2, 8.4, 6.0], ["F4B6B6", "F8CBAD", "BDD7EE", "C6E0B4", "FFF2CC", "D9D9D9"])
 absatz("Ein eingetippter Wert ersetzt die Annahme. Wird ein Feld geleert, stellt die Schaltfläche "
        "„Annahmen wiederherstellen“ die Annahme wieder her.")
+absatz("**Die Mappe erklärt sich selbst:** Spaltenköpfe in Objekte, Verkäufe, Neuobjekte und "
+       "Anlagen sind rot mit * (Pflichtfeld), blau (optional) oder grau (berechnet). Ein rotes "
+       "Dreieck am Kopf heißt: Maus darüber zeigt die Erläuterung, bei berechneten Spalten die "
+       "Herleitung in Worten; das gilt auch für Prognose, Rücklagen, Darlehen, Liquidität und "
+       "Auswertung. Im Blatt Parameter zeigt die Maus über der Bezeichnung, was der Parameter "
+       "beeinflusst; Abschnitte ohne Kernparameter sind eingeklappt (+ am linken Rand).")
 
 # ---------------------------------------------------------------- 4
 doc.add_heading("4. Kostenstellenblätter sind führend", level=1)
