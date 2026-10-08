@@ -57,6 +57,8 @@ AUSGEBLENDET = "Zeile ausgeblendet"  # statt Bereichsname: Zeilennummer im Blatt
 EINGEKLAPPT = "Spalte eingeklappt:"  # + Blattname; statt Zeile: Spaltennummer, Soll (Ebene, aus)
 ZEILE_EINGEKLAPPT = "Zeile eingeklappt:"  # + Blattname; statt Zeile: Zeilennummer, Soll (Ebene, aus)
 KOPF = "Kopf:"  # + Blatt:Zeile; statt Zeile: Spaltennummer, Soll Text, " [Tooltip]" mit Kommentar
+AUSWAHL = "Auswahl:"  # + Blattname; statt Zeile: Zelle, Soll (Liste, Anzahl Überprüfungen)
+UEBERLAPPT = "Datenüberprüfungen überlappen"  # Zeile 0, Soll: Liste der Fundstellen ([])
 
 
 def nr(spalten, key: str, versatz: int = 0) -> int:
@@ -91,7 +93,8 @@ def durchrechnen(modell: Modell, arbeitsordner: Path, zellen: dict = None, profi
     Ein gemeinsames Profil für mehrere Aufrufe spart den Aufbau bei jedem Start."""
     roh = arbeitsordner / "roh" / "mappe.xlsx"
     roh.parent.mkdir(parents=True, exist_ok=True)
-    mappe(modell, zellen).save(roh)
+    erzeugt = mappe(modell, zellen)
+    erzeugt.save(roh)
     aus = arbeitsordner / "gerechnet"
     soffice = shutil.which("soffice") or shutil.which("libreoffice")
     if not soffice:
@@ -101,7 +104,9 @@ def durchrechnen(modell: Modell, arbeitsordner: Path, zellen: dict = None, profi
          "--calc", "--convert-to", "xlsx", "--outdir", str(aus), str(roh)],
         check=True, capture_output=True, timeout=120,
     )
-    return load_workbook(aus / "mappe.xlsx", data_only=True)
+    wb = load_workbook(aus / "mappe.xlsx", data_only=True)
+    wb.erzeugt = erzeugt  # Datenüberprüfungen so, wie Excel sie öffnet (LibreOffice glättet sie)
+    return wb
 
 
 def wert(wb, name: str, zeile_im_bereich: int = 0):
@@ -1380,6 +1385,13 @@ def faelle():
             (f"{ZEILE_EINGEKLAPPT}Parameter", 38, (1, True)),
             ("par_6bFrist", 0, 4),
             ("par_6bFristNeubau", 0, 6),
+            # Auswahllisten: je Zelle genau eine Überprüfung, sonst verwirft Excel sie
+            (UEBERLAPPT, 0, []),
+            (f"{AUSWAHL}Verkäufe", "A2", ("obj_ID", 1)),
+            (f"{AUSWAHL}Verkäufe", "F2", ('"ja,nein"', 1)),
+            (f"{AUSWAHL}Neuobjekte", "A2", (None, 1)),
+            (f"{AUSWAHL}Neuobjekte", "K2", ("rl_ID", 1)),
+            (f"{AUSWAHL}Neuobjekte", "N2", ("nk_Liste", 1)),
         ]),
         ("AfA-Plan: geplante Jahre ersetzen die Fortschreibung",
          vorlage_eingelesen(plan={"KSt 1": {1240: {2027: 15_000, 2028: 14_000, 2030: 0}}}), [
@@ -1841,6 +1853,26 @@ def eingeklappt(ws, spalte: int) -> tuple:
     return 0, False
 
 
+def auswahl(ws, zelle: str) -> tuple:
+    """Auswahlliste der Zelle (formula1 einer Listenüberprüfung) und Anzahl ihrer Überprüfungen."""
+    treffer = [dv for dv in ws.data_validations.dataValidation if zelle in dv.sqref]
+    listen = [dv.formula1 for dv in treffer if dv.type == "list"]
+    return (listen[0] if listen else None), len(treffer)
+
+
+def ueberlappungen(wb) -> list:
+    """Zellbereiche mit mehr als einer Datenüberprüfung; Excel verwirft solche Überprüfungen."""
+    fundstellen = []
+    for ws in wb:
+        bereiche = [(i, r) for i, dv in enumerate(ws.data_validations.dataValidation)
+                    for r in dv.sqref.ranges]
+        for a, (i, r) in enumerate(bereiche):
+            for j, q in bereiche[a + 1:]:
+                if i != j and not r.isdisjoint(q):
+                    fundstellen.append(f"{ws.title}!{r.coord}")
+    return fundstellen
+
+
 def pruefe(fall: str, wb, pruefungen) -> int:
     """Sollwerte eines Falls prüfen, Ergebnis ausgeben, Anzahl Abweichungen zurückgeben."""
     fehler = 0
@@ -1852,6 +1884,10 @@ def pruefe(fall: str, wb, pruefungen) -> int:
         elif name.startswith(ZEILE_EINGEKLAPPT):
             dim = wb[name[len(ZEILE_EINGEKLAPPT):]].row_dimensions[zeile]
             ist = (dim.outline_level, bool(dim.hidden))
+        elif name.startswith(AUSWAHL):
+            ist = auswahl(getattr(wb, "erzeugt", wb)[name[len(AUSWAHL):]], zeile)
+        elif name == UEBERLAPPT:
+            ist = ueberlappungen(getattr(wb, "erzeugt", wb))
         elif name.startswith(KOPF):
             blatt, kopfzeile = name[len(KOPF):].rsplit(":", 1)
             c = wb[blatt].cell(row=int(kopfzeile), column=zeile)
