@@ -111,8 +111,9 @@ tabelle(["Blatt", "Wofür"], [
     ["**Objekte**", "Ein Bestandsobjekt je Zeile: Miete, Kosten, AK, Kaufjahr, Verkehrswert, Status"],
     ["**Verkäufe**", "ObjektID, Jahr, Preis, Kosten, Anteil G+B lt. Kaufvertrag, § 6b ja/nein, "
                      "„reinvestieren = ja“ legt ein Neuobjekt aus Annahmen an"],
-    ["**Neuobjekte**", "Kaufjahr, Kaufpreis, Anteil G+B, AfA-Satz und -Methode, Quelle-Rücklage, "
-                       "optional „Kostenstelle Neukauf“"],
+    ["**Neuobjekte**", "Kaufjahr, Kaufpreis, Anteil G+B, AfA-Satz und -Methode, bis zu drei "
+                       "Quell-Rücklagen, „Kostenstelle Neukauf“, Finanzierung (Abschnitt 4)"],
+    ["**Darlehen**", "Tilgungsplan je Kredit: Zins, Tilgung und Restschuld je Jahr"],
     ["**Anlagen**", "Anlagenverzeichnis: AK, Buchwert und AfA je Anlage und Jahr"],
     ["**Übersicht / Vergleich**", "Ergebnis je Jahr und Szenarien nebeneinander (Abschnitt 5)"],
     ["**Prüfung**", "Alle Plausibilitätsprüfungen als Fehler, Warnung oder Hinweis"],
@@ -150,11 +151,27 @@ punkte([
 
 doc.add_heading("Neukauf-Kostenstellen (KSt 31–35)", level=2)
 absatz("Alle Kostenstellen hinter „KSt 9999“ gelten als geplante Käufe. Sie erhalten ein eigenes "
-       "Blatt (Basisjahr und Planjahre gelb), zählen aber nicht zu „Alle Objekte“. Trägt man die "
-       "Kostenstelle im Blatt Neuobjekte unter „Kostenstelle Neukauf“ ein, übernimmt die Prognose "
-       "ab dem Jahr nach dem Kauf Miete, Einnahmen, Erhaltung und Ausgaben aus diesem Blatt; "
-       "Jahre ohne Wert werden mit der Steigerung fortgeschrieben. Kaufpreis, Anteil G+B und "
-       "AfA-Satz bleiben Eingaben im Blatt Neuobjekte.")
+       "Blatt (Basisjahr und Planjahre gelb). Wählt man die Kostenstelle im Blatt Neuobjekte unter "
+       "„Kostenstelle Neukauf“ aus, übernimmt die Prognose ab dem Jahr nach dem Kauf Miete, "
+       "Einnahmen, Erhaltung und Ausgaben aus diesem Blatt; Jahre ohne Wert werden mit der "
+       "Steigerung fortgeschrieben. Das Blatt ist dann zugleich das Blatt des Neuobjekts: AfA und "
+       "Kreditzinsen kommen grau aus dem Modell, das Neuobjekt zählt in „Alle Objekte“. Kaufpreis, "
+       "Anteil G+B und AfA-Satz bleiben Eingaben im Blatt Neuobjekte.")
+
+doc.add_heading("Rücklagen und Finanzierung eines Kaufs", level=2)
+punkte([
+    "**Quell-Rücklagen:** bis zu drei Rücklagen je Neuobjekt aus der Auswahlliste. Übertragen "
+    "werden erst alle Gebäudegewinne auf das Gebäude, dann die G+B-Gewinne auf G+B, der Rest auf "
+    "das Gebäude. Ob die Übertragung im Einzelfall gewollt ist, entscheidet der Berater.",
+    "**Finanzierungsbedarf** = Kaufpreis + Nebenkosten − Nettoerlös der Quell-Verkäufe.",
+    "**Finanzierung Rest:** leer bzw. „Eigenmittel“ zahlt den Bedarf aus der Liquidität; "
+    "„Kredit“ finanziert ihn. Kreditbetrag leer = ganzer Bedarf, sonst der eingetragene Betrag, "
+    "der Rest kommt aus Eigenmitteln.",
+    "**Kreditangaben:** Zinssatz, Tilgungsart (Annuität mit anfänglicher Tilgung, linear oder "
+    "endfällig), Tilgung p. a., optional die Laufzeit, nach der die Restschuld getilgt wird.",
+    "Zinsen mindern das Ergebnis und die Steuer, die Tilgung nur die Liquidität, die Restschuld "
+    "das Gesamtvermögen. Ist der Kredit getilgt, entfallen Zins und Tilgung (Blatt Darlehen).",
+])
 
 # ---------------------------------------------------------------- 5
 doc.add_heading("5. Ergebnis lesen", level=1)
@@ -202,7 +219,8 @@ punkte([
     "Bei verkauften Objekten AK, Kaufjahr und Anteil G+B belegen; orange Zellen bestimmen den "
     "Gewinn direkt.",
     "Graue Formelzellen nicht überschreiben; Änderungen immer in gelben oder blauen Zellen.",
-    "Zinsen und Tilgung sind noch nicht enthalten (Betrachtung vor Finanzierung).",
+    "Zins und Tilgung gibt es nur für Kredite der Neuobjekte; Bestandsobjekte rechnen ohne "
+    "Finanzierung.",
     "**Alle Steuersätze, Fristen und Annahmen vor dem Echteinsatz durch den zuständigen "
     "Berufsträger prüfen.**",
 ])

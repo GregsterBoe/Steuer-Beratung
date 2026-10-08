@@ -8,13 +8,13 @@
 - **Rechnung in Zellformeln:** jeder Schritt ist im Blatt nachvollziehbar. VBA steuert nur Objekte, Szenarien, Prüfungen und Neuberechnung.
 - **Python als Generator:** openpyxl baut die Mappe einmalig beim Erstellen. Ein Prüfskript rechnet sie per LibreOffice headless durch und gleicht sie mit den Testfällen ab.
 - **Alle Annahmen auf dem Parameterblatt**, keine festen Zahlen in Formeln.
-- **Vor Finanzierung:** Zins und Tilgung kommen erst in Stufe 2.
+- **Finanzierung nur bei Neuobjekten:** Kredite werden je Kauf im Blatt Neuobjekte festgelegt (Tilgungsplan im Blatt Darlehen); Bestandsobjekte rechnen ohne Zins und Tilgung.
 
 ## Blätter
 
 | Eingabe | Rechnung | Ausgabe | Kontrolle | BWA |
 | --- | --- | --- | --- | --- |
-| Parameter, Objekte, Anlagen, Verkäufe, Neuobjekte | Prognose, Rücklagen, Liquidität | Start, Übersicht, Vergleich, Auswertung | Prüfung, Varianten | Alle Objekte, je Kostenstelle ein Blatt, Verkauf und Kauf |
+| Parameter, Objekte, Anlagen, Verkäufe, Neuobjekte | Prognose, Rücklagen, Darlehen, Liquidität | Start, Übersicht, Vergleich, Auswertung | Prüfung, Varianten | Alle Objekte, je Kostenstelle ein Blatt, Verkauf und Kauf |
 
 ## Etappen
 
@@ -67,7 +67,7 @@ Zielformat der Eingabe ist die DATEV-BWA-Kostenstellenblattsammlung; `vorlagen/K
 
 `--kostenstellen` überspringt jedes Blatt, das nicht im Kostenstellenformat ist (kein „Nr.“ in B4, keine Kostenstelle in B2 oder keine Spalte des Basisjahrs in Zeile 4), etwa Annahmen oder Übersichten. Jedes übersprungene Blatt nennt es mit Grund in der Ausgabe. Je Kostenstellenblatt liest es B2 (Kostenstelle = ObjektID), C2 (Objektname) und aus der Spalte des Basisjahrs die BWA-Zeilen 1020 (Miete), 1090 (weitere Einnahmen), 1250 (Erhaltung) sowie 1100–1220 und 1260 (weitere Ausgaben). Die Datei muss in Excel gespeichert sein, damit berechnete Werte vorliegen. Dazu liest es 1240 als „AfA Basisjahr lt. Buchhaltung“, die schon geplante AfA der Folgejahre aus 1240 (Blatt **AfA-Plan**: Jahre mit Wert ersetzen die Fortschreibung, leere rechnet das Modell) und, falls vorhanden, die Aufschlüsselung der Abschreibungen unter der BWA (Buchwert und Jahres-AfA je Anlagengruppe, siehe unten). Die übrigen steuerlichen Stammdaten (AK, Kaufjahr) kommen aus dem Anlagenverzeichnis; solange sie fehlen, rechnet die Mappe mit Annahmen (siehe unten).
 
-Blätter hinter der Kostenstelle „KSt 9999“ (im Muster KSt 31–35) sind **Neukauf-Kostenstellen**: kein Bestandsobjekt, sondern Planwerte für einen Kauf. Jede bekommt in der Mappe ein eigenes Blatt im BWA-Layout; Basisjahr und Planjahre sind dort Eingabe und bilden die Datenbasis. Das Blatt **Neukauf-KSt** verweist darauf (Miete, weitere Einnahmen, Erhaltung, weitere Ausgaben je Jahr ab dem Basisjahr) und schreibt Jahre ohne Wert vom letzten Wert mit der Steigerung fort. „Alle Objekte“ enthält die Neukauf-Kostenstellen nicht. Ein Neuobjekt nennt sie in der Spalte „Kostenstelle Neukauf“ und rechnet ab dem Jahr nach dem Kauf mit diesen Werten statt mit Mietrendite und Erhaltungsquote. Die AfA rechnet weiter das Modell aus Kaufpreis, Anteil G+B, AfA-Satz und § 6b-Übertragung.
+Blätter hinter der Kostenstelle „KSt 9999“ (im Muster KSt 31–35) sind **Neukauf-Kostenstellen**: kein Bestandsobjekt, sondern Planwerte für einen Kauf. Jede bekommt in der Mappe ein eigenes Blatt im BWA-Layout; Basisjahr und Planjahre sind dort Eingabe und bilden die Datenbasis. Das Blatt **Neukauf-KSt** verweist darauf (Miete, weitere Einnahmen, Erhaltung, weitere Ausgaben je Jahr ab dem Basisjahr) und schreibt Jahre ohne Wert vom letzten Wert mit der Steigerung fort. Ein Neuobjekt wählt sie in der Spalte „Kostenstelle Neukauf“ (Auswahlliste) und rechnet ab dem Jahr nach dem Kauf mit diesen Werten statt mit Mietrendite und Erhaltungsquote. Das Blatt der Kostenstelle ist dann zugleich das Blatt des Neuobjekts: AfA (1240) und Kreditzinsen (1310) kommen grau aus dem Modell, darunter Kreditauszahlung, Tilgung und Restschuld; ein eigenes Blatt NEU-… entfällt. Über die Prognose zählt das Neuobjekt in „Alle Objekte“. Die AfA rechnet weiter das Modell aus Kaufpreis, Anteil G+B, AfA-Satz und § 6b-Übertragung.
 
 Das Prognoseblatt hat je Objektzeile einen Block mit 20 Jahreszeilen: Miete, weitere Einnahmen, Erhaltung und weitere Ausgaben wachsen mit ihren Steigerungsraten. Die AfA beträgt AK Gebäude × Satz, höchstens aber den Restbuchwert. Danach sind AfA und Buchwert null. Hat das Objekt Anlagen im Blatt Anlagen, ist die AfA die Summe der AfA je Anlage: Jede Anlage läuft für sich aus, sobald ihr Buchwert verbraucht ist.
 
@@ -76,7 +76,7 @@ Das Blatt **Übersicht** öffnet als erstes. Es zeigt von 2026 bis 2046 den Wert
 - **Baseline:** alles halten, nichts verkaufen.
 - **Plan:** mit den Verkäufen und Neuobjekten aus den Blättern Verkäufe und Neuobjekte.
 
-Der Wert ist der Verkehrswert aus dem Objektblatt, fortgeschrieben mit der Wertsteigerung vom Parameterblatt. Fehlt der Verkehrswert, gilt die Annahme Jahresmiete × Vervielfältiger; die Übersicht zählt die Objekte mit Annahmen. Ein Verkauf gilt zum Jahresende. Miete und AfA laufen im Verkaufsjahr noch, ab dem Folgejahr ist das Objekt inaktiv. Der Plan enthält auch die Neuobjekte. Das Gesamtvermögen ist der Verkehrswert plus die kumulierte Liquidität nach Steuern, abzüglich der latenten Steuer auf stille Reserven und Rücklage. So stehen Halten und Verkaufen vergleichbar nebeneinander.
+Der Wert ist der Verkehrswert aus dem Objektblatt, fortgeschrieben mit der Wertsteigerung vom Parameterblatt. Fehlt der Verkehrswert, gilt die Annahme Jahresmiete × Vervielfältiger; die Übersicht zählt die Objekte mit Annahmen. Ein Verkauf gilt zum Jahresende. Miete und AfA laufen im Verkaufsjahr noch, ab dem Folgejahr ist das Objekt inaktiv. Der Plan enthält auch die Neuobjekte. Das Gesamtvermögen ist der Verkehrswert plus die kumulierte Liquidität nach Steuern, abzüglich der Restschuld der Kredite und der latenten Steuer auf stille Reserven und Rücklage. So stehen Halten und Verkaufen vergleichbar nebeneinander.
 
 Im Blatt **Verkäufe** stehen je Verkauf ObjektID, Jahr, Preis, Kosten, optional der Anteil G+B laut Kaufvertrag und § 6b ja/nein. Daraus rechnet das Blatt:
 - den Gebäudebuchwert am Ende des Verkaufsjahrs aus der Prognose
@@ -87,17 +87,19 @@ Die Aufteilung folgt dem Kaufvertrag, sonst dem Verkehrswertanteil aus dem Objek
 
 Das Blatt **Rücklagen** bildet bei § 6b ja und Status OK eine Rücklage aus den positiven Teilgewinnen, getrennt nach Gebäude und G+B. Die Frist beträgt vier Jahre, mit „§ 6b Neubau begonnen = ja“ sechs Jahre. Was bis zum Fristjahr nicht auf Neuobjekte übertragen ist, wird dort aufgelöst, mit 6 % Zuschlag je Jahr. Der Spiegel je Jahr zeigt Gewinne, Einstellung, Übertragung, Auflösung, Zuschlag, Bestand und den steuerwirksamen Betrag, der in Etappe 7 die Steuer ergibt.
 
-Im Blatt **Neuobjekte** stehen je Reinvestition Kaufjahr, Kaufpreis, Anteil G+B, Nebenkosten, AfA-Satz, AfA-Methode (linear oder degressiv 5 % nach § 7 Abs. 5a EStG mit Wechsel zur linearen AfA), Mietrendite, Erhaltungsquote und die Quelle-Rücklage. Gekauft wird zum Jahresende, Miete und AfA laufen ab dem Folgejahr. Die Rücklage wird in fester Reihenfolge übertragen:
-1. Gebäudegewinn auf das neue Gebäude
-2. G+B-Gewinn auf den neuen G+B (bis auf 0)
-3. Rest des G+B-Gewinns auf das Gebäude
+Im Blatt **Neuobjekte** stehen je Reinvestition Kaufjahr, Kaufpreis, Anteil G+B, Nebenkosten, AfA-Satz, AfA-Methode (linear oder degressiv 5 % nach § 7 Abs. 5a EStG mit Wechsel zur linearen AfA), Mietrendite, Erhaltungsquote und bis zu drei Quell-Rücklagen (Auswahl aus dem Blatt Rücklagen). Gekauft wird zum Jahresende, Miete und AfA laufen ab dem Folgejahr. Die Rücklagen werden in fester Reihenfolge übertragen, über alle Quellen:
+1. Gebäudegewinne auf das neue Gebäude
+2. G+B-Gewinne auf den neuen G+B (bis auf 0)
+3. Rest der G+B-Gewinne auf das Gebäude
 
-Die AfA läuft von der geminderten AfA-Basis. Neuobjekte erscheinen in der Prognose und in der Plan-Linie der Übersicht, nicht in der Baseline.
+Die AfA läuft von der geminderten AfA-Basis. Die Werte je Quelle stehen in eingeklappten Spalten rechts. Neuobjekte erscheinen in der Prognose und in der Plan-Linie der Übersicht, nicht in der Baseline.
+
+**Finanzierung je Neuobjekt:** Finanzierungsbedarf = Kaufpreis + Nebenkosten − Nettoerlös der Quell-Verkäufe (in Zeilenreihenfolge, soweit nicht schon für ein Objekt darüber eingesetzt). Mit „Finanzierung Rest = Kredit“ deckt ein Kredit den Bedarf (Kreditbetrag leer) oder den eingetragenen Betrag, der Rest kommt aus Eigenmitteln (Liquidität). Eingaben: Zinssatz, Tilgungsart (Annuität mit anfänglicher Tilgung, linear, endfällig), Tilgung p. a. und optional die Laufzeit, nach der die Restschuld auf einmal getilgt wird. Das Blatt **Darlehen** rechnet je Kredit Zins, Tilgung und Restschuld je Jahr; Auszahlung zum Ende des Kaufjahrs, Zins und Tilgung ab dem Folgejahr, nach der vollen Tilgung entfällt beides. Der Zins mindert das Ergebnis (BWA 1310 im Blatt des Neuobjekts und in „Alle Objekte“), die Tilgung nur die Liquidität, die Restschuld das Gesamtvermögen. Szenario C finanziert gleich, in B entfällt mit dem Kauf auch der Kredit.
 
 Das Blatt **Liquidität** rechnet je Jahr die Steuer und den Geldfluss, je Szenario eine Tabelle:
 - Steuer = (laufendes Ergebnis + steuerwirksamer Betrag aus dem Rücklagenspiegel) × Grenzsteuersatz
 - Verluste werden vorgetragen und mit späteren Gewinnen verrechnet
-- freier Mittelzufluss = Mieten und Einnahmen − Erhaltung und Ausgaben + Zins + Verkaufserlöse − Steuer − Kauf der Neuobjekte
+- freier Mittelzufluss = Mieten und Einnahmen − Erhaltung und Ausgaben + Zins − Kreditzinsen + Verkaufserlöse − Steuer − Kauf der Neuobjekte + Kreditauszahlung − Tilgung
 
 Die Liquidität liegt in einer Alternativanlage und wird mit der Rendite vom Parameterblatt verzinst (Standard 3 %); der Zins ist steuerpflichtig.
 
@@ -114,7 +116,7 @@ Das Blatt **Vergleich** stellt die Kennzahlen am Ende des Rasters nebeneinander,
 Das Blatt **Prüfung** rechnet alle Plausibilitätsprüfungen als Formeln, je mit Art und Anzahl betroffener Zeilen:
 - **Fehler:** Status ungleich OK in Objekten, Verkäufen oder Neuobjekten (darunter Fristverstoß), Steuerwelt nicht GmbH
 - **Warnung:** Vorbesitzzeit für § 6b zu kurz, Rücklage nur teilweise oder gar nicht übertragen, Drei-Objekt-Grenze überschritten
-- **Hinweis:** Frist nach Prognoseende, Liquidität negativ (Finanzierungsbedarf), Verkehrswert fehlt
+- **Hinweis:** Frist nach Prognoseende, Liquidität negativ (Finanzierungsbedarf), Kredit am Ende des Rasters nicht getilgt, Verkehrswert fehlt
 
 Das Gesamtergebnis steht auch auf dem Parameterblatt und in der Übersicht.
 

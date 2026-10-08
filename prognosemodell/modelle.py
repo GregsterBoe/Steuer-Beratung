@@ -133,7 +133,7 @@ CODENAMEN = {
     "Prognose": "wsPrognose", "Rücklagen": "wsRuecklagen", "Liquidität": "wsLiquiditaet",
     "Auswertung": "wsAuswertung", "Prüfung": "wsPruefung", "Varianten": "wsVarianten",
     "BWA-Zuordnung": "wsBWAZuordnung", "Anlagen": "wsAnlagen", "AfA-Plan": "wsAfAPlan",
-    "Neukauf-KSt": "wsNeukaufKSt",
+    "Neukauf-KSt": "wsNeukaufKSt", "Darlehen": "wsDarlehen",
 }
 
 
@@ -355,6 +355,10 @@ PROGNOSE_SPALTEN = [
     # AfA, als würde das Objekt nie verkauft: je Anlage aus dem Blatt Anlagen, sonst AfA je
     # Jahr bis zum Restbuchwert; der Plan nimmt sie bis zum Verkaufsjahr
     Spalte("afa_halten", "AfA bei Halten", "prg_AfAHalten", FMT_EURO),
+    # Kredit des Neuobjekts (Blatt Darlehen); Bestandsobjekte ohne Finanzierung
+    Spalte("kredit_zins", "Zinsen Kredit", "prg_KreditZins", FMT_EURO),
+    Spalte("tilgung", "Tilgung Kredit", "prg_Tilgung", FMT_EURO),
+    Spalte("restschuld", "Restschuld Kredit Ende", "prg_Restschuld", FMT_EURO, 16),
 ]
 
 # Blatt Verkäufe (Etappe 4, Projektplan Abschnitt 11): Eingaben, dann berechnete Spalten
@@ -429,6 +433,9 @@ RUECKLAGE_JAHR_SPALTEN = [
 # Blatt Neuobjekte (Etappe 6, Projektplan Abschnitt 13): Kauf zum Jahresende,
 # Miete und AfA ab dem Folgejahr
 MAX_NEUOBJEKTE = 50
+FIN_EIGEN, FIN_KREDIT = "Eigenmittel", "Kredit"
+TILGUNG_ANNUITAET, TILGUNG_LINEAR, TILGUNG_ENDFAELLIG = "Annuität", "linear", "endfällig"
+TILGUNGSARTEN = (TILGUNG_ANNUITAET, TILGUNG_LINEAR, TILGUNG_ENDFAELLIG)
 NEU_FELDER = [
     Feld("neu_id", "NeuID", "ne_ID", FMT_TEXT, True, 12),
     Feld("name", "Name", "ne_Name", FMT_TEXT, False, 22),
@@ -446,12 +453,43 @@ NEU_FELDER = [
          minimum=0, maximum=1),
     Feld("erhaltungsquote", "Erhaltung auf Kaufpreis", "ne_ErhQuote", FMT_PROZENT, False, 11,
          minimum=0, maximum=1),
-    Feld("quelle", "Quelle RücklageID", "ne_Quelle", FMT_TEXT, False, 16),
+    # bis zu drei Rücklagen je Neuobjekt, übertragen in dieser Reihenfolge (QUELLEN)
+    Feld("quelle", "Quelle 1 RücklageID", "ne_Quelle", FMT_TEXT, False, 16,
+         hinweis="Rücklage aus dem Blatt Rücklagen; ihr Gewinn mindert die AK, ihr "
+                 "Nettoerlös den Finanzierungsbedarf"),
+    Feld("quelle2", "Quelle 2 RücklageID", "ne_Quelle2", FMT_TEXT, False, 16,
+         hinweis="weitere Rücklage, nach Quelle 1 übertragen"),
+    Feld("quelle3", "Quelle 3 RücklageID", "ne_Quelle3", FMT_TEXT, False, 16,
+         hinweis="weitere Rücklage, nach Quelle 2 übertragen"),
     Feld("kst", "Kostenstelle Neukauf", "ne_KSt", FMT_TEXT, False, 14,
          hinweis="z. B. KSt 31 aus dem Blatt Neukauf-KSt: dessen Jahreswerte ersetzen Miete, "
                  "weitere Einnahmen, Erhaltung und weitere Ausgaben aus Mietrendite und "
                  "Erhaltungsquote; die AfA rechnet weiter das Modell"),
+    # Finanzierung: Bedarf = AK gesamt − Nettoerlös der Quell-Verkäufe; Rest aus Eigenmitteln
+    # (Liquidität) oder per Kredit, Tilgungsplan im Blatt Darlehen
+    Feld("fin_art", "Finanzierung Rest", "ne_FinArt", FMT_TEXT, False, 12,
+         auswahl=(FIN_EIGEN, FIN_KREDIT),
+         hinweis="Finanzierungsbedarf (AK − Nettoerlös der Quell-Verkäufe) aus Eigenmitteln "
+                 "(leer) oder per Kredit"),
+    Feld("kredit_betrag", "Kreditbetrag", "ne_KreditBetrag", FMT_EURO, False, minimum=0,
+         hinweis="leer = ganzer Finanzierungsbedarf; nur bei Finanzierung Rest = Kredit"),
+    Feld("kredit_zins", "Zinssatz Kredit", "ne_KreditZins", FMT_PROZENT, False, 10,
+         minimum=0, maximum=0.2, hinweis="Zins p. a. auf die Restschuld am Vorjahresende"),
+    Feld("tilgungsart", "Tilgungsart", "ne_Tilgungsart", FMT_TEXT, False, 11,
+         auswahl=TILGUNGSARTEN,
+         hinweis="Annuität (leer): gleiche Rate aus Zins + anfänglicher Tilgung; linear: "
+                 "gleiche Tilgung; endfällig: Rückzahlung nach der Laufzeit"),
+    Feld("tilgung", "Tilgung p. a.", "ne_Tilgung", FMT_PROZENT, False, 10,
+         minimum=0, maximum=1,
+         hinweis="in % des Kreditbetrags; bei Annuität die anfängliche Tilgung"),
+    Feld("laufzeit", "Laufzeit Jahre", "ne_Laufzeit", FMT_ZAHL, False, 9,
+         minimum=1, maximum=100, ganzzahl=True,
+         hinweis="endfällig: Pflicht. Sonst optional: nach so vielen Jahren wird die "
+                 "Restschuld auf einmal getilgt"),
 ]
+# Quell-Rücklagen je Neuobjekt: (Feld, benannter Bereich, Präfix der Hilfsspalten)
+QUELLEN = [("quelle", "ne_Quelle", "ne_Q1"), ("quelle2", "ne_Quelle2", "ne_Q2"),
+           ("quelle3", "ne_Quelle3", "ne_Q3")]
 # Blatt Neukauf-KSt: Planwerte der Neukauf-Kostenstellen (hinter „KSt 9999“) je Jahr.
 # (Schlüssel, Bezeichnung, BWA-Nr., Steigerung für Jahre ohne Wert)
 NEUKAUF_POSITIONEN = [
@@ -476,7 +514,40 @@ NEU_SPALTEN = [
     Spalte("ak_gub", "steuerliche AK G+B", "ne_AKGuB", FMT_EURO),
     # 1 = Quelle-Rücklage angegeben; das Objekt entfällt in Szenario B
     Spalte("mit_quelle", "mit Rücklage", "ne_MitQuelle", FMT_ZAHL, 8),
+    # Finanzierung (Projektplan Abschnitt 26)
+    Spalte("ak_gesamt", "Kaufpreis + Nebenkosten", "ne_AKGesamt", FMT_EURO),
+    Spalte("erloes", "Einsatz Verkaufserlös", "ne_Erloes", FMT_EURO),
+    Spalte("bedarf", "Finanzierungsbedarf", "ne_Bedarf", FMT_EURO),
+    Spalte("kredit", "Kredit", "ne_Kredit", FMT_EURO),
+    Spalte("eigen", "Eigenmittel", "ne_Eigen", FMT_EURO),
+] + [
+    # je Quelle: verfügbare Rücklage, Übertragung, eingesetzter Erlös (Spalten eingeklappt)
+    Spalte(f"{k}_{key}", f"Q{n} {text}", f"{praefix}{name}", FMT_EURO)
+    for n, (k, _, praefix) in enumerate(QUELLEN, start=1)
+    for key, text, name in (("rl_geb", "Rücklage Gebäude verfügbar", "RLGeb"),
+                            ("rl_gub", "Rücklage G+B verfügbar", "RLGuB"),
+                            ("ue1", "ü1", "Ue1"), ("ue2", "ü2", "Ue2"), ("ue3", "ü3", "Ue3"),
+                            ("erloes", "Nettoerlös eingesetzt", "Erloes"))
 ]
+# erste Spalte der eingeklappten Hilfsspalten je Quelle
+NEU_DETAIL_ERSTE = "quelle_rl_geb"
+
+# Blatt Darlehen: je Zeile des Blatts Neuobjekte eine Zeile mit dem Tilgungsplan; links die
+# Kreditdaten, rechts je Block (Zinsen, Tilgung, Restschuld) eine Spalte je Prognosejahr
+DARLEHEN_SPALTEN = [
+    Spalte("id", "NeuID", "dl_ID", FMT_TEXT, 12),
+    Spalte("kaufjahr", "Auszahlung Ende Jahr", "dl_Kaufjahr", FMT_JAHR, 10),
+    Spalte("betrag", "Kreditbetrag", "dl_Betrag", FMT_EURO),
+    Spalte("zinssatz", "Zinssatz", "dl_Zinssatz", FMT_PROZENT, 9),
+    Spalte("art", "Tilgungsart", "dl_Art", FMT_TEXT, 11),
+    Spalte("tilgungssatz", "Tilgung p. a.", "dl_Tilgungssatz", FMT_PROZENT, 9),
+    Spalte("laufzeit", "Laufzeit Jahre", "dl_Laufzeit", FMT_ZAHL, 9),
+    Spalte("rate", "Rate p. a. (Annuität) bzw. Tilgung (linear)", "dl_Rate", FMT_EURO, 15),
+    Spalte("getilgt", "getilgt im Jahr", "dl_Getilgt", FMT_TEXT, 11),
+]
+DARLEHEN_BLOECKE = [("zins", "Zinsen", "dl_Zins"), ("tilgung", "Tilgung", "dl_Tilgung"),
+                    ("restschuld", "Restschuld Ende", "dl_Restschuld")]
+DARLEHEN_ERSTE = 4   # erste Datenzeile
 NEU_STATUS_NAME = "ne_Status"
 
 
@@ -509,6 +580,7 @@ _LIQ = [
     ("ergebnis", "laufendes Ergebnis", "Ergebnis", FMT_EURO, 14),
     ("verkauf", "steuerwirksam aus Verkauf und Rücklage", "Verkauf", FMT_EURO, 16),
     ("zins", "Zinsertrag Alternativanlage", "Zins", FMT_EURO, 14),
+    ("kreditzins", "Zinsen Kredite Neuobjekte", "KreditZins", FMT_EURO, 14),
     ("zve", "Ergebnis vor Verlustvortrag", "ZvE", FMT_EURO, 14),
     ("vortrag_genutzt", "Verlustvortrag genutzt", "VortragGenutzt", FMT_EURO, 14),
     ("bemessung", "Bemessungsgrundlage", "Bemessung", FMT_EURO, 14),
@@ -517,8 +589,11 @@ _LIQ = [
     ("verkaufserloes", "Verkaufserlöse netto", "Verkaufserloes", FMT_EURO, 14),
     ("rueckfluss", "davon Buchwert-Rückfluss", "Rueckfluss", FMT_EURO, 14),
     ("kauf", "Kauf Neuobjekte inkl. Nebenkosten", "Kauf", FMT_EURO, 15),
+    ("kredit", "Kreditauszahlung", "Kredit", FMT_EURO, 14),
+    ("tilgung", "Tilgung Kredite", "Tilgung", FMT_EURO, 14),
     ("zufluss", "freier Mittelzufluss", "Zufluss", FMT_EURO, 14),
     ("kum", "Liquidität kumuliert Ende", "Kum", FMT_EURO, 15),
+    ("restschuld", "Restschuld Kredite Ende", "Restschuld", FMT_EURO, 15),
 ]
 # Blatt Auswertung: Kennzahlen je Jahr, gleicher Aufbau je Szenario
 _AUS = [
@@ -526,6 +601,7 @@ _AUS = [
     ("ergebnis", "laufendes Ergebnis", "Ergebnis", FMT_EURO, 14),
     ("verkauf", "steuerwirksam aus Verkauf und Rücklage", "Verkauf", FMT_EURO, 16),
     ("zins", "Zinsertrag Alternativanlage", "Zins", FMT_EURO, 14),
+    ("kreditzins", "Zinsen Kredite Neuobjekte", "KreditZins", FMT_EURO, 14),
     ("guv", "Gesamt-GuV vor Steuern", "GuV", FMT_EURO, 14),
     ("steuer", "Steuer", "Steuer", FMT_EURO, 14),
     ("nach_steuer", "Ergebnis nach Steuern", "NachSteuer", FMT_EURO, 14),
@@ -536,6 +612,7 @@ _AUS = [
     ("ruecklage", "§ 6b-Rücklage Bestand", "Ruecklage", FMT_EURO, 14),
     ("vortrag", "Verlustvortrag", "Vortrag", FMT_EURO, 14),
     ("liquiditaet", "Liquidität kumuliert", "Liquiditaet", FMT_EURO, 14),
+    ("restschuld", "Restschuld Kredite", "Restschuld", FMT_EURO, 14),
     ("vermoegen", "Gesamtvermögen vor latenter Steuer", "Vermoegen", FMT_EURO, 16),
     ("latente_steuer", "latente Steuer", "LatenteSteuer", FMT_EURO, 14),
     ("vermoegen_netto", "Gesamtvermögen nach latenter Steuer", "VermoegenNetto", FMT_EURO, 17),
@@ -561,7 +638,8 @@ AUSWERTUNG_SPALTEN = aus_spalten(SZ_A)
 # Prognosejahr aus der Auswertung, "summe" = Summe über alle Jahre aus der Liquidität
 VERGLEICH_KENNZAHLEN = [
     ("Endvermögen nach latenter Steuer", "aus", "VermoegenNetto", "ende",
-     "Verkehrswert + Liquidität − latente Steuer am Ende des letzten Prognosejahrs"),
+     "Verkehrswert + Liquidität − Restschuld − latente Steuer am Ende des letzten "
+     "Prognosejahrs"),
     ("Verkehrswert Immobilien", "aus", "Verkehrswert", "ende", "Objekte im Bestand"),
     ("Liquidität (Alternativanlage)", "aus", "Liquiditaet", "ende",
      "kumulierte freie Mittel samt Zinsen"),
@@ -581,6 +659,9 @@ VERGLEICH_KENNZAHLEN = [
     ("Steuer", "liq", "Steuer", "summe", "gezahlte Steuer; die gestundete steht in der latenten"),
     ("Verkaufserlöse netto", "liq", "Verkaufserloes", "summe", "Summe über alle Jahre"),
     ("Kauf Neuobjekte", "liq", "Kauf", "summe", "Summe über alle Jahre"),
+    ("Restschuld Kredite", "aus", "Restschuld", "ende",
+     "Kredite der Neuobjekte; mindert das Gesamtvermögen"),
+    ("Zinsen Kredite", "liq", "KreditZins", "summe", "Summe über alle Jahre"),
 ]
 
 
@@ -660,6 +741,14 @@ class Neuobjekt:
     erhaltungsquote: Optional[float] = None
     quelle: Optional[str] = None         # RücklageID, z. B. "RL-OBJ-001"
     kst: Optional[str] = None            # Neukauf-Kostenstelle, z. B. "KSt 31"
+    quelle2: Optional[str] = None        # weitere Rücklagen, nach quelle übertragen
+    quelle3: Optional[str] = None
+    fin_art: Optional[str] = None        # "Kredit" oder leer bzw. "Eigenmittel"
+    kredit_betrag: Optional[float] = None  # leer = ganzer Finanzierungsbedarf
+    kredit_zins: Optional[float] = None
+    tilgungsart: Optional[str] = None    # "Annuität" (leer), "linear", "endfällig"
+    tilgung: Optional[float] = None      # % des Kreditbetrags, Annuität: anfänglich
+    laufzeit: Optional[int] = None       # Jahre bis zur Rückzahlung der Restschuld
 
 
 # Blatt Prüfung: Plausibilitätsprüfungen (Etappe 9, Projektplan Abschnitt 5 und 19)
@@ -700,7 +789,8 @@ PRUEFUNGEN = [
     Pruefung("frist_ende", "Frist einer Rücklage endet nach dem Prognoseende; Auflösung und "
              "Zuschlag liegen außerhalb des Rasters", HINWEIS, "Blatt Rücklagen, Spalte Hinweis"),
     Pruefung("liquiditaet", "Liquidität im Plan (A) in mindestens einem Jahr negativ: "
-             "Finanzierungsbedarf (Stufe 2)", HINWEIS, "Blatt Liquidität, Liquidität kumuliert"),
+             "Finanzierungsbedarf, ggf. Kredit im Blatt Neuobjekte", HINWEIS,
+             "Blatt Liquidität, Liquidität kumuliert"),
     Pruefung("kritisch", "Verkauf mit Annahmen bei steuerlichen Stammdaten oder Verkaufspreis "
              "(orange): Veräußerungsgewinn und § 6b-Rücklage sind nur geschätzt", WARNUNG,
              "Blätter Objekte und Verkäufe, orange Zellen"),
@@ -732,6 +822,9 @@ PRUEFUNGEN = [
     Pruefung("anlagen_afa", "Objekte, deren AfA im Basisjahr lt. Blatt Anlagen von der AfA lt. "
              "Buchhaltung (BWA 1240) um mehr als 1 € abweicht: Zuordnung der Anlagen prüfen",
              HINWEIS, "Blatt Objekte, Spalten AfA Basisjahr lt. Anlagen und lt. Buchhaltung"),
+    Pruefung("restschuld", "Kredite der Neuobjekte, die am Ende des Rasters noch nicht "
+             "getilgt sind: die Restschuld mindert das Endvermögen", HINWEIS,
+             "Blatt Darlehen, Spalte getilgt im Jahr"),
 ]
 
 # Blatt Varianten: je Makrolauf eine Zeile mit festen Werten (Projektplan Abschnitt 19)
