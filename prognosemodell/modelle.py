@@ -913,6 +913,16 @@ VARIANTEN_KOPF = ["Variante", "festgehalten am", "Endvermögen A", "Endvermögen
 MAX_VARIANTEN = 100
 
 
+@dataclass(frozen=True)
+class Kapazitaet:
+    """Leere Zeilen je Eingabeblatt. Jede Zeile kostet Rechenzeit, auch wenn sie leer bleibt;
+    die Prüfung rechnet deshalb mit kleineren Mappen."""
+    objekte: int = MAX_OBJEKTE
+    verkaeufe: int = MAX_VERKAEUFE
+    neuobjekte: int = MAX_NEUOBJEKTE
+    neukauf: int = MAX_NEUKAUF
+
+
 @dataclass
 class Modell:
     objekte: list = field(default_factory=list)
@@ -932,3 +942,5 @@ class Modell:
     # Blatt BWA-Zuordnung: abweichende BWA-Nr. je Posten, z. B. {"gewinn": 1351},
     # und "verkauf": "brutto"; ohne Eintrag gilt der Standard
     bwa_zuordnung: dict = field(default_factory=dict)
+    # Zeilen je Eingabeblatt (Objekte, Verkäufe, Neuobjekte, Neukauf-KSt)
+    kapazitaet: Kapazitaet = field(default_factory=Kapazitaet)

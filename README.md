@@ -58,11 +58,14 @@ python -m prognosemodell --kostenstellen Kostenstellen.xlsx --ausgabe Ordner/Pro
 python -m prognosemodell --kostenstellen Kostenstellen.xlsx --inventar Inventar_2025.xlsx   # dazu das Anlagenverzeichnis
 python -m pruefung.pruefen           # rechnet per LibreOffice headless und prüft gegen Sollwerte
 python -m pruefung.pruefen "Etappe 9"  # nur Fälle, deren Name den Text enthält
+python -m pruefung.pruefen -j 2      # höchstens 2 Fälle gleichzeitig (Standard: ein Prozess je Kern)
 python -m pruefung.pruefen_einlesen  # prüft die Einleseschicht, ohne LibreOffice
 python -m prognosemodell.vorlagen    # schreibt vorlagen/Kostenstellen_BWA_Vorlage.xlsx und vorlagen/Inventar_Vorlage.xlsx
 ```
 
 Das Prüfskript und `--makros` brauchen LibreOffice mit Calc und der Python-UNO-Brücke (`soffice`, unter Debian/Ubuntu die Pakete `libreoffice-calc` und `python3-uno`).
+
+Das Prüfskript rechnet die Fälle parallel und mit kleinen Mappen (10 Objekte, Verkäufe und Neuobjekte, 5 Neukauf-Kostenstellen statt 200, 50, 50 und 20), denn jede leere Zeile kostet LibreOffice Rechenzeit. Zwei Fälle rechnen zur Kontrolle mit der Mappe in Originalgröße.
 
 Zielformat der Eingabe ist die DATEV-BWA-Kostenstellenblattsammlung; `vorlagen/Kostenstellen_BWA_Vorlage.xlsx` zeigt das Layout mit erfundenen Werten. Als Jahresspalte gilt ein Kopf wie 2026, „Jahr 2026“ oder „Plan 2027“; ein Summenblatt „Alle Objekte“ wird übersprungen. Die Ergebnisse stehen wieder in dieser Struktur, siehe unten.
 

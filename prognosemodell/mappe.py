@@ -18,10 +18,10 @@ from . import bwa, erklaerungen, formeln
 from .modelle import (ANLAGE_FELDER, ANLAGE_JAHRE_NAME, ANLAGE_SPALTEN, ANLAGE_STATUS_NAME,
                       MIN_ANLAGEN, OBJEKT_ANLAGEN_SPALTEN,
                       CODENAME_MAPPE, CODENAMEN, FEHLER, OBJEKT_EINGELESEN, FMT_EURO, FMT_JAHR, FMT_PROZENT,
-                      KST_VERKNUEPFT, MAX_NEUKAUF, NEUKAUF_POSITIONEN,
-                      FMT_TEXT, FMT_ZAHL, HINWEIS, MAX_NEUOBJEKTE, MAX_VARIANTEN, PRUEFUNGEN,
+                      KST_VERKNUEPFT, NEUKAUF_POSITIONEN,
+                      FMT_TEXT, FMT_ZAHL, HINWEIS, MAX_VARIANTEN, PRUEFUNGEN,
                       VARIANTEN_KOPF, WARNUNG,
-                      MAX_OBJEKTE, MAX_VERKAEUFE, NEU_FELDER, NEU_SPALTEN, NEU_STATUS_NAME, OBJEKT_FELDER,
+                      NEU_FELDER, NEU_SPALTEN, NEU_STATUS_NAME, OBJEKT_FELDER,
                       DARLEHEN_BLOECKE, DARLEHEN_ERSTE, DARLEHEN_SPALTEN, NEU_DETAIL_ERSTE, QUELLEN,
                       PARAMETER, PROGNOSE_SPALTEN, Spalte, RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN,
                       STATUS_NAME, STATUS_UEBERSCHRIFT, SZ_A, SZ_BASELINE, SZENARIEN,
@@ -269,7 +269,7 @@ def _blatt_parameter(wb, modell: Modell) -> None:
 
 def _blatt_objekte(wb, modell: Modell) -> None:
     ws = wb.create_sheet("Objekte")
-    erste, letzte = 2, MAX_OBJEKTE + 1
+    erste, letzte = 2, modell.kapazitaet.objekte + 1
     status_spalte = len(OBJEKT_FELDER) + 1
     hilfe = [(STATUS_UEBERSCHRIFT, STATUS_NAME, 26, formeln.status_objekt),
              ("Annahmen (blau)", "obj_Annahmen", 11, formeln.annahmen_objekt),
@@ -466,7 +466,7 @@ def _blatt_afa_plan(wb, modell: Modell) -> None:
     Wert ersetzen die Fortschreibung bei Halten, leere Jahre rechnet das Modell selbst."""
     ws = wb.create_sheet("AfA-Plan")
     jahre = prognosejahre()
-    erste, letzte = 3, MAX_OBJEKTE + 2
+    erste, letzte = 3, modell.kapazitaet.objekte + 2
     j0 = 4                       # erste Jahresspalte (D)
     import0 = j0 + jahre + 1     # ausgeblendete Kopie der eingelesenen Werte
     ws["A1"] = ("AfA-Plan: Abschreibungen je Objekt und Jahr, wie in der Kostenstellen-Datei "
@@ -530,7 +530,8 @@ def _blatt_neukauf(wb, modell: Modell) -> None:
     j0, fort0, import0, n = formeln.nk_spalten()
     je = len(NEUKAUF_POSITIONEN)
     erste = formeln.NK_ERSTE
-    letzte = erste + MAX_NEUKAUF * je - 1
+    max_nk = modell.kapazitaet.neukauf
+    letzte = erste + max_nk * je - 1
     schluessel = get_column_letter(import0 + n)
     ws["A1"] = ("Neukauf-Kostenstellen: Planwerte je Jahr für Neuobjekte (Blatt Neuobjekte, "
                 "Spalte Kostenstelle Neukauf). Grün = verknüpft mit dem Kostenstellenblatt der "
@@ -552,10 +553,10 @@ def _blatt_neukauf(wb, modell: Modell) -> None:
                          f"${get_column_letter(fort0 + n - 1)}${letzte}")
     # je Kostenstelle eine Zeile: Auswahlliste der Spalte Kostenstelle Neukauf (Neuobjekte)
     liste = get_column_letter(import0 + n + 1)
-    for block in range(MAX_NEUKAUF):
+    for block in range(max_nk):
         ws[f"{liste}{erste + block}"] = f'=IF($A${erste + block * je}="","",$A${erste + block * je})'
-    _name(wb, "nk_Liste", f"'Neukauf-KSt'!${liste}${erste}:${liste}${erste + MAX_NEUKAUF - 1}")
-    for block in range(MAX_NEUKAUF):
+    _name(wb, "nk_Liste", f"'Neukauf-KSt'!${liste}${erste}:${liste}${erste + max_nk - 1}")
+    for block in range(max_nk):
         kopf = erste + block * je
         for k, (key, text, nr, satz) in enumerate(NEUKAUF_POSITIONEN):
             zeile = kopf + k
@@ -580,7 +581,7 @@ def _blatt_neukauf(wb, modell: Modell) -> None:
             ws.cell(row=zeile, column=import0 + n,
                     value=f'=IF($A{zeile}="","",$A{zeile}&"|{key}")')
     basisjahr = bwa._basisjahr(modell)
-    for block, lw in enumerate(list(modell.neukauf.values())[:MAX_NEUKAUF]):
+    for block, lw in enumerate(list(modell.neukauf.values())[:modell.kapazitaet.neukauf]):
         kopf = erste + block * je
         ws.cell(row=kopf, column=1, value=lw.objekt_id)
         ws.cell(row=kopf, column=2, value=lw.name)
@@ -605,11 +606,12 @@ def _blatt_neukauf(wb, modell: Modell) -> None:
     ws.freeze_panes = "E3"
 
 
-def _blatt_prognose(wb) -> None:
+def _blatt_prognose(wb, modell: Modell) -> None:
     """Je Zeile des Objektblatts ein Block mit einer Zeile je Prognosejahr, danach je Neuobjekt."""
     ws = wb.create_sheet("Prognose")
     jahre = prognosejahre()
-    erste, letzte = 2, (MAX_OBJEKTE + MAX_NEUOBJEKTE) * jahre + 1
+    k = modell.kapazitaet
+    erste, letzte = 2, (k.objekte + k.neuobjekte) * jahre + 1
     _kopf(ws, 1, [s.ueberschrift for s in PROGNOSE_SPALTEN])
     _kopf_berechnet(ws, 1, PROGNOSE_SPALTEN, grau=False)
     ws.row_dimensions[1].height = 32
@@ -619,8 +621,8 @@ def _blatt_prognose(wb) -> None:
         ws.column_dimensions[bst].width = s.breite
         _name(wb, s.name, f"Prognose!${bst}${erste}:${bst}${letzte}")
 
-    bloecke = ([(nr, formeln.prognose_zeile) for nr in range(1, MAX_OBJEKTE + 1)]
-               + [(nr, formeln.prognose_zeile_neu) for nr in range(1, MAX_NEUOBJEKTE + 1)])
+    bloecke = ([(nr, formeln.prognose_zeile) for nr in range(1, k.objekte + 1)]
+               + [(nr, formeln.prognose_zeile_neu) for nr in range(1, k.neuobjekte + 1)])
     for block, (nr, zeilenformeln) in enumerate(bloecke):
         for j in range(jahre):
             zeile = erste + block * jahre + j
@@ -637,7 +639,7 @@ def _blatt_prognose(wb) -> None:
 def _blatt_verkaeufe(wb, modell: Modell) -> None:
     """Geplante Verkäufe: Eingaben, Aufteilung des Erlöses und Gewinn je Gebäude und G+B."""
     ws = wb.create_sheet("Verkäufe")
-    erste, letzte = 2, MAX_VERKAEUFE + 1
+    erste, letzte = 2, modell.kapazitaet.verkaeufe + 1
     spalten = VERKAUF_FELDER + VERKAUF_SPALTEN
     status_spalte = len(spalten) + 1
     st = get_column_letter(status_spalte)
@@ -708,7 +710,7 @@ def _blatt_verkaeufe(wb, modell: Modell) -> None:
 def _blatt_neuobjekte(wb, modell: Modell) -> None:
     """Reinvestitionsobjekte: Eingaben, Übertragung der Rücklage, AfA-Basis."""
     ws = wb.create_sheet("Neuobjekte")
-    erste, letzte = 2, MAX_NEUOBJEKTE + 1
+    erste, letzte = 2, modell.kapazitaet.neuobjekte + 1
     spalten = NEU_FELDER + NEU_SPALTEN
     status_spalte = len(spalten) + 1
     st = get_column_letter(status_spalte)
@@ -786,11 +788,11 @@ def _blatt_neuobjekte(wb, modell: Modell) -> None:
     ws.freeze_panes = "B2"
 
 
-def _blatt_darlehen(wb) -> None:
+def _blatt_darlehen(wb, modell: Modell) -> None:
     """Tilgungsplan je Kredit eines Neuobjekts: Zinsen, Tilgung und Restschuld je Jahr."""
     ws = wb.create_sheet("Darlehen")
     erste = DARLEHEN_ERSTE
-    letzte = erste + MAX_NEUOBJEKTE - 1
+    letzte = erste + modell.kapazitaet.neuobjekte - 1
     n = prognosejahre()
     ws["A1"] = ("Kredite der Neuobjekte (Blatt Neuobjekte, Finanzierung Rest = Kredit). "
                 "Auszahlung zum Ende des Kaufjahrs; Zins und Tilgung ab dem Folgejahr auf die "
@@ -836,12 +838,12 @@ def _blatt_darlehen(wb) -> None:
     ws.freeze_panes = f"B{erste}"
 
 
-def _blatt_ruecklagen(wb) -> None:
+def _blatt_ruecklagen(wb, modell: Modell) -> None:
     """§ 6b-Rücklagen: links je Verkauf, rechts der Spiegel je Jahr."""
     ws = wb.create_sheet("Rücklagen")
     erste = 2
 
-    letzte = MAX_VERKAEUFE + 1
+    letzte = modell.kapazitaet.verkaeufe + 1
     _kopf(ws, 1, [s.ueberschrift for s in RUECKLAGE_SPALTEN])
     _kopf_berechnet(ws, 1, RUECKLAGE_SPALTEN, grau=False)
     for i, s in enumerate(RUECKLAGE_SPALTEN, start=1):
@@ -1425,6 +1427,12 @@ def _blatt_start(wb, modell: Modell) -> None:
 
 
 def erstelle_mappe(modell: Modell) -> Workbook:
+    k = modell.kapazitaet
+    for art, anzahl, platz in (("Objekte", len(modell.objekte), k.objekte),
+                               ("Verkäufe", len(modell.verkaeufe), k.verkaeufe),
+                               ("Neuobjekte", len(modell.neuobjekte), k.neuobjekte)):
+        if anzahl > platz:
+            raise ValueError(f"{anzahl} {art}, die Mappe hat Platz für {platz}.")
     wb = Workbook()
     _blatt_parameter(wb, modell)
     _blatt_objekte(wb, modell)
@@ -1433,9 +1441,9 @@ def erstelle_mappe(modell: Modell) -> Workbook:
     _blatt_neukauf(wb, modell)
     _blatt_verkaeufe(wb, modell)
     _blatt_neuobjekte(wb, modell)
-    _blatt_darlehen(wb)
-    _blatt_prognose(wb)
-    _blatt_ruecklagen(wb)
+    _blatt_darlehen(wb, modell)
+    _blatt_prognose(wb, modell)
+    _blatt_ruecklagen(wb, modell)
     _blatt_liquiditaet(wb)
     _blatt_auswertung(wb)
     _blatt_uebersicht(wb)

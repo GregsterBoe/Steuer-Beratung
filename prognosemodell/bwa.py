@@ -15,8 +15,8 @@ import re
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-from .modelle import (ARTEN_ABNUTZBAR, FMT_EURO, FMT_JAHR, FMT_PROZENT, MAX_NEUOBJEKTE, QUELLEN,
-                      MAX_VERKAEUFE, PARAMETER, STATUS_6B_UNZULAESSIG, STATUS_OK, Modell,
+from .modelle import (ARTEN_ABNUTZBAR, FMT_EURO, FMT_JAHR, FMT_PROZENT, QUELLEN,
+                      PARAMETER, STATUS_6B_UNZULAESSIG, STATUS_OK, Modell,
                       prognosejahre)
 from .vorlagen import (BWA_ZEILEN, ERSTE_ZEILE, SPALTE_JAHR, SPALTE_PLAN, SPALTE_VORJAHRE,
                        bwa_kopf)
@@ -552,9 +552,8 @@ def blaetter_bwa(wb, modell: Modell) -> list:
         if obj_zeile is not None:
             verknuepfe_objekt(wb, obj_zeile, t, ZEILEN)
         titel.append(t)
-    from .modelle import MAX_NEUKAUF
     neukauf = []
-    for block, lw in enumerate(list(modell.neukauf.values())[:MAX_NEUKAUF]):
+    for block, lw in enumerate(list(modell.neukauf.values())[:modell.kapazitaet.neukauf]):
         t = blattname(lw.blatt or lw.objekt_id, wb.sheetnames)
         _blatt_neukauf_kst(wb, t, lw, basisjahr, planjahre)
         verknuepfe_neukauf(wb, block, t)
@@ -987,11 +986,11 @@ def blatt_sonderbereich(wb, modell: Modell) -> None:
              "=$B${0}-D{0}".format(b.zeile - 1), "=$B${0}-E{0}".format(b.zeile - 1))
     b.leer()
 
-    vorgaenge = min(max(len(modell.verkaeufe), MIN_VORGAENGE), MAX_VERKAEUFE)
+    vorgaenge = min(max(len(modell.verkaeufe), MIN_VORGAENGE), modell.kapazitaet.verkaeufe)
     for n in range(1, vorgaenge + 1):
         b.adr = {}
         _vorgang(b, n)
-    neu = min(max(len(modell.neuobjekte), MIN_VORGAENGE), MAX_NEUOBJEKTE)
+    neu = min(max(len(modell.neuobjekte), MIN_VORGAENGE), modell.kapazitaet.neuobjekte)
     _kauf(b, neu)
     b.zeile_(None, f"Weitere Vorgänge: das Blatt zeigt {vorgaenge} Verkäufe und {neu} "
              "Neuobjekte, jeweils die ersten Zeilen der Eingabeblätter. Mehr beim nächsten "
