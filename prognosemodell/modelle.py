@@ -124,6 +124,15 @@ PARAMETER = [
     Parameter("par_SanQuote", "Großmaßnahme in % des Gebäudewerts", 0.15, FMT_PROZENT,
               "Gebäudewert = Verkehrswert × Gebäudeanteil, in heutigen Preisen; 0 % = keine "
               "Großmaßnahmen annehmen"),
+    # Darlehen der Bestandsobjekte (Projektplan Abschnitt 28): mit Restschuld ein
+    # Tilgungsplan, ohne sie wird nur der Zinsaufwand des Basisjahrs fortgeschrieben
+    Parameter("par_ZinsVeraenderung", "Zinsaufwand ohne Restschuld: Veränderung p. a.", -0.03,
+              FMT_PROZENT, "nur für Objekte ohne Restschuld: Zinsaufwand Basisjahr × (1 + Satz) "
+              "je Jahr, bis zum Verkauf; negativ, weil die Darlehen getilgt werden. Platzhalter",
+              abschnitt="Darlehen der Bestandsobjekte"),
+    Parameter("par_AnnDarlTilgung", "Tilgung in % der Restschuld (ohne Rate)", 0.02,
+              FMT_PROZENT, "Rate = Restschuld × (Zinssatz + Satz), solange keine Rate erfasst "
+              "ist; Platzhalter"),
 ]
 
 # Codenamen für VBA: ASCII, unabhängig vom angezeigten Blattnamen
@@ -174,6 +183,9 @@ OBJEKT_FELDER = [
     Feld("afa_bwa", "AfA Basisjahr lt. Buchhaltung", "obj_AfABWA", FMT_EURO, False, minimum=0,
          hinweis="BWA 1240; 0 = keine AfA mehr. Daraus die Annahmen AfA je Jahr und "
                  "AK Gebäude = AfA / AfA-Satz"),
+    Feld("zinsen", "Zinsaufwand Basisjahr", "obj_ZinsBasis", FMT_EURO, False, minimum=0,
+         hinweis="BWA 1310; leer = 0. Ohne Restschuld fortgeschrieben mit der Veränderung "
+                 "(Parameter) bis zum Verkauf; mit Restschuld nur Grundlage des Zinssatzes"),
     # steuerliche Stammdaten (Anlagenverzeichnis); fehlen sie, greift die Annahme
     Feld("verkehrswert", "Verkehrswert aktuell", "obj_Verkehrswert", FMT_EURO, False, minimum=0,
          annahme=True, hinweis="leer: Jahresmiete × Vervielfältiger (Parameter)"),
@@ -218,12 +230,31 @@ OBJEKT_FELDER = [
          minimum=0, annahme=True,
          hinweis="leer: Verkehrswert × Gebäudeanteil × Quote (Parameter); "
                  "wächst mit der Erhaltungssteigerung bis zum Jahr der Maßnahme"),
+    # Darlehen: mit Restschuld Tilgungsplan je Jahr, beim Verkauf abgelöst
+    Feld("restschuld", "Restschuld Darlehen Ende Basisjahr", "obj_Restschuld", FMT_EURO, False,
+         minimum=0,
+         hinweis="Summe der Darlehen des Objekts lt. Saldenliste oder Bankauszug zum 31.12. "
+                 "Mit Wert: Zins und Tilgung je Jahr, beim Verkauf aus dem Erlös abgelöst. "
+                 "Leer: Zinsaufwand wird grob fortgeschrieben, ohne Tilgung und Ablösung"),
+    Feld("zinssatz", "Zinssatz Darlehen", "obj_Zinssatz", FMT_PROZENT, False, 10, minimum=0,
+         maximum=0.2, annahme=True,
+         hinweis="Zins p. a. auf die Restschuld am Vorjahresende; bei mehreren Darlehen "
+                 "der Durchschnitt. Leer: Zinsaufwand Basisjahr / Restschuld (eher etwas zu "
+                 "hoch, weil die Restschuld im Jahr gesunken ist); 0 ohne Restschuld"),
+    Feld("rate", "Rate Darlehen p. a. (Zins + Tilgung)", "obj_Rate", FMT_EURO, False, minimum=0,
+         annahme=True,
+         hinweis="Jahresrate lt. Bank (Monatsrate × 12), gleich bleibend; Tilgung = Rate − "
+                 "Zins. Leer: Restschuld × (Zinssatz + Tilgung in % aus dem Parameterblatt); "
+                 "0 ohne Restschuld"),
 ]
 # Spalten, die beim Einlesen aus der Buchhaltung kommen (grün, solange unverändert)
 OBJEKT_EINGELESEN = ("name", "miete", "erhaltung", "weitere_einnahmen", "weitere_ausgaben",
-                     "afa_bwa")
+                     "afa_bwa", "zinsen")
 # davon mit Kostenstellenblatt verknüpft: Formel auf die Spalte Basisjahr des BWA-Blatts
-KST_VERKNUEPFT = ("miete", "erhaltung", "weitere_einnahmen", "weitere_ausgaben", "afa_bwa")
+KST_VERKNUEPFT = ("miete", "erhaltung", "weitere_einnahmen", "weitere_ausgaben", "afa_bwa",
+                  "zinsen")
+# nur Annahmen, wenn das Objekt eine Restschuld hat; ohne sie stehen 0 in den Zellen
+DARLEHEN_ANNAHMEN = ("zinssatz", "rate")
 
 # Berechnete Statusspalte direkt nach den Eingabefeldern
 STATUS_UEBERSCHRIFT = "Status"
@@ -356,10 +387,16 @@ PROGNOSE_SPALTEN = [
     # AfA, als würde das Objekt nie verkauft: je Anlage aus dem Blatt Anlagen, sonst AfA je
     # Jahr bis zum Restbuchwert; der Plan nimmt sie bis zum Verkaufsjahr
     Spalte("afa_halten", "AfA bei Halten", "prg_AfAHalten", FMT_EURO),
-    # Kredit des Neuobjekts (Blatt Darlehen); Bestandsobjekte ohne Finanzierung
-    Spalte("kredit_zins", "Zinsen Kredit", "prg_KreditZins", FMT_EURO),
-    Spalte("tilgung", "Tilgung Kredit", "prg_Tilgung", FMT_EURO),
-    Spalte("restschuld", "Restschuld Kredit Ende", "prg_Restschuld", FMT_EURO, 16),
+    # Darlehen: Neuobjekt aus dem Blatt Darlehen, Bestandsobjekt aus Restschuld, Zinssatz und
+    # Rate im Blatt Objekte (ohne Restschuld nur der fortgeschriebene Zinsaufwand); die
+    # Tilgung im Verkaufsjahr enthält die Ablösung der Restschuld
+    Spalte("kredit_zins", "Zinsen Darlehen", "prg_KreditZins", FMT_EURO),
+    Spalte("tilgung", "Tilgung Darlehen", "prg_Tilgung", FMT_EURO),
+    Spalte("restschuld", "Restschuld Darlehen Ende", "prg_Restschuld", FMT_EURO, 16),
+    # dasselbe, als würde das Bestandsobjekt nie verkauft (Baseline); Neuobjekte 0
+    Spalte("zins_halten", "Zinsen bei Halten", "prg_ZinsHalten", FMT_EURO),
+    Spalte("tilgung_halten", "Tilgung bei Halten", "prg_TilgungHalten", FMT_EURO),
+    Spalte("restschuld_halten", "Restschuld bei Halten", "prg_RestschuldHalten", FMT_EURO, 16),
 ]
 
 # Blatt Verkäufe (Etappe 4, Projektplan Abschnitt 11): Eingaben, dann berechnete Spalten
@@ -612,7 +649,7 @@ _LIQ = [
     ("ergebnis", "laufendes Ergebnis", "Ergebnis", FMT_EURO, 14),
     ("verkauf", "steuerwirksam aus Verkauf und Rücklage", "Verkauf", FMT_EURO, 16),
     ("zins", "Zinsertrag Alternativanlage", "Zins", FMT_EURO, 14),
-    ("kreditzins", "Zinsen Kredite Neuobjekte", "KreditZins", FMT_EURO, 14),
+    ("kreditzins", "Zinsen Darlehen", "KreditZins", FMT_EURO, 14),
     ("zve", "Ergebnis vor Verlustvortrag", "ZvE", FMT_EURO, 14),
     ("vortrag_genutzt", "Verlustvortrag genutzt", "VortragGenutzt", FMT_EURO, 14),
     ("bemessung", "Bemessungsgrundlage", "Bemessung", FMT_EURO, 14),
@@ -622,10 +659,10 @@ _LIQ = [
     ("rueckfluss", "davon Buchwert-Rückfluss", "Rueckfluss", FMT_EURO, 14),
     ("kauf", "Kauf Neuobjekte inkl. Nebenkosten", "Kauf", FMT_EURO, 15),
     ("kredit", "Kreditauszahlung", "Kredit", FMT_EURO, 14),
-    ("tilgung", "Tilgung Kredite", "Tilgung", FMT_EURO, 14),
+    ("tilgung", "Tilgung Darlehen (mit Ablösung bei Verkauf)", "Tilgung", FMT_EURO, 15),
     ("zufluss", "freier Mittelzufluss", "Zufluss", FMT_EURO, 14),
     ("kum", "Liquidität kumuliert Ende", "Kum", FMT_EURO, 15),
-    ("restschuld", "Restschuld Kredite Ende", "Restschuld", FMT_EURO, 15),
+    ("restschuld", "Restschuld Darlehen Ende", "Restschuld", FMT_EURO, 15),
 ]
 # Blatt Auswertung: Kennzahlen je Jahr, gleicher Aufbau je Szenario
 _AUS = [
@@ -633,7 +670,7 @@ _AUS = [
     ("ergebnis", "laufendes Ergebnis", "Ergebnis", FMT_EURO, 14),
     ("verkauf", "steuerwirksam aus Verkauf und Rücklage", "Verkauf", FMT_EURO, 16),
     ("zins", "Zinsertrag Alternativanlage", "Zins", FMT_EURO, 14),
-    ("kreditzins", "Zinsen Kredite Neuobjekte", "KreditZins", FMT_EURO, 14),
+    ("kreditzins", "Zinsen Darlehen", "KreditZins", FMT_EURO, 14),
     ("guv", "Gesamt-GuV vor Steuern", "GuV", FMT_EURO, 14),
     ("steuer", "Steuer", "Steuer", FMT_EURO, 14),
     ("nach_steuer", "Ergebnis nach Steuern", "NachSteuer", FMT_EURO, 14),
@@ -644,7 +681,7 @@ _AUS = [
     ("ruecklage", "§ 6b-Rücklage Bestand", "Ruecklage", FMT_EURO, 14),
     ("vortrag", "Verlustvortrag", "Vortrag", FMT_EURO, 14),
     ("liquiditaet", "Liquidität kumuliert", "Liquiditaet", FMT_EURO, 14),
-    ("restschuld", "Restschuld Kredite", "Restschuld", FMT_EURO, 14),
+    ("restschuld", "Restschuld Darlehen", "Restschuld", FMT_EURO, 14),
     ("vermoegen", "Gesamtvermögen vor latenter Steuer", "Vermoegen", FMT_EURO, 16),
     ("latente_steuer", "latente Steuer", "LatenteSteuer", FMT_EURO, 14),
     ("vermoegen_netto", "Gesamtvermögen nach latenter Steuer", "VermoegenNetto", FMT_EURO, 17),
@@ -691,9 +728,9 @@ VERGLEICH_KENNZAHLEN = [
     ("Steuer", "liq", "Steuer", "summe", "gezahlte Steuer; die gestundete steht in der latenten"),
     ("Verkaufserlöse netto", "liq", "Verkaufserloes", "summe", "Summe über alle Jahre"),
     ("Kauf Neuobjekte", "liq", "Kauf", "summe", "Summe über alle Jahre"),
-    ("Restschuld Kredite", "aus", "Restschuld", "ende",
-     "Kredite der Neuobjekte; mindert das Gesamtvermögen"),
-    ("Zinsen Kredite", "liq", "KreditZins", "summe", "Summe über alle Jahre"),
+    ("Restschuld Darlehen", "aus", "Restschuld", "ende",
+     "Darlehen der Bestands- und Neuobjekte; mindert das Gesamtvermögen"),
+    ("Zinsen Darlehen", "liq", "KreditZins", "summe", "Summe über alle Jahre"),
 ]
 
 
@@ -723,6 +760,10 @@ class Objekt:
     baujahr: Optional[int] = None
     san_jahr: Optional[int] = None       # Großmaßnahme; 0 = keine
     san_betrag: Optional[float] = None
+    zinsen: Optional[float] = None       # Zinsaufwand Basisjahr (BWA 1310)
+    restschuld: Optional[float] = None   # Darlehen Ende Basisjahr; leer = Zins fortschreiben
+    zinssatz: Optional[float] = None
+    rate: Optional[float] = None         # Zins + Tilgung p. a.
 
 
 @dataclass
@@ -857,6 +898,12 @@ PRUEFUNGEN = [
     Pruefung("restschuld", "Kredite der Neuobjekte, die am Ende des Rasters noch nicht "
              "getilgt sind: die Restschuld mindert das Endvermögen", HINWEIS,
              "Blatt Darlehen, Spalte getilgt im Jahr"),
+    Pruefung("zins_verkauf", "Verkaufte Objekte mit Zinsaufwand, aber ohne Restschuld: die "
+             "Ablösung des Darlehens aus dem Verkaufserlös fehlt, Liquidität und Kapitalanlage "
+             "sind zu hoch", WARNUNG, "Blatt Objekte, Spalte Restschuld Darlehen"),
+    Pruefung("zins_grob", "Objekte mit Zinsaufwand, aber ohne Restschuld: Zinsen grob "
+             "fortgeschrieben (Parameter), ohne Tilgung", HINWEIS,
+             "Blatt Objekte, Spalten Zinsaufwand und Restschuld Darlehen"),
 ]
 
 # Blatt Varianten: je Makrolauf eine Zeile mit festen Werten (Projektplan Abschnitt 19)

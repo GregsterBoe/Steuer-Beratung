@@ -94,6 +94,13 @@ PARAMETER_WIRKUNG = {
     "par_SanVorlauf": "Großmaßnahme frühestens im ersten Prognosejahr + Vorlauf.",
     "par_SanQuote": "Nur ohne Eingabe: Großmaßnahme = Verkehrswert × Gebäudeanteil × Quote, "
                     "als Erhaltung sofort abziehbar. 0 % schaltet die Annahme ab.",
+    "par_ZinsVeraenderung": "Nur Objekte mit Zinsaufwand, aber ohne Restschuld: Zinsen je "
+                            "Jahr = Zinsaufwand Basisjahr × (1 + Satz)^Jahre, bis zum "
+                            "Verkaufsjahr. Mindern Ergebnis, Steuer und Liquidität; Tilgung "
+                            "und Ablösung fehlen dann.",
+    "par_AnnDarlTilgung": "Nur Objekte mit Restschuld, aber ohne Rate: Rate = Restschuld × "
+                          "(Zinssatz + Satz). Bestimmt Tilgung, Restschuld und damit die "
+                          "Ablösung beim Verkauf.",
 }
 
 # Berechnete Spalten, nach benanntem Bereich
@@ -205,9 +212,16 @@ SPALTEN = {
     "prg_Buchwert": "Buchwert Vorjahr − AfA, nicht unter 0.",
     "prg_Ergebnis": "Miete + weitere Einnahmen − Erhaltung − weitere Ausgaben − AfA.",
     "prg_Bestand": "1 = am Jahresende im Bestand (Verkaufsjahr schon 0).",
-    "prg_KreditZins": "Zinsen des Kredits dieses Neuobjekts (Blatt Darlehen).",
-    "prg_Tilgung": "Tilgung des Kredits dieses Neuobjekts (Blatt Darlehen).",
-    "prg_Restschuld": "Restschuld am Jahresende (Blatt Darlehen).",
+    "prg_KreditZins": "Neuobjekt: Zinsen des Kredits (Blatt Darlehen). Bestand mit Restschuld: "
+                      "Restschuld Vorjahresende × Zinssatz; ohne Restschuld: Zinsaufwand "
+                      "Basisjahr × (1 + Veränderung)^Jahre bis zum Verkauf.",
+    "prg_Tilgung": "Neuobjekt: Blatt Darlehen. Bestand: Rate − Zins, höchstens die Restschuld; "
+                   "im Verkaufsjahr die ganze Restschuld (Ablösung aus dem Erlös).",
+    "prg_Restschuld": "Restschuld Vorjahresende − Tilgung.",
+    "prg_ZinsHalten": "Zinsen, als würde das Bestandsobjekt nie verkauft (Baseline).",
+    "prg_TilgungHalten": "Tilgung, als würde das Bestandsobjekt nie verkauft (Baseline).",
+    "prg_RestschuldHalten": "Restschuld, als würde das Bestandsobjekt nie verkauft; im "
+                            "Verkaufsjahr der Betrag, der abgelöst wird.",
     # Darlehen
     "dl_Betrag": "Kredit aus dem Blatt Neuobjekte; 0 = keine Finanzierung per Kredit.",
     "dl_Rate": "Annuität: Kredit × (Zinssatz + anfängliche Tilgung), gleich bleibend. Linear: "
@@ -226,8 +240,9 @@ LIQUIDITAET = {
     "verkauf": "A: steuerwirksam laut Rücklagenspiegel (sofort versteuerte Gewinne + Auflösung + "
                "Zuschlag). B und C: jeder Veräußerungsgewinn sofort.",
     "zins": "Liquidität kumuliert am Vorjahresende × Rendite Alternativanlage.",
-    "kreditzins": "Summe der Kreditzinsen der Neuobjekte (Blatt Darlehen); voll abziehbar.",
-    "zve": "laufendes Ergebnis + steuerwirksam aus Verkauf + Zinsertrag − Kreditzinsen.",
+    "kreditzins": "Summe der Zinsen aller Darlehen: Bestandsobjekte bis zum Verkauf (Blatt "
+                  "Objekte), Kredite der Neuobjekte (Blatt Darlehen); voll abziehbar.",
+    "zve": "laufendes Ergebnis + steuerwirksam aus Verkauf + Zinsertrag − Zinsen Darlehen.",
     "vortrag_genutzt": "MIN(Verlustvortrag Vorjahr, positives Ergebnis).",
     "bemessung": "positives Ergebnis − genutzter Verlustvortrag.",
     "vortrag": "Vorjahr − genutzt + neuer Verlust.",
@@ -237,12 +252,12 @@ LIQUIDITAET = {
     "kauf": "Kaufpreis + Nebenkosten der Neuobjekte mit diesem Kaufjahr (B: ohne Neuobjekte mit "
             "Rücklage).",
     "kredit": "Kreditauszahlungen der Neuobjekte mit diesem Kaufjahr.",
-    "tilgung": "Summe der Tilgungen (Blatt Darlehen); mindert nur die Liquidität, nicht das "
-               "Ergebnis.",
-    "zufluss": "Einnahmen − Ausgaben + Zinsertrag − Kreditzinsen + Verkaufserlöse − Steuer − Kauf "
+    "tilgung": "Summe der Tilgungen; im Verkaufsjahr eines Bestandsobjekts mit der Ablösung "
+               "seiner Restschuld. Mindert nur die Liquidität, nicht das Ergebnis.",
+    "zufluss": "Einnahmen − Ausgaben + Zinsertrag − Zinsen + Verkaufserlöse − Steuer − Kauf "
                "+ Kreditauszahlung − Tilgung. AfA fließt nicht ab.",
     "kum": "Vorjahr + freier Mittelzufluss; negativ = Finanzierungslücke.",
-    "restschuld": "Summe der Restschulden der Kredite am Jahresende.",
+    "restschuld": "Summe der Restschulden aller Darlehen am Jahresende.",
 }
 
 # Auswertung: je Szenario dieselbe Tabelle
@@ -250,8 +265,8 @@ AUSWERTUNG = {
     "ergebnis": "aus der Liquidität: Einnahmen − Ausgaben − AfA.",
     "verkauf": "aus der Liquidität: steuerwirksam aus Verkauf und Rücklage.",
     "zins": "aus der Liquidität: Zinsertrag Alternativanlage.",
-    "kreditzins": "aus der Liquidität: Zinsen Kredite.",
-    "guv": "laufendes Ergebnis + steuerwirksam aus Verkauf + Zinsertrag − Kreditzinsen.",
+    "kreditzins": "aus der Liquidität: Zinsen Darlehen (Bestand und Neuobjekte).",
+    "guv": "laufendes Ergebnis + steuerwirksam aus Verkauf + Zinsertrag − Zinsen Darlehen.",
     "steuer": "aus der Liquidität.",
     "nach_steuer": "Gesamt-GuV − Steuer.",
     "steuer_kum": "Summe der Steuer bis zu diesem Jahr.",
@@ -261,7 +276,7 @@ AUSWERTUNG = {
     "ruecklage": "Bestand der § 6b-Rücklage (nur A).",
     "vortrag": "Verlustvortrag am Jahresende aus der Liquidität.",
     "liquiditaet": "Liquidität kumuliert aus der Liquidität.",
-    "restschuld": "Restschuld Kredite am Jahresende.",
+    "restschuld": "Restschuld aller Darlehen am Jahresende.",
     "vermoegen": "Verkehrswert + Liquidität − Restschuld.",
     "latente_steuer": "(stille Reserven + Rücklage − Verlustvortrag) × Grenzsteuersatz, "
                       "mindestens 0: Steuer bei Verkauf aller Objekte zum Verkehrswert.",

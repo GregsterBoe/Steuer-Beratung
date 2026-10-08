@@ -8,7 +8,7 @@ from openpyxl.utils import get_column_letter
 
 from .modelle import (AFA_DEGRESSIV, ANL_NICHT_IM_MODELL, ANLAGE_FELDER, ANLAGE_SPALTEN,
                       ARTEN_ABNUTZBAR, ART_GEBAEUDE, ART_GUB, GRUPPE_ABNUTZBAR, METHODE_KEINE,
-                      KST_VERKNUEPFT, OBJEKT_EINGELESEN,
+                      DARLEHEN_ANNAHMEN, KST_VERKNUEPFT, OBJEKT_EINGELESEN,
                       ANL_OBJEKT_FEHLT, ANL_OHNE_OBJEKT, OBJEKT_ANLAGEN_SPALTEN,
                       OBJEKT_ERSTE_ANLAGEN_SPALTE,
                       FEHLER, NEU_FELDER, STATUS_ANNAHME_GELOESCHT, NEU_SPALTEN, OBJEKT_FELDER, PROGNOSE_SPALTEN,
@@ -181,6 +181,11 @@ def annahme_objekt(key: str, zeile: int):
                      f"{n('baujahr')}+par_SanAlter)))"),
         "san_betrag": (f"IF({n('san_jahr')}=0,0,{n('verkehrswert')}*{n('vk_quote_gebaeude')}"
                        f"*par_SanQuote)"),
+        # Darlehen nur mit Restschuld; der Zinsaufwand des Basisjahrs bezieht sich auf die
+        # im Jahr gesunkene Restschuld, der Satz ist daher eher etwas zu hoch
+        "zinssatz": (f"IF({n('restschuld')}>0,{n('zinsen')}/{n('restschuld')},0)"),
+        "rate": (f"IF({n('restschuld')}>0,{n('restschuld')}*({n('zinssatz')}"
+                 f"+par_AnnDarlTilgung),0)"),
     }.get(key)
     if ausdruck is None:
         return None
@@ -230,6 +235,8 @@ def annahmen_objekt(zeile: int, nur_kritisch: bool = False) -> str:
         formel = f"{ISFORMEL}(${spalte(f.key)}{zeile})"
         # aus dem Blatt Anlagen oder dem Kostenstellenblatt: keine Annahme
         deckung = deckung_anlagen(f.key, zeile) or aus_kostenstelle(f.key, zeile)
+        if f.key in DARLEHEN_ANNAHMEN:   # ohne Restschuld kein Darlehen, keine Annahme
+            return f"{formel}*(N(${spalte('restschuld')}{zeile})>0)"
         return f"{formel}*NOT({deckung})" if deckung else formel
 
     summe = "+".join(zaehlt(f) for f in felder)
@@ -442,10 +449,40 @@ def prognose_zeile(zeile: int, objekt_nr: int, erstes_jahr: bool) -> dict:
         "buchwert_gub_ohne6b": _leer_oder(zeile, _p("buchwert_gub", zeile)),
         "erhaltung_halten": _leer_oder(zeile, _erhaltung_bestand(zeile, objekt_nr)),
         "quelle": _leer_oder(zeile, '""'),
-        "kredit_zins": _leer_oder(zeile, "0"),
-        "tilgung": _leer_oder(zeile, "0"),
-        "restschuld": _leer_oder(zeile, "0"),
+        **_darlehen_bestand(zeile, objekt_nr, erstes_jahr),
     }
+
+
+def _darlehen_bestand(zeile: int, objekt_nr: int, erstes_jahr: bool) -> dict:
+    """Zins, Tilgung und Restschuld eines Bestandsobjekts, im Plan und bei Halten.
+
+    Mit Restschuld: Zins = Restschuld Vorjahresende × Zinssatz, Tilgung = Rate − Zins, nie
+    mehr als die Restschuld; im Verkaufsjahr (Verkauf zum Jahresende) wird der Rest abgelöst.
+    Ohne Restschuld: Zinsaufwand Basisjahr × (1 + par_ZinsVeraenderung) je Jahr bis zum
+    Verkauf, ohne Tilgung.
+    """
+    def stamm(name):
+        return f"N({_stamm(name, objekt_nr)})"
+
+    rs0, satz, rate = stamm("obj_Restschuld"), stamm("obj_Zinssatz"), stamm("obj_Rate")
+    mit = f"{rs0}>0"
+    grob = (f"{stamm('obj_ZinsBasis')}*(1+par_ZinsVeraenderung)"
+            f"^({_p('jahr', zeile)}-par_Basisjahr)")
+
+    def plan(zins_key, tilgung_key, rs_key, verkauf):
+        vor = rs0 if erstes_jahr else _p(rs_key, zeile - 1)
+        zins = _p(zins_key, zeile)
+        regulaer = f"MIN(MAX({rate}-{zins},0),{vor})"
+        tilgung = f"IF({_p('bestand', zeile)}=0,{vor},{regulaer})" if verkauf else regulaer
+        grob_zins = f"{grob}*{_p('aktiv', zeile)}" if verkauf else grob
+        return {
+            zins_key: _leer_oder(zeile, f"IF({mit},{vor}*{satz},{grob_zins})"),
+            tilgung_key: _leer_oder(zeile, f"IF({mit},{tilgung},0)"),
+            rs_key: _leer_oder(zeile, f"IF({mit},{vor}-{_p(tilgung_key, zeile)},0)"),
+        }
+
+    return {**plan("kredit_zins", "tilgung", "restschuld", verkauf=True),
+            **plan("zins_halten", "tilgung_halten", "restschuld_halten", verkauf=False)}
 
 
 def prognose_zeile_neu(zeile: int, neu_nr: int, erstes_jahr: bool) -> dict:
@@ -533,6 +570,10 @@ def prognose_zeile_neu(zeile: int, neu_nr: int, erstes_jahr: bool) -> dict:
         "kredit_zins": _leer_oder(zeile, darlehen("dl_Zins")),
         "tilgung": _leer_oder(zeile, darlehen("dl_Tilgung")),
         "restschuld": _leer_oder(zeile, darlehen("dl_Restschuld")),
+        # gehört nicht zur Baseline
+        "zins_halten": _leer_oder(zeile, "0"),
+        "tilgung_halten": _leer_oder(zeile, "0"),
+        "restschuld_halten": _leer_oder(zeile, "0"),
     }
 
 
@@ -955,7 +996,8 @@ def darlehen_zeile(zeile: int, neu_nr: int) -> dict:
 # A Plan wie erfasst, B sofort versteuern und Kapital anlegen, C sofort versteuern und
 # trotzdem kaufen, Baseline alles halten. Die Steuer rechnet mit Verlustvortrag ohne
 # Mindestbesteuerung. Die Liquidität wird in allen Szenarien mit par_Alternativrendite
-# verzinst. Finanziert sind nur Neuobjekte mit Kredit (Blatt Darlehen).
+# verzinst. Darlehen: Neuobjekte mit Kredit (Blatt Darlehen) und Bestandsobjekte mit
+# Zinsaufwand oder Restschuld (Blatt Objekte, Projektplan Abschnitt 28).
 
 
 def _zelle(spalten, versatz: int = 0):
@@ -1054,7 +1096,8 @@ def _liq_plan(c, t: str, sz: Szenario) -> dict:
         "rueckfluss": f"={erloese}-SUMIFS(rls_Gewinne,rls_Jahr,{t})",
         "kauf": (f"=SUMIFS(ne_Kaufpreis,ne_Kaufjahr,{t},ne_Gueltig,1{neu})"
                  f"+SUMIFS(ne_Nebenkosten,ne_Kaufjahr,{t},ne_Gueltig,1{neu})"),
-        # Kredit zum Kauf am Jahresende ausgezahlt, Zins und Tilgung ab dem Folgejahr
+        # Kredit zum Kauf am Jahresende ausgezahlt, Zins und Tilgung ab dem Folgejahr;
+        # Bestandsdarlehen werden im Verkaufsjahr mit der Tilgung abgelöst
         "kreditzins": f"={_summe_zeilen('prg_KreditZins', t, sz)}",
         "kredit": f"=SUMIFS(ne_Kredit,ne_Kaufjahr,{t},ne_Gueltig,1{neu})",
         "tilgung": f"={_summe_zeilen('prg_Tilgung', t, sz)}",
@@ -1081,10 +1124,11 @@ def _liq_baseline(c, zeile: int, t: str, erstes_jahr: bool) -> dict:
         "verkaufserloes": "=0",
         "rueckfluss": "=0",
         "kauf": "=0",
-        "kreditzins": "=0",
+        # Darlehen der Bestandsobjekte laufen weiter, als würde nie verkauft
+        "kreditzins": f"={_summe_jahr('prg_ZinsHalten', t)}",
         "kredit": "=0",
-        "tilgung": "=0",
-        "restschuld": "=0",
+        "tilgung": f"={_summe_jahr('prg_TilgungHalten', t)}",
+        "restschuld": f"={_summe_jahr('prg_RestschuldHalten', t)}",
     }
 
 
@@ -1194,6 +1238,9 @@ def pruefung_anzahl() -> dict:
         "afa_plan": '=COUNTIF(afp_Anzahl,">0")',
         "anlagen_afa": '=COUNTIF(obj_AnlDiff,">1")+COUNTIF(obj_AnlDiff,"<-1")',
         "restschuld": '=COUNTIF(dl_Getilgt,"nach*")',
+        "zins_verkauf": ('=SUMPRODUCT((obj_ID<>"")*(obj_ZinsBasis>0)*NOT(obj_Restschuld>0)'
+                         '*(COUNTIF(vk_ID,obj_ID)>0))'),
+        "zins_grob": '=SUMPRODUCT((obj_ID<>"")*(obj_ZinsBasis>0)*NOT(obj_Restschuld>0))',
     }
 
 

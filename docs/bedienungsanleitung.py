@@ -148,8 +148,8 @@ punkte([
     "Die Blätter je Kostenstelle und „Alle Objekte“ sind die Datenbasis. Werte des Basisjahrs "
     "(gelbe Spalte) werden **dort** geändert; sie fließen automatisch in Objekte, Prognose und "
     "„Alle Objekte“.",
-    "Im Blatt Objekte verweisen Miete, Erhaltung, weitere Einnahmen und Ausgaben sowie die AfA "
-    "lt. Buchhaltung auf das Kostenstellenblatt (grün).",
+    "Im Blatt Objekte verweisen Miete, Erhaltung, weitere Einnahmen und Ausgaben, die AfA "
+    "lt. Buchhaltung und der Zinsaufwand (1310) auf das Kostenstellenblatt (grün).",
     "Wird ein solcher Wert im Blatt Objekte überschrieben, rechnet nur die Prognose damit. Die "
     "Zelle wird orange, das Prüfungsblatt warnt. Die Schaltfläche **„Objekte -> Kostenstellen“** "
     "überträgt den Wert ins Kostenstellenblatt und stellt die Verknüpfung wieder her.",
@@ -180,6 +180,18 @@ punkte([
     "das Gesamtvermögen. Ist der Kredit getilgt, entfallen Zins und Tilgung (Blatt Darlehen).",
 ])
 
+doc.add_heading("Darlehen der Bestandsobjekte", level=2)
+punkte([
+    "**Grob, ohne weitere Daten:** Der Zinsaufwand des Basisjahrs (BWA 1310) läuft bis zum "
+    "Verkaufsjahr weiter und sinkt je Jahr um den Satz vom Parameterblatt (Standard 3 %). "
+    "Tilgung und Ablösung beim Verkauf fehlen; die Prüfung weist darauf hin.",
+    "**Genau:** Im Blatt Objekte die **Restschuld zum 31.12.** des Basisjahrs eintragen "
+    "(Saldenliste oder Bankauszug), möglichst auch Zinssatz und Jahresrate. Dann rechnet die "
+    "Prognose Zins und Tilgung je Jahr und löst die Restschuld im Verkaufsjahr aus dem Erlös "
+    "ab. Fehlen Zinssatz oder Rate, stehen Annahmen (blau) in den Zellen.",
+    "Eine Vorfälligkeitsentschädigung gehört in die Verkaufskosten.",
+])
+
 # ---------------------------------------------------------------- 5
 doc.add_heading("5. Ergebnis lesen", level=1)
 punkte([
@@ -203,7 +215,8 @@ punkte([
     "**Fehler:** Status ungleich OK in Objekten, Verkäufen oder Neuobjekten, Fristverstoß. "
     "Vor jeder Auswertung beheben.",
     "**Warnung:** Vorbesitzzeit für § 6b zu kurz, Rücklage nicht voll übertragen, Drei-Objekt-"
-    "Grenze, Abweichung vom Kostenstellenblatt, unbekannte Neukauf-Kostenstelle.",
+    "Grenze, Abweichung vom Kostenstellenblatt, unbekannte Neukauf-Kostenstelle, Verkauf "
+    "ohne Restschuld trotz Zinsaufwand.",
     "**Hinweis:** Frist nach Prognoseende, negative Liquidität, fehlender Verkehrswert, Anlagen "
     "ohne Objekt.",
 ])
@@ -226,8 +239,8 @@ punkte([
     "Bei verkauften Objekten AK, Kaufjahr und Anteil G+B belegen; orange Zellen bestimmen den "
     "Gewinn direkt.",
     "Graue Formelzellen nicht überschreiben; Änderungen immer in gelben oder blauen Zellen.",
-    "Zins und Tilgung gibt es nur für Kredite der Neuobjekte; Bestandsobjekte rechnen ohne "
-    "Finanzierung.",
+    "Bei Objekten mit Darlehen die Restschuld eintragen, vor allem vor einem Verkauf: sonst "
+    "fehlt die Ablösung, Liquidität und Kapitalanlage sind zu hoch.",
     "**Alle Steuersätze, Fristen und Annahmen vor dem Echteinsatz durch den zuständigen "
     "Berufsträger prüfen.**",
 ])

@@ -1318,7 +1318,7 @@ Das Blatt **Darlehen** hat je Zeile des Blatts Neuobjekte eine Zeile (dl\_ID lee
 - Tilgung = MIN(Restschuld Vorjahr; Rate − Zins bzw. Rate bzw. 0 bei endfällig), ab Kaufjahr + Laufzeit die ganze Restschuld
 - Restschuld = im Kaufjahr der Kreditbetrag, danach Vorjahr − Tilgung; ist sie 0, entfallen Zins und Tilgung
 
-**Wirkung.** Die Prognose holt je Neuobjekt prg\_KreditZins, prg\_Tilgung und prg\_Restschuld aus dem Darlehensblatt (Bestandsobjekte 0). Liquidität: neue Spalten Zinsen Kredite (mindert das Ergebnis vor Verlustvortrag), Kreditauszahlung, Tilgung und Restschuld; freier Mittelzufluss = … − Kreditzinsen − Kauf + Kreditauszahlung − Tilgung. Auswertung: Zinsen Kredite in der GuV, Gesamtvermögen = Verkehrswert + Liquidität − Restschuld. Vergleich: Restschuld und Zinsen Kredite als neue Kennzahlen (Zeilen 17 und 18). Szenario C finanziert wie A, in B entfällt mit dem Kauf auch der Kredit, die Baseline hat keinen. Prüfung „restschuld“ (Hinweis): Kredite, die am Ende des Rasters nicht getilgt sind.
+**Wirkung.** Die Prognose holt je Neuobjekt prg\_KreditZins, prg\_Tilgung und prg\_Restschuld aus dem Darlehensblatt (Bestandsobjekte seit Abschnitt 28 aus dem Blatt Objekte). Liquidität: neue Spalten Zinsen Kredite (mindert das Ergebnis vor Verlustvortrag), Kreditauszahlung, Tilgung und Restschuld; freier Mittelzufluss = … − Kreditzinsen − Kauf + Kreditauszahlung − Tilgung. Auswertung: Zinsen Kredite in der GuV, Gesamtvermögen = Verkehrswert + Liquidität − Restschuld. Vergleich: Restschuld und Zinsen Kredite als neue Kennzahlen (Zeilen 17 und 18). Szenario C finanziert wie A, in B entfällt mit dem Kauf auch der Kredit, die Baseline hat keinen. Prüfung „restschuld“ (Hinweis): Kredite, die am Ende des Rasters nicht getilgt sind.
 
 **BWA.** Neuer Posten „Neuobjekte: Zinsen Kredite“ (Standard 1310) in der Herleitung; die Kontrolle gegen die Liquidität bleibt 0. Unter der Herleitung steht im Blatt des Neuobjekts und in „Alle Objekte“ nachrichtlich Kreditauszahlung, Tilgung und Restschuld.
 
@@ -1350,3 +1350,44 @@ Die Schaltflächen auf dem Parameterblatt sind frei schwebend (Placement), damit
 Hinweis aus der Durchsicht: par_GrESt wird derzeit nicht gerechnet; die Nebenkosten der Neuobjekte kommen aus der Eingabe bzw. „Kaufnebenkosten in % des Kaufpreises“. Der Tooltip sagt das.
 
 **Prüfung im Prüfskript:** „Selbstdokumentation: Pflichtfelder, Tooltips, eingeklappte Parameter“ prüft nach dem Durchrechnen in LibreOffice Kopftexte mit * und vorhandene Kommentare in Verkäufe, Neuobjekte, Objekte, Liquidität, Rücklagen und Parameter sowie Ebene und Ausblendung der Parameterzeilen.
+
+## 28. Darlehen der Bestandsobjekte
+
+Bisher rechneten Bestandsobjekte vor Finanzierung: der Zinsaufwand der Buchhaltung (BWA 1310) wurde zwar eingelesen, ging aber in keine Rechnung. Ohne Zins ist die Steuer zu hoch, ohne Tilgung und Ablösung die Liquidität. Umgesetzt sind zwei Stufen, die zweite greift je Objekt, sobald eine Restschuld erfasst ist.
+
+**Neue Felder im Blatt Objekte**
+
+| Feld | Name | Herkunft / Annahme |
+| --- | --- | --- |
+| Zinsaufwand Basisjahr | obj\_ZinsBasis | BWA 1310; mit Kostenstellenblatt verknüpft wie Miete und AfA (grün, „Objekte → Kostenstellen“ schreibt auf 1310) |
+| Restschuld Darlehen Ende Basisjahr | obj\_Restschuld | Eingabe (Saldenliste, Bankauszug); leer = Stufe 1 |
+| Zinssatz Darlehen | obj\_Zinssatz | leer: Zinsaufwand / Restschuld, ohne Restschuld 0 |
+| Rate Darlehen p. a. | obj\_Rate | leer: Restschuld × (Zinssatz + par\_AnnDarlTilgung), ohne Restschuld 0 |
+
+Zinssatz und Rate zählen nur bei Restschuld > 0 als Annahme. Der Zinssatz aus Zinsaufwand / Restschuld Ende ist eher etwas zu hoch, weil die Restschuld im Basisjahr gesunken ist; der Tooltip sagt das.
+
+**Stufe 1, ohne Restschuld:** Zins = Zinsaufwand Basisjahr × (1 + par\_ZinsVeraenderung)^(Jahr − Basisjahr), bis einschließlich Verkaufsjahr (prg\_Aktiv). Standard −3 %: im Muster der Kanzlei sinkt der monatliche Zinsaufwand von 2.632 auf 2.590 €, rund 3 % im Jahr. Keine Tilgung, keine Restschuld.
+
+**Stufe 2, mit Restschuld:** Annuität wie im Blatt Darlehen, je Objekt in der Prognose (Zeile darüber = Vorjahr):
+
+- Zins = Restschuld Vorjahresende × Zinssatz
+- Tilgung = MIN(MAX(Rate − Zins; 0); Restschuld Vorjahresende); im Verkaufsjahr (prg\_Bestand = 0) die ganze Restschuld: Verkauf zum Jahresende, Ablösung aus dem Erlös
+- Restschuld = Vorjahr − Tilgung
+
+Eine Vorfälligkeitsentschädigung trägt der Anwender in die Verkaufskosten ein.
+
+**Prognose:** prg\_KreditZins, prg\_Tilgung und prg\_Restschuld gelten jetzt auch für Bestandsobjekte. Neu sind prg\_ZinsHalten, prg\_TilgungHalten, prg\_RestschuldHalten: dasselbe ohne Verkauf (Neuobjekte 0). Spaltenköpfe „Zinsen Darlehen“ usw.
+
+**Wirkung:** Liquidität und Auswertung summieren wie bisher prg\_KreditZins, prg\_Tilgung und prg\_Restschuld, jetzt über Bestand und Neuobjekte („Zinsen Darlehen“, „Tilgung Darlehen (mit Ablösung bei Verkauf)“, „Restschuld Darlehen“). Die Baseline nimmt die Halten-Spalten; bisher war sie ohne Finanzierung. Szenarien B und C haben dieselben Bestandsdarlehen wie A. Gesamtvermögen = Verkehrswert + Liquidität − Restschuld, also auch abzüglich der Bestandsdarlehen.
+
+**BWA:** 1310 im Blatt des Bestandsobjekts und in „Alle Objekte“ = Zinsen Bestand (prg\_Neu = 0) plus die Kredite der Neuobjekte über die Zuordnung; die Kontrolle gegen die Liquidität bleibt 0. Ohne Kostenstellen-Datei kommt das Basisjahr 1310 aus obj\_ZinsBasis. Unter der Herleitung steht jetzt auch im Blatt des Bestandsobjekts die Finanzierung (Tilgung mit Ablösung, Restschuld).
+
+**Sonderbereich Verkauf und Kauf:** Ausgangsfall (halten) mit Zinsen und Tilgung aus den Halten-Spalten. Neue Zeile „Ablösung Darlehen des Objekts (Restschuld Ende Verkaufsjahr)“ = prg\_RestschuldHalten im Verkaufsjahr; die Kapitalanlage ist Nettoerlös − Reinvestition + Kredit − Steuer ca. − Ablösung.
+
+**Prüfung:** „zins\_verkauf“ (Warnung): verkauftes Objekt mit Zinsaufwand, aber ohne Restschuld, die Ablösung fehlt. „zins\_grob“ (Hinweis): Objekte mit Zinsaufwand ohne Restschuld.
+
+**Parameter (Abschnitt „Darlehen der Bestandsobjekte“, eingeklappt):** par\_ZinsVeraenderung −3 %, par\_AnnDarlTilgung 2 %.
+
+**Später:** Import der Restschulden aus der Summen- und Saldenliste (DATEV), sobald ein Muster vorliegt; Voraussetzung ist ein Sachkonto je Darlehen und dessen Zuordnung zum Objekt.
+
+**Prüfung im Prüfskript:** „Bestandsdarlehen: Tilgungsplan, Fortschreibung und Ablösung beim Verkauf“: OBJ-001 Restschuld 500.000, 4 %, Rate 40.000, Verkauf Ende 2029 (Ablösung 459.200, bei Halten Rest 437.568); OBJ-002 nur Zinsaufwand 10.000 × 0,97 je Jahr; OBJ-003 Zinssatz und Rate als Annahme (4 %, 18.000); OBJ-004 Zinsaufwand ohne Restschuld, verkauft (Warnung). Liquidität, Baseline, Auswertung, BWA 1310 mit Kontrolle gegen die Liquidität, Sonderbereich.
