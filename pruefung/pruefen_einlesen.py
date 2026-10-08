@@ -228,7 +228,9 @@ def main() -> int:
                    Objekt("KSt 3", name="KC 24+26"), Objekt("KSt 4", name="KC 30")]
         ohne = [Anlage(nr=str(i), bw_stand=1.0, bezeichnung=b) for i, b in enumerate([
             "Grund und Boden Musterstr. 1", "Außenanlage Beispeilweg", "Wohngebäude KC 24",
-            "Garage KC", "Grund und Boden ohne Kostenstelle", "Parkplatz Kst. 2", None])]
+            "Garage KC", "Grund und Boden ohne Kostenstelle", "Parkplatz Kst. 2", None,
+            "Grund u. Boden Kostenstelle 4", "Grund u. Boden Kostenst. 3",
+            "Grund u. Boden Beispielweg 7"])]
         bez = [(a.objekt_id, a.zuordnung) for a in ordne_anlagen_zu(ohne, objekte)]
         pruefe("Bezeichnung: abgekürzte Straße", bez[0],
                ("KSt 1", "Bezeichnung: musterstr, 1"))
@@ -239,6 +241,12 @@ def main() -> int:
         pruefe("Bezeichnung: nur Füllwörter, keine Zuordnung", bez[4], (None, None))
         pruefe("Bezeichnung: KSt in der Bezeichnung", bez[5], ("KSt 2", "Bezeichnung: KSt 2"))
         pruefe("Bezeichnung fehlt", bez[6], (None, None))
+        pruefe("Bezeichnung: G+B mit „Kostenstelle“ und Nummer", bez[7],
+               ("KSt 4", "Bezeichnung: KSt 4"))
+        pruefe("Bezeichnung: G+B mit „Kostenst.“ und Nummer", bez[8],
+               ("KSt 3", "Bezeichnung: KSt 3"))
+        pruefe("Bezeichnung: „Grund u. Boden“ mit Objektname", bez[9],
+               ("KSt 2", "Bezeichnung: beispielweg, 7"))
         pruefe("KOST1 gekennzeichnet", ordne_anlagen_zu(anlagen, objekte)[0].zuordnung, "KOST1")
         pruefe("KOST1 geht vor der Bezeichnung",
                ordne_anlagen_zu([Anlage(nr="x", bw_stand=1.0, kost1="1",

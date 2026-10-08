@@ -501,12 +501,13 @@ BEZ_FUELLWOERTER = {
     "grund", "boden", "gub", "gb", "grundstueck", "grundstuecke", "gebaeude", "wohngebaeude",
     "geschaeftsgebaeude", "buerogebaeude", "haus", "wohnhaus", "wohnbau", "bau", "anbau",
     "neubau", "umbau", "aussenanlage", "aussenanlagen", "anlage", "anlagen", "anteil",
-    "objekt", "kostenstelle", "wohnung", "wohnungen", "whg", "einbau", "einbauten",
+    "objekt", "kostenstelle", "kostenst", "wohnung", "wohnungen", "whg", "einbau", "einbauten",
     "sanierung", "modernisierung", "erweiterung", "teil", "gesamt", "alle",
 }
 BEZ_AEHNLICH = 0.8        # Mindestähnlichkeit zweier Wörter (difflib-Quote)
 BEZ_ABSTAND = 0.5         # Vorsprung des besten Objekts vor dem zweitbesten
-BEZ_KST = re.compile(r"\bkst\.?\s*(\d+)\b", re.IGNORECASE)
+# Kostenstellennummer in der Bezeichnung: „KSt 5“, „Kostenstelle 5“, „Kostenst. 5“
+BEZ_KST = re.compile(r"\b(?:kst|kostenst(?:elle)?)\.?\s*(\d+)\b", re.IGNORECASE)
 
 
 def _woerter(text) -> tuple:

@@ -1503,6 +1503,21 @@ def faelle():
             ("anl_Status", 10, "OK"),
             ("obj_AKGuB", 1, 410_000),
         ] + befund(annahmen=2, anlagen=3, anlagen_bez=1, baujahr=2)),
+        # G+B als „Grund u. Boden Kostenstelle 2“ ohne KOST1: zählt zu AK G+B (400.000 + 10.000)
+        # und mindert beim Verkauf den Gewinn auf G+B: 2 Mio × 30 % − 410.000 = 190.000
+        ("Anlagen: G+B über „Kostenstelle“ in der Bezeichnung, wirkt im Verkauf",
+         dataclasses.replace(
+             anlagen_eingelesen(ohne_kost1=[Anlage(nr="100021", bw_stand=10_000, art="G+B",
+                                                   methode="keine",
+                                                   bezeichnung="Grund u. Boden Kostenstelle 2")]),
+             verkaeufe=[Verkauf("KSt 2", 2027, preis=2_000_000, anteil_gub=0.3)]), [
+            ("anl_ID", 10, "KSt 2"),
+            ("anl_Zuordnung", 10, "Bezeichnung: KSt 2"),
+            ("obj_AKGuB", 1, 410_000),
+            ("vk_AKGuB", 0, 410_000),
+            ("vk_ErloesGuB", 0, 600_000),
+            ("vk_GewinnGuB", 0, 190_000),
+        ]),
         ("Anlagen: Baujahr eingetippt bestätigt, keine Warnung mehr", baujahr_bestaetigt(), [
             ("obj_Baujahr", 0, 1990),
             ("obj_AnlBauOffen", 0, 0),
