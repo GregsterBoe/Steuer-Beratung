@@ -1283,3 +1283,49 @@ Im Anlagenverzeichnis der Kanzlei fehlt bei vielen Anlagen Grund und Boden die K
 
 - `pruefen_einlesen`: „Grund u. Boden Kostenstelle 4“, „Grund u. Boden Kostenst. 3“ und „Grund u. Boden Beispielweg 7“ werden zugeordnet.
 - `pruefen`, Fall „Anlagen: G+B über „Kostenstelle“ in der Bezeichnung, wirkt im Verkauf“: AK G+B 410.000 im Objekt und im Verkauf, Gewinn G+B 190.000.
+
+## 26. Finanzierung der Neuobjekte, mehrere Quell-Rücklagen
+
+Bisher lief jeder Kauf über die Liquidität; fehlte Geld, kostete die negative Liquidität die Rendite der Alternativanlage. Jetzt legt das Blatt Neuobjekte je Kauf die Finanzierung fest, und ein Neuobjekt kann bis zu drei Rücklagen aufnehmen.
+
+**Mehrere Quell-Rücklagen.** Statt einer Quelle gibt es die Spalten Quelle 1 bis 3 (ne\_Quelle, ne\_Quelle2, ne\_Quelle3), je mit Auswahl aus rl\_ID. Mehrere Rücklagen auf ein Wirtschaftsgut zu übertragen ist nach § 6b zulässig; ob es im Einzelfall gewollt ist, entscheidet der Berater über die Auswahl. Die Reihenfolge der Übertragung gilt über alle Quellen:
+
+1. ü1 je Quelle = MIN(Rücklage Gebäude verfügbar; AK Gebäude − ü1 der Quellen davor)
+2. ü2 je Quelle = MIN(Rücklage G+B verfügbar; AK G+B − ü2 der Quellen davor)
+3. ü3 je Quelle = MIN(Rücklage G+B − ü2; AK Gebäude − alle ü1 − ü3 der Quellen davor)
+
+So geht kein Gebäudegewinn verloren, weil ein G+B-Gewinn das Gebäude schon belegt hat. „Verfügbar“ ist die Rücklage minus das, was Zeilen darüber aus ihr genommen haben, über alle drei Quellspalten. Die Werte je Quelle stehen in eingeklappten Hilfsspalten rechts (ne\_Q1RLGeb … ne\_Q3Erloes), ne\_Ue1 bis ne\_Ue3 sind die Summen. Rücklagen-Spalten „übertragen“ und die Prüfung „teiluebertrag“ summieren über alle Quellspalten. Im Sonderbereich zählt ein Neuobjekt beim Verkauf seiner Quelle 1.
+
+Status je Quelle (Quelle 2 und 3 mit Vorsatz „Quelle n:“): Rücklage unbekannt, Kauf vor Bildung, Kauf nach Fristjahr, dazu „doppelt“, wenn eine Rücklage in derselben Zeile zweimal steht. Diese Meldungen und die des Kredits stehen nebeneinander, das Objekt bleibt im Modell.
+
+**Finanzierungsbedarf.** Die Rücklage ist kein Geld, sie stundet nur Steuer. Für den Kauf steht der Nettoerlös der Quell-Verkäufe bereit:
+
+| Spalte | Name | Formel |
+| --- | --- | --- |
+| Kaufpreis + Nebenkosten | ne\_AKGesamt | Kaufpreis + Nebenkosten |
+| Einsatz Verkaufserlös | ne\_Erloes | je Quelle MIN(Nettoerlös − in Zeilen darüber eingesetzt; AK gesamt − Quellen davor), Verkauf bis zum Kaufjahr |
+| Finanzierungsbedarf | ne\_Bedarf | AK gesamt − Einsatz |
+| Kredit | ne\_Kredit | bei Finanzierung Rest = Kredit: Kreditbetrag, leer = Bedarf; sonst 0 |
+| Eigenmittel | ne\_Eigen | Bedarf − Kredit, aus der Liquidität |
+
+Anders als die Übertragung braucht der Einsatz des Erlöses keine offene Frist. Ohne Quelle ist der ganze Kaufpreis Bedarf.
+
+**Kredit.** Eingaben im Blatt Neuobjekte: Finanzierung Rest (Eigenmittel oder Kredit), Kreditbetrag, Zinssatz, Tilgungsart (Annuität, linear, endfällig; leer = Annuität), Tilgung p. a. in % des Kreditbetrags (bei Annuität anfänglich), Laufzeit (endfällig Pflicht, sonst optional: danach wird die Restschuld auf einmal getilgt). Status: „Kredit: Zinssatz fehlt“, „Kredit: Tilgung fehlt“, „Kredit: Laufzeit fehlt (endfällig)“, „Kreditangaben ohne Finanzierung Rest = Kredit, kein Kredit“.
+
+Das Blatt **Darlehen** hat je Zeile des Blatts Neuobjekte eine Zeile (dl\_ID leer ohne Kredit) mit den Kreditdaten, der Rate (Annuität: Betrag × (Zins + Tilgung), linear: Betrag × Tilgung) und „getilgt im Jahr“, rechts je Prognosejahr drei Blöcke dl\_Zins, dl\_Tilgung, dl\_Restschuld, darunter die Summe je Jahr. Auszahlung zum Ende des Kaufjahrs:
+
+- Zins = Restschuld Vorjahr × Zinssatz
+- Tilgung = MIN(Restschuld Vorjahr; Rate − Zins bzw. Rate bzw. 0 bei endfällig), ab Kaufjahr + Laufzeit die ganze Restschuld
+- Restschuld = im Kaufjahr der Kreditbetrag, danach Vorjahr − Tilgung; ist sie 0, entfallen Zins und Tilgung
+
+**Wirkung.** Die Prognose holt je Neuobjekt prg\_KreditZins, prg\_Tilgung und prg\_Restschuld aus dem Darlehensblatt (Bestandsobjekte 0). Liquidität: neue Spalten Zinsen Kredite (mindert das Ergebnis vor Verlustvortrag), Kreditauszahlung, Tilgung und Restschuld; freier Mittelzufluss = … − Kreditzinsen − Kauf + Kreditauszahlung − Tilgung. Auswertung: Zinsen Kredite in der GuV, Gesamtvermögen = Verkehrswert + Liquidität − Restschuld. Vergleich: Restschuld und Zinsen Kredite als neue Kennzahlen (Zeilen 17 und 18). Szenario C finanziert wie A, in B entfällt mit dem Kauf auch der Kredit, die Baseline hat keinen. Prüfung „restschuld“ (Hinweis): Kredite, die am Ende des Rasters nicht getilgt sind.
+
+**BWA.** Neuer Posten „Neuobjekte: Zinsen Kredite“ (Standard 1310) in der Herleitung; die Kontrolle gegen die Liquidität bleibt 0. Unter der Herleitung steht im Blatt des Neuobjekts und in „Alle Objekte“ nachrichtlich Kreditauszahlung, Tilgung und Restschuld.
+
+**Neukauf-Kostenstelle als Blatt des Neuobjekts.** Die Spalte Kostenstelle Neukauf hat eine Auswahlliste (nk\_Liste). Verweist ein Neuobjekt auf eine Neukauf-Kostenstelle mit eigenem Blatt, entsteht kein Blatt NEU-…; das KSt-Blatt nennt in D3 das Neuobjekt, zeigt in den Planspalten AfA (1240) und Kreditzinsen (1310) aus dem Modell (grau, ohne Verweis der eingelesene Wert) und darunter die Finanzierung. Über die Prognose zählt das Neuobjekt in „Alle Objekte“.
+
+**Prüfung im Prüfskript**
+
+- „Finanzierung: Annuitätenkredit über den Finanzierungsbedarf“: AK 2,1 Mio − Erlös 1,4 Mio = Kredit 700.000, 4 % + 2 %: 2029 Zins 28.000, Tilgung 14.000; Liquidität, Auswertung, Szenarien B und C, BWA 1310, Kontrolle, Sonderbereich, Restschuld 2046 340.964,22.
+- „Finanzierung: zwei Quellen, linearer und endfälliger Kredit, Statusfälle“: ü1 220.000 + 220.000, ü2 500.000 + 100.000, ü3 400.000 aus Quelle 2; Erlös 2,8 Mio, Kredit 150.000 linear getilgt 2032; endfällig 500.000 getilgt 2034; vier Statusfälle.
+- „Finanzierung: Kreditzinsen im Blatt der Neukauf-Kostenstelle“: KSt 31 zeigt 1240 und 1310 aus dem Modell.

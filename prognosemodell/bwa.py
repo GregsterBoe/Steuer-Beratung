@@ -15,7 +15,7 @@ import re
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-from .modelle import (ARTEN_ABNUTZBAR, FMT_EURO, FMT_JAHR, FMT_PROZENT, MAX_NEUOBJEKTE,
+from .modelle import (ARTEN_ABNUTZBAR, FMT_EURO, FMT_JAHR, FMT_PROZENT, MAX_NEUOBJEKTE, QUELLEN,
                       MAX_VERKAEUFE, PARAMETER, STATUS_6B_UNZULAESSIG, STATUS_OK, Modell,
                       prognosejahre)
 from .vorlagen import (BWA_ZEILEN, ERSTE_ZEILE, SPALTE_JAHR, SPALTE_PLAN, SPALTE_VORJAHRE,
@@ -176,6 +176,9 @@ def _posten() -> list:
          lambda j, vk, rl, pf, s: prg("prg_Ausgaben", j, pf, "-")),
         ("neu_afa", "Neuobjekte: Abschreibungen", 1240, "AfA nach Übertragung § 6b",
          lambda j, vk, rl, pf, s: prg("prg_AfA", j, pf, "-")),
+        ("neu_zins", "Neuobjekte: Zinsen Kredite", 1310,
+         "Kredit lt. Blatt Neuobjekte, Tilgungsplan im Blatt Darlehen",
+         lambda j, vk, rl, pf, s: prg("prg_KreditZins", j, pf, "-")),
         ("zinsertrag", "Zinsertrag Alternativanlage", 1322, "nur im Blatt Alle Objekte",
          lambda j, vk, rl, pf, s: f"MAX({zins.format(j=j)},0)" if s else "0"),
         ("zinsaufwand", "Zinsaufwand bei negativer Liquidität", 1310,
@@ -190,6 +193,17 @@ HERLEITUNG_TITEL = ERSTE_ZEILE + len(BWA_ZEILEN) + 1
 HERLEITUNG_ERSTE = HERLEITUNG_TITEL + 1
 HERLEITUNG_LETZTE = HERLEITUNG_ERSTE + len(POSTEN) - 1
 SPALTE_ZIEL = 4   # D: BWA-Nr. des Postens (Spalte B bleibt den BWA-Zeilen vorbehalten)
+# Finanzierung nachrichtlich unter der Herleitung (nicht ergebniswirksam): je Posten
+# (Bezeichnung, Formel je Objekt mit {id} und {j}, Formel im Summenblatt mit {j})
+FINANZIERUNG = [
+    ("Kreditauszahlung (Kauf zum Jahresende)",
+     "SUMIFS(ne_Kredit,ne_ID,{id},ne_Kaufjahr,{j},ne_Gueltig,1)", "SUMIFS(liq_Kredit,liq_Jahr,{j})"),
+    ("Tilgung", "SUMIFS(prg_Tilgung,prg_ID,{id},prg_Jahr,{j})", "SUMIFS(liq_Tilgung,liq_Jahr,{j})"),
+    ("Restschuld Ende", "SUMIFS(prg_Restschuld,prg_ID,{id},prg_Jahr,{j})",
+     "SUMIFS(liq_Restschuld,liq_Jahr,{j})"),
+]
+FINANZ_TITEL = HERLEITUNG_LETZTE + 2
+FINANZ_LETZTE = FINANZ_TITEL + len(FINANZIERUNG)
 
 
 def _zugeordnet(sp: str, nr: int) -> str:
@@ -229,6 +243,21 @@ def _herleitung(ws, planjahre: int, objekt: bool) -> None:
             zelle = ws.cell(row=zeile, column=SPALTE_PLAN + i,
                             value="=" + formel(jahr, vk, rl, pf, not objekt))
             zelle.number_format, zelle.font = FMT_BWA, FONT_HILFE_GROSS
+
+
+def _finanzierung(ws, planjahre: int, id_: str = None) -> None:
+    """Kredit nachrichtlich unter der Herleitung: Auszahlung, Tilgung, Restschuld je Planjahr.
+    id_: Zelle mit der NeuID; ohne: Summe aller Kredite (Summenblatt)."""
+    ws.cell(row=FINANZ_TITEL, column=3, value="Finanzierung (nachrichtlich, Zinsen in 1310)"
+            ).font = Font(bold=True)
+    for zeile, (text, objekt, summe) in enumerate(FINANZIERUNG, start=FINANZ_TITEL + 1):
+        ws.cell(row=zeile, column=3, value=text).font = FONT_HILFE_GROSS
+        for i in range(planjahre):
+            jahr = f"{get_column_letter(SPALTE_PLAN + i)}${ZEILE_JAHR}"
+            formel = (summe.format(j=jahr) if id_ is None else
+                      f'IF({id_}="",0,{objekt.format(id=id_, j=jahr)})')
+            c = ws.cell(row=zeile, column=SPALTE_PLAN + i, value=f"={formel}")
+            c.number_format, c.font = FMT_BWA, FONT_HILFE_GROSS
 
 
 def _planformeln_objekt(z: dict, sp: str) -> dict:
@@ -304,7 +333,7 @@ SPALTE_ANLAGE = 4   # D
 
 
 def _abschreibungen(ws, anlagen: list, planjahre: int) -> None:
-    erste_zeile = HERLEITUNG_LETZTE + 3
+    erste_zeile = FINANZ_LETZTE + 3
     vorjahr = get_column_letter(SPALTE_VORJAHRE + 1)   # Basisjahr − 1
     basis = get_column_letter(SPALTE_JAHR)
     plan = [get_column_letter(SPALTE_PLAN + i) for i in range(planjahre)]
@@ -375,6 +404,8 @@ def _blatt_objekt(wb, titel: str, objekt_id: str, name, ist, basisjahr: int,
         _basisspalte(ws, z, obj)
     _planspalten(ws, z, planjahre, lambda sp: _planformeln_objekt(z, sp))
     _herleitung(ws, planjahre, objekt=True)
+    if neu:
+        _finanzierung(ws, planjahre, "$B$2")
     if anlagen:
         _abschreibungen(ws, anlagen, planjahre)
     if neu:
@@ -385,9 +416,9 @@ def _blatt_objekt(wb, titel: str, objekt_id: str, name, ist, basisjahr: int,
     else:
         basis = (" Basisjahr hellblau: aus dem Blatt Objekte (1260 = weitere Ausgaben "
                  "abzüglich 1100–1220).")
-    ws["E2"] = (("Neuobjekt: Werte ab dem Jahr nach dem Kauf. " if neu else "")
-                + "Planspalten = Szenario A, vor Finanzierung; Zins und Steuer nur im Blatt "
-                f"„{SUMMENBLATT}“." + basis)
+    ws["E2"] = (("Neuobjekt: Werte ab dem Jahr nach dem Kauf, Kreditzinsen in 1310. " if neu
+                 else "") + "Planspalten = Szenario A; Steuer und Zins der Alternativanlage nur "
+                f"im Blatt „{SUMMENBLATT}“." + basis)
     ws["E2"].font = Font(italic=True)
     return ws
 
@@ -415,11 +446,27 @@ def _blatt_neukauf_kst(wb, titel: str, lw, basisjahr: int, planjahre: int):
                 ws.cell(row=z[nr], column=spalte).fill = FILL_EINGABE
         for nr, formel in _summenformeln(z, sp).items():
             ws.cell(row=z[nr], column=spalte, value=formel)
-    ws["E2"] = ("Neukauf-Kostenstelle: Planwerte für ein Neuobjekt (Blatt Neuobjekte, Spalte "
-                "Kostenstelle Neukauf). Gelb ändern: Miete 1020, weitere Einnahmen 1090, "
+    # Objektblatt des Neuobjekts, das auf die Kostenstelle verweist: AfA und Kreditzinsen
+    # aus dem Modell; ohne Verweis bleibt der eingelesene Wert
+    ws["C3"] = "Neuobjekt:"
+    ws["C3"].font = FONT_HILFE_GROSS
+    ws["D3"] = '=IFERROR(INDEX(ne_ID,MATCH($B$2,ne_KSt,0)),"")'
+    ws["D3"].font, ws["D3"].fill = Font(bold=True), FILL_BERECHNET
+    for nr, name in ((1240, "prg_AfA"), (1310, "prg_KreditZins")):
+        for i in range(planjahre):
+            c = ws.cell(row=z[nr], column=SPALTE_PLAN + i)
+            eingelesen = c.value if isinstance(c.value, (int, float)) else '""'
+            jahr = f"{get_column_letter(SPALTE_PLAN + i)}${ZEILE_JAHR}"
+            c.value = (f'=IF($D$3="",{eingelesen},'
+                       f"SUMIFS({name},prg_ID,$D$3,prg_Jahr,{jahr}))")
+            c.fill = FILL_BERECHNET
+    _finanzierung(ws, planjahre, "$D$3")
+    ws["E2"] = ("Neukauf-Kostenstelle, zugleich Blatt des Neuobjekts in D3 (Blatt Neuobjekte, "
+                "Spalte Kostenstelle Neukauf). Gelb ändern: Miete 1020, weitere Einnahmen 1090, "
                 "Erhaltung 1250 und weitere Ausgaben 1100–1220, 1260 gehen über das Blatt "
-                "Neukauf-KSt in die Prognose; leere Jahre werden fortgeschrieben. Nicht in "
-                f"„{SUMMENBLATT}“, das Ergebnis steht im Blatt des Neuobjekts.")
+                "Neukauf-KSt in die Prognose ab dem Jahr nach dem Kauf; leere Jahre werden "
+                "fortgeschrieben. AfA 1240 und Kreditzinsen 1310 rechnet das Modell (grau). "
+                f"Das Neuobjekt zählt in „{SUMMENBLATT}“.")
     ws["E2"].font = Font(italic=True)
     return ws
 
@@ -489,7 +536,8 @@ def blaetter_bwa(wb, modell: Modell) -> list:
         eintraege.append((wunsch, obj.objekt_id, obj.name, ist.ist if ist else None, False,
                           zeile if ist is not None else None))
     for ne in modell.neuobjekte:
-        if ne.neu_id:
+        # mit Neukauf-Kostenstelle ist deren Blatt das Blatt des Neuobjekts
+        if ne.neu_id and ne.kst not in modell.neukauf:
             eintraege.append((ne.neu_id, ne.neu_id, ne.name, None, True, None))
     titel = []
     for wunsch, objekt_id, name, ist, neu, obj_zeile in eintraege:
@@ -521,8 +569,9 @@ def blaetter_bwa(wb, modell: Modell) -> list:
                            value="=" + "+".join(f"N('{b}'!{sp}{z[nr]})" for b in bestand))
     _planspalten(summe, z, planjahre, lambda sp: _planformeln_summe(z, sp, bestand))
     _herleitung(summe, planjahre, objekt=False)
-    summe["E2"] = ("Planspalten = Szenario A über alle Objekte und Neuobjekte, vor "
-                   "Finanzierung. Nr. 1353 = Ergebnis vor Verlustvortrag im Blatt "
+    _finanzierung(summe, planjahre)
+    summe["E2"] = ("Planspalten = Szenario A über alle Objekte und Neuobjekte, mit den "
+                   "Krediten der Neuobjekte. Nr. 1353 = Ergebnis vor Verlustvortrag im Blatt "
                    f"Liquidität (Kontrolle im Blatt {ZUORDNUNG}), Steuer mit Verlustvortrag. "
                    "Ist-Spalten und Basisjahr: Summe der Kostenstellenblätter; Objekte ohne "
                    "eigenes Blatt nur in den Planspalten.")
@@ -761,14 +810,16 @@ def _vorgang(b: _Block, n: int) -> None:
                         for f in ("ne_Kaufpreis", "ne_Nebenkosten"))
     b.zeile_("reinvest", "Reinvestition (Kaufpreis und Nebenkosten der Neuobjekte)",
              ok(f'IF({{rl}}="",0,{reinvest})'))
+    kredit = f'SUMIFS(ne_Kredit,ne_Quelle,{{rl}},ne_Status,"{STATUS_OK}")'
+    b.zeile_("kredit", "Kredit der Neuobjekte", ok(f'IF({{rl}}="",0,{kredit})'))
     b.zeile_("uebertrag", "Übertrag § 6b EStG", ok(f"-({rl('rl_UebGeb')}+{rl('rl_UebGuB')})"))
     b.zeile_("steuer", "Steuer auf den Gewinn ca. (Verkaufsjahr, Auflösung im Fristjahr)",
              ok(f"-(N({vk('vk_Gewinn')})-{rl('rl_Betrag')}+{rl('rl_Aufloesung')}"
                 f"+{rl('rl_Zuschlag')})*par_Steuersatz"))
-    b.zeile_("anlage", "Kapitalanlage (Nettoerlös − Reinvestition − Steuer ca.)",
-             ok(f"N({vk('vk_Nettoerloes')})-{{reinvest}}+{{steuer}}"))
-    b.zeile_(None, "Restschuld aktuell / nach Umstrukturierung", "Stufe 2 (Finanzierung)",
-             fmt="@")
+    b.zeile_("anlage", "Kapitalanlage (Nettoerlös − Reinvestition + Kredit − Steuer ca.)",
+             ok(f"N({vk('vk_Nettoerloes')})-{{reinvest}}+{{kredit}}+{{steuer}}"))
+    b.zeile_(None, "Restschuld Kredite im Vergleichsjahr (Bestand ohne Finanzierung)",
+             ok(alt("prg_Restschuld")))
     b.leer()
     b.kopf(f'=IF({{ok}}=1,"Vergleich im Jahr "&{{x}},"Vergleich")', "Ausgangsfall (halten)",
            "Alternative (Verkauf, Kauf, Anlage)", "Differenz")
@@ -776,6 +827,7 @@ def _vorgang(b: _Block, n: int) -> None:
            ("e_kapital", "Kapitalertrag", "{p_zins}"),
            ("e_aufwand", "Aufwand (Erhaltung, weitere Ausgaben, AfA; ohne Zinsen)",
             "{p_erh}+{p_ausg}+{p_afa}"),
+           ("e_zinsen", "Zinsen Kredite", "{p_zinsen}"),
            ("e_ergebnis", "vorläufiges Ergebnis", "{p_ergebnis}"),
            ("e_vor", "liquider Überschuss vor Steuern", "{p_cashflow}"),
            ("e_steuer", "Steuern ca.", "-{p_ergebnis}*par_Steuersatz"),
@@ -820,10 +872,10 @@ def _vorgang(b: _Block, n: int) -> None:
         ("p_ausg", "./. weitere Ausgaben", "-" + halten("obj_AusgBasis", "par_Kostensteig"),
          "-" + alt("prg_Ausgaben")),
         ("p_afa", "./. Abschreibungen (Steuerbilanz)", f"-({afa_h})", "-" + alt("prg_AfA")),
-        ("p_zinsen", "./. Zinsen (Stufe 2)", "0", "0"),
+        ("p_zinsen", "./. Zinsen Kredite", "0", "-" + alt("prg_KreditZins")),
         ("p_ergebnis", "= vorläufiges Ergebnis", "{p_miete}+{p_einn}+{p_zins}+{p_erh}+{p_ausg}"
          "+{p_afa}+{p_zinsen}", None),
-        ("p_tilgung", "./. Tilgungen (Stufe 2)", "0", "0"),
+        ("p_tilgung", "./. Tilgungen", "0", "-" + alt("prg_Tilgung")),
         ("p_afa_zurueck", "+ Abschreibungen", "-{p_afa}", None),
         ("p_cashflow", "= Cash Flow", "{p_ergebnis}+{p_tilgung}+{p_afa_zurueck}", None),
     ]
@@ -870,7 +922,8 @@ def _kauf(b: _Block, anzahl: int) -> None:
     zeile("NeuID (Kostenstelle)", "{id}", "@", fett=True)
     zeile("Name", f'IF({ne("ne_Name")}="","",{ne("ne_Name")})', "@")
     zeile("Status", ne("ne_Status"), "@")
-    zeile("Quelle RücklageID", f'IF({ne("ne_Quelle")}="","",{ne("ne_Quelle")})', "@")
+    for nr, (_, quelle, _) in enumerate(QUELLEN, start=1):
+        zeile(f"Quelle {nr} RücklageID", f'IF({ne(quelle)}="","",{ne(quelle)})', "@")
     kj = zeile("Kaufjahr (Kauf zum Jahresende)", ne("ne_Kaufjahr"), FMT_JAHR)
     zeile("Kaufpreis", f"N({ne('ne_Kaufpreis')})")
     zeile("Kaufnebenkosten", f"N({ne('ne_Nebenkosten')})")
@@ -885,6 +938,11 @@ def _kauf(b: _Block, anzahl: int) -> None:
     zeile("steuerliche AK G+B", f"N({ne('ne_AKGuB')})")
     zeile("AfA-Methode", f'IF({ne("ne_AfAMethode")}="","linear",{ne("ne_AfAMethode")})', "@")
     zeile("AfA-Satz", f"N({ne('ne_AfASatz')})", FMT_PROZENT)
+    zeile("Kaufpreis + Nebenkosten", f"N({ne('ne_AKGesamt')})")
+    zeile("./. Einsatz Verkaufserlös (Quell-Verkäufe)", f"-N({ne('ne_Erloes')})")
+    zeile("= Finanzierungsbedarf", f"N({ne('ne_Bedarf')})", fett=True)
+    zeile("davon Kredit", f"N({ne('ne_Kredit')})")
+    zeile("davon Eigenmittel", f"N({ne('ne_Eigen')})")
     jahr = zeile("erstes volles Jahr", f"{{sp}}{kj}+1", FMT_JAHR)
 
     def prg(name):
@@ -893,15 +951,19 @@ def _kauf(b: _Block, anzahl: int) -> None:
     miete = zeile("Mieten", prg("prg_Miete"))
     erh = zeile("./. Erhaltung", f"-{prg('prg_Erhaltung')}")
     afa = zeile("./. Abschreibungen (Steuerbilanz)", f"-{prg('prg_AfA')}")
-    erg = zeile("= vorläufiges Ergebnis", f"{{sp}}{miete}+{{sp}}{erh}+{{sp}}{afa}", fett=True)
-    zeile("= Cash Flow (vor Finanzierung)", f"{{sp}}{erg}-{{sp}}{afa}", fett=True)
+    zinsen = zeile("./. Zinsen Kredit", f"-{prg('prg_KreditZins')}")
+    erg = zeile("= vorläufiges Ergebnis",
+                f"{{sp}}{miete}+{{sp}}{erh}+{{sp}}{afa}+{{sp}}{zinsen}", fett=True)
+    tilgung = zeile("./. Tilgung Kredit", f"-{prg('prg_Tilgung')}")
+    zeile("= Cash Flow", f"{{sp}}{erg}-{{sp}}{afa}+{{sp}}{tilgung}", fett=True)
 
 
 def blatt_sonderbereich(wb, modell: Modell) -> None:
     ws = wb.create_sheet(blattname(SONDERBEREICH, wb.sheetnames))
     ws["A1"] = "Sonderbereich Verkauf und Kauf"
     ws["A1"].font = FONT_TITEL
-    ws["A2"] = ("Alle Werte vor Finanzierung (ohne Zins und Tilgung), Steuerbilanz. Je Verkauf "
+    ws["A2"] = ("Steuerbilanz; Zins und Tilgung nur für Kredite der Neuobjekte. Neuobjekte "
+                "zählen beim Verkauf ihrer Quelle 1. Je Verkauf "
                 "eine Ergebnissicht und eine Detailsicht; Steuern ca. = Ergebnis × "
                 "Grenzsteuersatz, ohne Verlustvortrag. Die genaue Steuer je Jahr steht im "
                 "Blatt Liquidität.")

@@ -15,6 +15,8 @@ from .modelle import (AFA_DEGRESSIV, ANL_NICHT_IM_MODELL, ANLAGE_FELDER, ANLAGE_
                       RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN, STATUS_6B_UNZULAESSIG,
                       STATUS_OK, SZ_A, SZ_B, SZ_BASELINE, SZENARIEN, VERKAUF_FELDER,
                       VERKAUF_SPALTEN, WARNUNG, Szenario, aus_spalten, liq_spalten,
+                      DARLEHEN_SPALTEN, FIN_KREDIT, QUELLEN, TILGUNG_ANNUITAET,
+                      TILGUNG_ENDFAELLIG, TILGUNG_LINEAR,
                       ZUORDNUNG_BEZEICHNUNG, ZUORDNUNG_MEHRDEUTIG, prognosejahre)
 
 
@@ -440,6 +442,9 @@ def prognose_zeile(zeile: int, objekt_nr: int, erstes_jahr: bool) -> dict:
         "buchwert_gub_ohne6b": _leer_oder(zeile, _p("buchwert_gub", zeile)),
         "erhaltung_halten": _leer_oder(zeile, _erhaltung_bestand(zeile, objekt_nr)),
         "quelle": _leer_oder(zeile, '""'),
+        "kredit_zins": _leer_oder(zeile, "0"),
+        "tilgung": _leer_oder(zeile, "0"),
+        "restschuld": _leer_oder(zeile, "0"),
     }
 
 
@@ -478,6 +483,9 @@ def prognose_zeile_neu(zeile: int, neu_nr: int, erstes_jahr: bool) -> dict:
         """Jahreswert der Neukauf-Kostenstelle (Blatt Neukauf-KSt, fortgeschrieben); "" ohne."""
         return (f'IFERROR(INDEX(nk_Fort,MATCH({ne("ne_KSt")}&"|{pos}",nk_Schluessel,0),'
                 f'{t}-par_Basisjahr+1),"")')
+
+    def darlehen(name):
+        return f"IF({gueltig},N(INDEX({name},{neu_nr},{t}-par_Startjahr+1)),0)"
 
     def ab_kauf(basis, satz, pos):
         """Wert der Neukauf-Kostenstelle, sonst basis ab dem Kauf mit der Steigerung."""
@@ -521,6 +529,10 @@ def prognose_zeile_neu(zeile: int, neu_nr: int, erstes_jahr: bool) -> dict:
         # nur bei gültiger Übertragung, sonst gehört das Neuobjekt zu keinem Verkauf
         "quelle": _leer_oder(zeile, f'IF(AND({ne("ne_Status")}="{STATUS_OK}",'
                                     f'{ne("ne_Quelle")}<>""),{ne("ne_Quelle")},"")'),
+        # Tilgungsplan des Kredits, Zeile neu_nr im Blatt Darlehen
+        "kredit_zins": _leer_oder(zeile, darlehen("dl_Zins")),
+        "tilgung": _leer_oder(zeile, darlehen("dl_Tilgung")),
+        "restschuld": _leer_oder(zeile, darlehen("dl_Restschuld")),
     }
 
 
@@ -626,6 +638,12 @@ def _rs(key: str, zeile: int) -> str:
     return f"${rsspalte(key)}{zeile}"
 
 
+def _aus_quellen(namen: tuple, rl_id: str) -> str:
+    """Summe der Hilfsspalten namen (Ue1 …) der Neuobjekte, die die Rücklage nennen."""
+    return "+".join(f"SUMIFS({praefix}{name},{quelle},{rl_id})"
+                    for _, quelle, praefix in QUELLEN for name in namen)
+
+
 def ruecklage_zeile(zeile: int, verkauf_nr: int) -> dict:
     """Formeln einer Rücklagenzeile; verkauf_nr = Zeile im Verkaufsblatt (1 = erster Verkauf)."""
     def vk(name):
@@ -644,10 +662,10 @@ def ruecklage_zeile(zeile: int, verkauf_nr: int) -> dict:
         "gub": wenn(f'MAX({vk("vk_GewinnGuB")},0)'),
         "betrag": wenn(f"{_r('geb', zeile)}+{_r('gub', zeile)}"),
         "fristjahr": wenn(f"{_r('jahr', zeile)}+{frist}"),
-        # Übertragung auf Neuobjekte (Etappe 6), Gebäudegewinn nur als ü1
-        "ueb_geb": wenn(f"SUMIFS(ne_Ue1,ne_Quelle,{_r('id', zeile)})"),
-        "ueb_gub": wenn(f"SUMIFS(ne_Ue2,ne_Quelle,{_r('id', zeile)})"
-                        f"+SUMIFS(ne_Ue3,ne_Quelle,{_r('id', zeile)})"),
+        # Übertragung auf Neuobjekte (Etappe 6) über alle drei Quellspalten,
+        # Gebäudegewinn nur als ü1
+        "ueb_geb": wenn(_aus_quellen(("Ue1",), _r("id", zeile))),
+        "ueb_gub": wenn(_aus_quellen(("Ue2", "Ue3"), _r("id", zeile))),
         # was bis zum Fristjahr nicht übertragen ist, wird dort aufgelöst
         "aufloesung": wenn(f"{_r('betrag', zeile)}-{_r('ueb_geb', zeile)}-{_r('ueb_gub', zeile)}"),
         # 6 % je vollem Jahr zwischen Bildung und Auflösung (§ 6b Abs. 7)
@@ -682,7 +700,7 @@ def ruecklage_jahr_zeile(zeile: int, erstes_jahr: bool) -> dict:
 
 # --- Neuobjekte und Übertragung (Etappe 6, Projektplan Abschnitt 13) ---
 #
-# Je Neuobjekt höchstens eine Quelle-Rücklage. Mehrere Neuobjekte können dieselbe
+# Je Neuobjekt bis zu drei Quell-Rücklagen. Mehrere Neuobjekte können dieselbe
 # Rücklage nutzen; sie bedienen sich in Zeilenreihenfolge, jede Zeile sieht nur,
 # was die Zeilen darüber übrig gelassen haben. Reihenfolge der Übertragung:
 # ü1 Gebäudegewinn auf Gebäude, ü2 G+B-Gewinn auf G+B, ü3 Rest G+B-Gewinn auf Gebäude.
@@ -697,18 +715,48 @@ def _n(key: str, zeile: int) -> str:
     return f"${nspalte(key)}{zeile}"
 
 
-def _uebertragung_moeglich(zeile: int) -> str:
-    """Bedingung: Zeile im Modell, Quelle bekannt, Kauf zwischen Bildungs- und Fristjahr."""
-    q, kj = _n("quelle", zeile), _n("kaufjahr", zeile)
-    rl = f"MATCH({q},rl_ID,0)"
+def _quelle_bekannt(zeile: int, k: int) -> str:
+    """Bedingung: Zeile im Modell, Quelle k angegeben, bekannt und nicht schon in einer
+    früheren Quelle derselben Zeile genannt; ohne MATCH, das sonst #N/A liefert."""
+    q = _n(QUELLEN[k][0], zeile)
+    frueher = "".join(f",{q}={_n(QUELLEN[j][0], zeile)}" for j in range(k))
+    doppelt = f"OR(FALSE{frueher})"
+    return (f'AND({_n("gueltig", zeile)}=1,{q}<>"",COUNTIF(rl_ID,{q})>0,'
+            f'NOT({doppelt}))')
+
+
+def _rl(name: str, q: str) -> str:
+    return f"INDEX({name},MATCH({q},rl_ID,0))"
+
+
+def _uebertragung_moeglich(zeile: int, k: int) -> str:
+    """Bedingung: Quelle k bekannt, Kauf zwischen Bildungs- und Fristjahr."""
+    q, kj = _n(QUELLEN[k][0], zeile), _n("kaufjahr", zeile)
     # verschachtelt, weil AND alle Argumente auswertet und MATCH sonst #N/A liefert
-    return (f'IF(OR({_n("gueltig", zeile)}<>1,{q}=""),FALSE,IF(COUNTIF(rl_ID,{q})=0,FALSE,'
-            f'AND({kj}>=INDEX(rl_Jahr,{rl}),{kj}<=INDEX(rl_Fristjahr,{rl}))))')
+    return (f'IF({_quelle_bekannt(zeile, k)},AND({kj}>={_rl("rl_Jahr", q)},'
+            f'{kj}<={_rl("rl_Fristjahr", q)}),FALSE)')
+
+
+def _erloes_moeglich(zeile: int, k: int) -> str:
+    """Bedingung: Nettoerlös des Quell-Verkaufs steht für den Kauf bereit (verkauft bis
+    zum Kaufjahr); anders als die Übertragung auch nach dem Fristjahr."""
+    q, kj = _n(QUELLEN[k][0], zeile), _n("kaufjahr", zeile)
+    return f'IF({_quelle_bekannt(zeile, k)},{kj}>={_rl("rl_Jahr", q)},FALSE)'
+
+
+def _q(key: str, k: int, zeile: int) -> str:
+    """Hilfsspalte key der Quelle k (0 = Quelle 1)."""
+    return _n(f"{QUELLEN[k][0]}_{key}", zeile)
 
 
 def neu_zeile(zeile: int) -> dict:
-    """Formeln der berechneten Spalten je Neuobjekt; leer ohne NeuID."""
-    id_, q, kj = _n("neu_id", zeile), _n("quelle", zeile), _n("kaufjahr", zeile)
+    """Formeln der berechneten Spalten je Neuobjekt; leer ohne NeuID.
+
+    Je Quelle k (bis zu drei) die verfügbare Rücklage nach den Zeilen darüber, dann
+    die Übertragung über alle Quellen: erst alle Gebäudegewinne auf das Gebäude (ü1),
+    dann die G+B-Gewinne auf G+B (ü2), der Rest der G+B-Gewinne auf das Gebäude (ü3).
+    """
+    id_, kj = _n("neu_id", zeile), _n("kaufjahr", zeile)
     pflicht = [_n(f.key, zeile) for f in NEU_FELDER if f.pflicht]
 
     def wenn(ausdruck):
@@ -719,49 +767,186 @@ def neu_zeile(zeile: int) -> dict:
         bst = nspalte(key)
         return f"${bst}$1:${bst}{zeile - 1}"
 
-    def verbraucht(key):
-        return f"SUMIFS({darueber(key)},{darueber('quelle')},{q})"
+    def verbraucht(key, k):
+        """Was die Zeilen darüber aus der Rücklage der Quelle k genommen haben, über alle
+        drei Quellspalten."""
+        q = _n(QUELLEN[k][0], zeile)
+        return "(" + "+".join(f"SUMIFS({darueber(f'{feld}_{key}')},{darueber(feld)},{q})"
+                              for feld, _, _ in QUELLEN) + ")"
 
-    moeglich = _uebertragung_moeglich(zeile)
+    def vorher(key, k):
+        """Summe der Hilfsspalte key über die Quellen vor k in dieser Zeile."""
+        return "+".join(["0"] + [_q(key, j, zeile) for j in range(k)])
+
+    def alle(key):
+        return "+".join(_q(key, j, zeile) for j in range(len(QUELLEN)))
+
     ak = f"(N({_n('kaufpreis', zeile)})+N({_n('nebenkosten', zeile)}))"
-    ue1, ue2 = _n("ue1", zeile), _n("ue2", zeile)
-    return {
+    ak_geb, ak_gub = _n("ak_geb_neu", zeile), _n("ak_gub_neu", zeile)
+    formeln = {
         "gueltig": wenn(f"IF(AND({_gefuellt(pflicht)}={len(pflicht)},"
                         f"COUNTIF(ne_ID,{id_})=1,COUNTIF(obj_ID,{id_})=0,"
                         f"{kj}>=par_Startjahr,{kj}<=par_Endjahr),1,0)"),
         # Nebenkosten im Verhältnis des Kaufpreises aufgeteilt und aktiviert
         "ak_gub_neu": wenn(f"{ak}*N({_n('anteil_gub', zeile)})"),
         "ak_geb_neu": wenn(f"{ak}*(1-N({_n('anteil_gub', zeile)}))"),
-        "rl_geb": wenn(f"IF({moeglich},INDEX(rl_Geb,MATCH({q},rl_ID,0))-{verbraucht('ue1')},0)"),
-        "rl_gub": wenn(f"IF({moeglich},INDEX(rl_GuB,MATCH({q},rl_ID,0))"
-                       f"-{verbraucht('ue2')}-{verbraucht('ue3')},0)"),
-        "ue1": wenn(f"MIN({_n('rl_geb', zeile)},{_n('ak_geb_neu', zeile)})"),
-        "ue2": wenn(f"MIN({_n('rl_gub', zeile)},{_n('ak_gub_neu', zeile)})"),
-        "ue3": wenn(f"MIN({_n('rl_gub', zeile)}-{ue2},{_n('ak_geb_neu', zeile)}-{ue1})"),
-        "ue_gesamt": wenn(f"{ue1}+{ue2}+{_n('ue3', zeile)}"),
-        "afa_basis": wenn(f"{_n('ak_geb_neu', zeile)}-{ue1}-{_n('ue3', zeile)}"),
-        "ak_gub": wenn(f"{_n('ak_gub_neu', zeile)}-{ue2}"),
-        "mit_quelle": wenn(f'IF({q}="",0,1)'),
+        "rl_geb": wenn(alle("rl_geb")),
+        "rl_gub": wenn(alle("rl_gub")),
+        "ue1": wenn(alle("ue1")),
+        "ue2": wenn(alle("ue2")),
+        "ue3": wenn(alle("ue3")),
+        "ue_gesamt": wenn(f"{_n('ue1', zeile)}+{_n('ue2', zeile)}+{_n('ue3', zeile)}"),
+        "afa_basis": wenn(f"{ak_geb}-{_n('ue1', zeile)}-{_n('ue3', zeile)}"),
+        "ak_gub": wenn(f"{ak_gub}-{_n('ue2', zeile)}"),
+        "mit_quelle": wenn("IF(" + "&".join(_n(f, zeile) for f, _, _ in QUELLEN)
+                           + '="",0,1)'),
+        # Finanzierung: was der Nettoerlös der Quell-Verkäufe nicht deckt
+        "ak_gesamt": wenn(ak),
+        "erloes": wenn(alle("erloes")),
+        "bedarf": wenn(f"IF({_n('gueltig', zeile)}=1,{_n('ak_gesamt', zeile)}"
+                       f"-{_n('erloes', zeile)},0)"),
+        "kredit": wenn(f'IF(AND({_n("gueltig", zeile)}=1,{_n("fin_art", zeile)}="{FIN_KREDIT}"),'
+                       f'IF({_n("kredit_betrag", zeile)}="",MAX({_n("bedarf", zeile)},0),'
+                       f'N({_n("kredit_betrag", zeile)})),0)'),
+        "eigen": wenn(f"{_n('bedarf', zeile)}-{_n('kredit', zeile)}"),
     }
+    for k, (feld, _, _) in enumerate(QUELLEN):
+        q = _n(feld, zeile)
+        moeglich = _uebertragung_moeglich(zeile, k)
+        rl_geb, rl_gub = _q("rl_geb", k, zeile), _q("rl_gub", k, zeile)
+        ue1, ue2 = _q("ue1", k, zeile), _q("ue2", k, zeile)
+        netto = f"N({_rl('vk_Nettoerloes', q)})"
+        formeln.update({
+            f"{feld}_rl_geb": wenn(f"IF({moeglich},{_rl('rl_Geb', q)}"
+                                   f"-{verbraucht('ue1', k)},0)"),
+            f"{feld}_rl_gub": wenn(f"IF({moeglich},{_rl('rl_GuB', q)}"
+                                   f"-{verbraucht('ue2', k)}-{verbraucht('ue3', k)},0)"),
+            f"{feld}_ue1": wenn(f"MAX(MIN({rl_geb},{ak_geb}-({vorher('ue1', k)})),0)"),
+            f"{feld}_ue2": wenn(f"MAX(MIN({rl_gub},{ak_gub}-({vorher('ue2', k)})),0)"),
+            f"{feld}_ue3": wenn(f"MAX(MIN({rl_gub}-{ue2},{ak_geb}-({alle('ue1')})"
+                                f"-({vorher('ue3', k)})),0)"),
+            f"{feld}_erloes": wenn(f"IF({_erloes_moeglich(zeile, k)},MAX(MIN({netto}"
+                                   f"-{verbraucht('erloes', k)},{ak}-({vorher('erloes', k)})),"
+                                   f"0),0)"),
+        })
+    return formeln
+
+
+def _hinweis_quelle(zeile: int, k: int) -> str:
+    """"; Fehlertext" der Quelle k oder ""; die Zeile bleibt im Modell."""
+    q, kj = _n(QUELLEN[k][0], zeile), _n("kaufjahr", zeile)
+    vor = f"; Quelle {k + 1}: " if k else "; "
+    pruefungen = [
+        (f"COUNTIF(rl_ID,{q})=0", "Rücklage unbekannt, keine Übertragung"),
+        (f"{kj}<{_rl('rl_Jahr', q)}", "Kauf vor Bildung der Rücklage, keine Übertragung"),
+        (f"{kj}>{_rl('rl_Fristjahr', q)}", "Kauf nach Fristjahr, keine Übertragung"),
+    ]
+    if k:
+        frueher = ",".join(f"{q}={_n(QUELLEN[j][0], zeile)}" for j in range(k))
+        pruefungen.insert(0, (f"OR({frueher})", "doppelt, keine Übertragung"))
+    ausdruck = '""'
+    for bedingung, text in reversed(pruefungen):
+        ausdruck = f'IF({bedingung},"{vor}{text}",{ausdruck})'
+    return f'IF({q}="","",{ausdruck})'
+
+
+def _hinweis_kredit(zeile: int) -> str:
+    """"; Fehlertext" der Kreditangaben oder ""."""
+    def leer(key):
+        return f'{_n(key, zeile)}=""'
+
+    art = _n("tilgungsart", zeile)
+    return (
+        f'IF({_n("fin_art", zeile)}<>"{FIN_KREDIT}",'
+        f'IF(AND({leer("kredit_betrag")},{leer("kredit_zins")}),"",'
+        f'"; Kreditangaben ohne Finanzierung Rest = {FIN_KREDIT}, kein Kredit"),'
+        f'IF({leer("kredit_zins")},"; Kredit: Zinssatz fehlt",'
+        f'IF(AND({art}="{TILGUNG_ENDFAELLIG}",{leer("laufzeit")}),'
+        f'"; Kredit: Laufzeit fehlt (endfällig)",'
+        f'IF(AND({art}<>"{TILGUNG_ENDFAELLIG}",{leer("tilgung")},{leer("laufzeit")}),'
+        f'"; Kredit: Tilgung fehlt",""))))'
+    )
 
 
 def status_neu(zeile: int) -> str:
-    """Plausibilitätsstatus je Neuobjekt; Fehler der Quelle lassen das Objekt im Modell."""
-    id_, q, kj = _n("neu_id", zeile), _n("quelle", zeile), _n("kaufjahr", zeile)
+    """Plausibilitätsstatus je Neuobjekt. Die ersten Fehler nehmen es aus dem Modell;
+    Fehler der Quellen und des Kredits lassen es im Modell und stehen nebeneinander."""
+    id_, kj = _n("neu_id", zeile), _n("kaufjahr", zeile)
     pflicht = [_n(f.key, zeile) for f in NEU_FELDER if f.pflicht]
-    rl = f"MATCH({q},rl_ID,0)"
+    hinweise = "&".join([_hinweis_quelle(zeile, k) for k in range(len(QUELLEN))]
+                        + [_hinweis_kredit(zeile)])
     return (
         f'=IF({id_}="","",'
         f'IF({_gefuellt(pflicht)}<{len(pflicht)},"Pflichtfeld fehlt",'
         f'IF(COUNTIF(ne_ID,{id_})>1,"NeuID doppelt",'
         f'IF(COUNTIF(obj_ID,{id_})>0,"NeuID wie Bestandsobjekt",'
         f'IF(OR({kj}<par_Startjahr,{kj}>par_Endjahr),"Kaufjahr außerhalb Raster",'
-        f'IF({q}="","{STATUS_OK}",'
-        f'IF(COUNTIF(rl_ID,{q})=0,"Rücklage unbekannt, keine Übertragung",'
-        f'IF({kj}<INDEX(rl_Jahr,{rl}),"Kauf vor Bildung der Rücklage, keine Übertragung",'
-        f'IF({kj}>INDEX(rl_Fristjahr,{rl}),"Kauf nach Fristjahr, keine Übertragung",'
-        f'"{STATUS_OK}")))))))))'
+        f'IF({hinweise}="","{STATUS_OK}",MID({hinweise},3,500)))))))'
     )
+
+
+# --- Darlehen der Neuobjekte (Projektplan Abschnitt 26) ---
+#
+# Zeile n gehört zu Zeile n im Blatt Neuobjekte. Auszahlung zum Ende des Kaufjahrs, Zins
+# und Tilgung ab dem Folgejahr, jeweils auf die Restschuld am Vorjahresende.
+
+
+def dspalte(key: str) -> str:
+    """Spalte der Kreditdaten im Blatt Darlehen."""
+    return _spalte_aus(DARLEHEN_SPALTEN, key)
+
+
+def dl_block_spalte(block: int, i: int) -> str:
+    """Spalte des Prognosejahrs i im Block (0 Zinsen, 1 Tilgung, 2 Restschuld)."""
+    return get_column_letter(len(DARLEHEN_SPALTEN) + 2 + block * (prognosejahre() + 1) + i)
+
+
+def darlehen_zeile(zeile: int, neu_nr: int) -> dict:
+    """Kreditdaten und Tilgungsplan einer Zeile; leer ohne Kredit."""
+    def ne(name):
+        return f"INDEX({name},{neu_nr})"
+
+    def d(key):
+        return f"${dspalte(key)}{zeile}"
+
+    def wenn(ausdruck):
+        return f'=IF({d("id")}="","",{ausdruck})'
+
+    art = d("art")
+    formeln = {
+        "id": f'=IF(N({ne("ne_Kredit")})>0,{ne("ne_ID")},"")',
+        "kaufjahr": wenn(ne("ne_Kaufjahr")),
+        "betrag": wenn(f"N({ne('ne_Kredit')})"),
+        "zinssatz": wenn(f"N({ne('ne_KreditZins')})"),
+        "art": wenn(f'IF({ne("ne_Tilgungsart")}="","{TILGUNG_ANNUITAET}",'
+                    f'{ne("ne_Tilgungsart")})'),
+        "tilgungssatz": wenn(f"N({ne('ne_Tilgung')})"),
+        "laufzeit": wenn(f'IF(N({ne("ne_Laufzeit")})>0,N({ne("ne_Laufzeit")}),"")'),
+        "rate": wenn(f'IF({art}="{TILGUNG_ENDFAELLIG}",0,IF({art}="{TILGUNG_LINEAR}",'
+                     f'{d("betrag")}*{d("tilgungssatz")},'
+                     f'{d("betrag")}*({d("zinssatz")}+{d("tilgungssatz")})))'),
+    }
+    n = prognosejahre()
+    rs = [f"{dl_block_spalte(2, i)}{zeile}" for i in range(n)]
+    formeln["getilgt"] = wenn(f'IF({rs[-1]}>0.005,"nach "&par_Endjahr,'
+                              f'{d("kaufjahr")}+COUNTIF({rs[0]}:{rs[-1]},">0.005"))')
+    kj, betrag = d("kaufjahr"), d("betrag")
+    lz = d("laufzeit")
+    for i in range(n):
+        t = f"{dl_block_spalte(0, i)}$3"
+        vor = "0" if i == 0 else f"N({rs[i - 1]})"
+        zins = f"{dl_block_spalte(0, i)}{zeile}"
+        regulaer = (f'IF({art}="{TILGUNG_ENDFAELLIG}",0,IF({art}="{TILGUNG_LINEAR}",{d("rate")},'
+                    f'MAX({d("rate")}-{zins},0)))')
+        formeln[("zins", i)] = wenn(f"{vor}*{d('zinssatz')}")
+        # nach der Laufzeit die ganze Restschuld, nie mehr als die Restschuld
+        formeln[("tilgung", i)] = wenn(
+            f"IF({t}<={kj},0,MIN({vor},IF(AND(ISNUMBER({lz}),{t}>={kj}+N({lz})),{vor},"
+            f"{regulaer})))")
+        formeln[("restschuld", i)] = wenn(
+            f"IF({t}<{kj},0,IF({t}={kj},{betrag},"
+            f"{vor}-{dl_block_spalte(1, i)}{zeile}))")
+    return formeln
 
 
 # --- Liquidität und Auswertung (Etappe 7 und 8, Projektplan Abschnitte 14 und 15) ---
@@ -770,7 +955,7 @@ def status_neu(zeile: int) -> str:
 # A Plan wie erfasst, B sofort versteuern und Kapital anlegen, C sofort versteuern und
 # trotzdem kaufen, Baseline alles halten. Die Steuer rechnet mit Verlustvortrag ohne
 # Mindestbesteuerung. Die Liquidität wird in allen Szenarien mit par_Alternativrendite
-# verzinst. Alle Werte sind vor Finanzierung.
+# verzinst. Finanziert sind nur Neuobjekte mit Kredit (Blatt Darlehen).
 
 
 def _zelle(spalten, versatz: int = 0):
@@ -838,11 +1023,13 @@ def liquiditaet_zeile(sz: Szenario):
             "ergebnis": f"={c('einnahmen', zeile)}-{c('ausgaben', zeile)}-{c('afa', zeile)}",
             # Zins auf den Stand am Vorjahresende, Zufluss zum Jahresende
             "zins": f"={kum_vor}*par_Alternativrendite",
-            "zve": f"={c('ergebnis', zeile)}+{c('verkauf', zeile)}+{c('zins', zeile)}",
+            "zve": (f"={c('ergebnis', zeile)}+{c('verkauf', zeile)}+{c('zins', zeile)}"
+                    f"-{c('kreditzins', zeile)}"),
             **_steuer(c, zeile, erstes_jahr, c("zve", zeile)),
             "zufluss": (f"={c('einnahmen', zeile)}-{c('ausgaben', zeile)}+{c('zins', zeile)}"
-                        f"+{c('verkaufserloes', zeile)}-{c('steuer', zeile)}"
-                        f"-{c('kauf', zeile)}"),
+                        f"-{c('kreditzins', zeile)}+{c('verkaufserloes', zeile)}"
+                        f"-{c('steuer', zeile)}-{c('kauf', zeile)}+{c('kredit', zeile)}"
+                        f"-{c('tilgung', zeile)}"),
             "kum": f"={kum_vor}+{c('zufluss', zeile)}",
         }
     return zeile_formeln
@@ -867,6 +1054,11 @@ def _liq_plan(c, t: str, sz: Szenario) -> dict:
         "rueckfluss": f"={erloese}-SUMIFS(rls_Gewinne,rls_Jahr,{t})",
         "kauf": (f"=SUMIFS(ne_Kaufpreis,ne_Kaufjahr,{t},ne_Gueltig,1{neu})"
                  f"+SUMIFS(ne_Nebenkosten,ne_Kaufjahr,{t},ne_Gueltig,1{neu})"),
+        # Kredit zum Kauf am Jahresende ausgezahlt, Zins und Tilgung ab dem Folgejahr
+        "kreditzins": f"={_summe_zeilen('prg_KreditZins', t, sz)}",
+        "kredit": f"=SUMIFS(ne_Kredit,ne_Kaufjahr,{t},ne_Gueltig,1{neu})",
+        "tilgung": f"={_summe_zeilen('prg_Tilgung', t, sz)}",
+        "restschuld": f"={_summe_zeilen('prg_Restschuld', t, sz)}",
     }
 
 
@@ -889,6 +1081,10 @@ def _liq_baseline(c, zeile: int, t: str, erstes_jahr: bool) -> dict:
         "verkaufserloes": "=0",
         "rueckfluss": "=0",
         "kauf": "=0",
+        "kreditzins": "=0",
+        "kredit": "=0",
+        "tilgung": "=0",
+        "restschuld": "=0",
     }
 
 
@@ -915,7 +1111,9 @@ def auswertung_zeile(sz: Szenario):
             "ergebnis": liq("Ergebnis"),
             "verkauf": liq("Verkauf"),
             "zins": liq("Zins"),
-            "guv": f"={c('ergebnis', zeile)}+{c('verkauf', zeile)}+{c('zins', zeile)}",
+            "kreditzins": liq("KreditZins"),
+            "guv": (f"={c('ergebnis', zeile)}+{c('verkauf', zeile)}+{c('zins', zeile)}"
+                    f"-{c('kreditzins', zeile)}"),
             "steuer": liq("Steuer"),
             "nach_steuer": f"={c('guv', zeile)}-{c('steuer', zeile)}",
             "steuer_kum": f"={_vor(c, 'steuer_kum', zeile, erstes_jahr)}+{c('steuer', zeile)}",
@@ -926,7 +1124,9 @@ def auswertung_zeile(sz: Szenario):
             "ruecklage": ruecklage,
             "vortrag": liq("Vortrag"),
             "liquiditaet": liq("Kum"),
-            "vermoegen": f"={c('verkehrswert', zeile)}+{c('liquiditaet', zeile)}",
+            "restschuld": liq("Restschuld"),
+            "vermoegen": (f"={c('verkehrswert', zeile)}+{c('liquiditaet', zeile)}"
+                          f"-{c('restschuld', zeile)}"),
             # Steuer, wenn alle Objekte zum Verkehrswert verkauft und die Rücklage aufgelöst würde
             "latente_steuer": (f"=MAX({c('stille_reserven', zeile)}+{c('ruecklage', zeile)}"
                                f"-{c('vortrag', zeile)},0)*par_Steuersatz"),
@@ -959,7 +1159,7 @@ def _nicht_ok(status: str, ausnahme: str = None) -> str:
 
 
 def pruefung_anzahl() -> dict:
-    genannt = "COUNTIF(ne_Quelle,rl_ID)"
+    genannt = "(" + "+".join(f"COUNTIF({q},rl_ID)" for _, q, _ in QUELLEN) + ")"
     # Restbetrag über einen halben Cent, damit Rundung nicht anschlägt
     rest = '(rl_ID<>"")*(rl_Aufloesung>0.005)'
     gueltig = f'((vk_Status="{STATUS_OK}")+(vk_Status="{STATUS_6B_UNZULAESSIG}"))'
@@ -993,6 +1193,7 @@ def pruefung_anzahl() -> dict:
         "neukauf_kst": '=SUMPRODUCT((ne_KSt<>"")*(COUNTIF(nk_ID,ne_KSt)=0))',
         "afa_plan": '=COUNTIF(afp_Anzahl,">0")',
         "anlagen_afa": '=COUNTIF(obj_AnlDiff,">1")+COUNTIF(obj_AnlDiff,"<-1")',
+        "restschuld": '=COUNTIF(dl_Getilgt,"nach*")',
     }
 
 

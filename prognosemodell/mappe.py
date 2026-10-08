@@ -21,6 +21,7 @@ from .modelle import (ANLAGE_FELDER, ANLAGE_JAHRE_NAME, ANLAGE_SPALTEN, ANLAGE_S
                       FMT_TEXT, FMT_ZAHL, HINWEIS, MAX_NEUOBJEKTE, MAX_VARIANTEN, PRUEFUNGEN,
                       VARIANTEN_KOPF, WARNUNG,
                       MAX_OBJEKTE, MAX_VERKAEUFE, NEU_FELDER, NEU_SPALTEN, NEU_STATUS_NAME, OBJEKT_FELDER,
+                      DARLEHEN_BLOECKE, DARLEHEN_ERSTE, DARLEHEN_SPALTEN, NEU_DETAIL_ERSTE, QUELLEN,
                       PARAMETER, PROGNOSE_SPALTEN, RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN,
                       STATUS_NAME, STATUS_UEBERSCHRIFT, SZ_A, SZ_BASELINE, SZENARIEN,
                       VERGLEICH_KENNZAHLEN, VERKAUF_FELDER, VERKAUF_SPALTEN, VERKAUF_STATUS_NAME, Modell,
@@ -30,7 +31,8 @@ from .modelle import (ANLAGE_FELDER, ANLAGE_JAHRE_NAME, ANLAGE_SPALTEN, ANLAGE_S
 # Felder, deren Wert aus dem Blatt Anlagen nur eine Vermutung ist: orange statt grün
 ANLAGEN_PRUEFEN = ("baujahr",)
 
-HINWEIS_FINANZIERUNG = "Alle Werte vor Finanzierung (ohne Zins und Tilgung)."
+HINWEIS_FINANZIERUNG = ("Finanzierung: nur Kredite der Neuobjekte (Blatt Neuobjekte, "
+                        "Tilgungsplan im Blatt Darlehen); Bestandsobjekte ohne Zins und Tilgung.")
 
 FONT_TITEL = Font(bold=True, size=14)
 FONT_KOPF = Font(bold=True, color="FFFFFF")
@@ -71,10 +73,12 @@ def _kopf(ws, zeile: int, werte: list) -> None:
         c.alignment = Alignment(wrap_text=True, vertical="center")
 
 
-def _validierung(ws, f, bereich: str) -> None:
-    """Genau eine Datenüberprüfung je Eingabespalte: Auswahlliste oder Zahlenbereich,
-    dazu die Eingabehilfe des Felds beim Anklicken."""
-    if f.auswahl:
+def _validierung(ws, f, bereich: str, liste: str = None) -> None:
+    """Genau eine Datenüberprüfung je Eingabespalte: Auswahlliste (auch aus einem benannten
+    Bereich, liste) oder Zahlenbereich, dazu die Eingabehilfe des Felds beim Anklicken."""
+    if liste:
+        dv = DataValidation(type="list", formula1=liste, allow_blank=True)
+    elif f.auswahl:
         dv = DataValidation(type="list", formula1='"' + ",".join(f.auswahl) + '"',
                             allow_blank=True)
     elif f.minimum is not None or f.maximum is not None:
@@ -460,6 +464,11 @@ def _blatt_neukauf(wb, modell: Modell) -> None:
     _name(wb, "nk_Schluessel", f"'Neukauf-KSt'!${schluessel}${erste}:${schluessel}${letzte}")
     _name(wb, "nk_Fort", f"'Neukauf-KSt'!${get_column_letter(fort0)}${erste}:"
                          f"${get_column_letter(fort0 + n - 1)}${letzte}")
+    # je Kostenstelle eine Zeile: Auswahlliste der Spalte Kostenstelle Neukauf (Neuobjekte)
+    liste = get_column_letter(import0 + n + 1)
+    for block in range(MAX_NEUKAUF):
+        ws[f"{liste}{erste + block}"] = f'=IF($A${erste + block * je}="","",$A${erste + block * je})'
+    _name(wb, "nk_Liste", f"'Neukauf-KSt'!${liste}${erste}:${liste}${erste + MAX_NEUKAUF - 1}")
     for block in range(MAX_NEUKAUF):
         kopf = erste + block * je
         for k, (key, text, nr, satz) in enumerate(NEUKAUF_POSITIONEN):
@@ -500,7 +509,7 @@ def _blatt_neukauf(wb, modell: Modell) -> None:
         f"{a}{erste}:{get_column_letter(j0 + n - 1)}{letzte}",
         FormulaRule(formula=[f"AND(ISNUMBER({a}{erste}),{a}{erste}={imp}{erste})"],
                     fill=FILL_EINGELESEN))
-    for i in range(n + 1):
+    for i in range(n + 2):
         ws.column_dimensions[get_column_letter(import0 + i)].hidden = True
     for i in range(n):
         ws.column_dimensions[get_column_letter(j0 + i)].width = 11
@@ -618,17 +627,18 @@ def _blatt_neuobjekte(wb, modell: Modell) -> None:
         bst = get_column_letter(i)
         ws.column_dimensions[bst].width = s.breite
         _name(wb, s.name, f"'Neuobjekte'!${bst}${erste}:${bst}${letzte}")
+    # Auswahl aus den gebildeten Rücklagen bzw. den Neukauf-Kostenstellen
+    listen = {feld: "rl_ID" for feld, _, _ in QUELLEN}
+    listen["kst"] = "nk_Liste"
     for i, f in enumerate(NEU_FELDER, start=1):
         bst = get_column_letter(i)
-        if f.key != "quelle":
+        if f.key in listen:
+            _validierung(ws, dataclasses.replace(f, auswahl=None), f"{bst}{erste}:{bst}{letzte}",
+                         liste=listen[f.key])
+        else:
             _validierung(ws, f, f"{bst}{erste}:{bst}{letzte}")
         # Formeln aus „reinvestieren = ja“ im Blatt Verkäufe sind Annahmen (blau)
         _farblogik(ws, bst, erste, letzte, dataclasses.replace(f, pflicht=False, annahme=True))
-    # Quelle als Auswahl aus den gebildeten Rücklagen
-    q = formeln.nspalte("quelle")
-    dv = DataValidation(type="list", formula1="rl_ID", allow_blank=True)
-    ws.add_data_validation(dv)
-    dv.add(f"{q}{erste}:{q}{letzte}")
 
     ws.column_dimensions[st].width = 44
     _name(wb, NEU_STATUS_NAME, f"'Neuobjekte'!${st}${erste}:${st}${letzte}")
@@ -664,7 +674,67 @@ def _blatt_neuobjekte(wb, modell: Modell) -> None:
                          "die Annahme.")
     ws[f"{hinweis}5"] = ("AfA-Methode degressiv: par_AfADegressiv vom Restbuchwert, Wechsel zur "
                          "linearen AfA über die Restnutzungsdauer (1 / AfA-Satz), sobald höher.")
+    ws[f"{hinweis}7"] = ("Bis zu drei Quell-Rücklagen: erst alle Gebäudegewinne auf das Gebäude "
+                         "(ü1), dann die G+B-Gewinne auf G+B (ü2), der Rest auf das Gebäude (ü3). "
+                         "Die Werte je Quelle stehen in den eingeklappten Spalten (+ über Status).")
+    ws[f"{hinweis}8"] = ("Finanzierungsbedarf = Kaufpreis + Nebenkosten − Nettoerlös der "
+                         "Quell-Verkäufe (in Zeilenreihenfolge, soweit nicht schon eingesetzt). "
+                         "Finanzierung Rest = Kredit: Kreditbetrag leer = ganzer Bedarf; der Rest "
+                         "kommt aus Eigenmitteln (Liquidität). Tilgungsplan im Blatt Darlehen.")
+    # Hilfsspalten je Quelle eingeklappt, Schalter über der Statusspalte
+    von = len(NEU_FELDER) + 1 + [s.key for s in NEU_SPALTEN].index(NEU_DETAIL_ERSTE)
+    ws.column_dimensions.group(get_column_letter(von), get_column_letter(status_spalte - 1),
+                               hidden=True)
+    ws.sheet_properties.outlinePr.summaryRight = True
     ws.freeze_panes = "B2"
+
+
+def _blatt_darlehen(wb) -> None:
+    """Tilgungsplan je Kredit eines Neuobjekts: Zinsen, Tilgung und Restschuld je Jahr."""
+    ws = wb.create_sheet("Darlehen")
+    erste = DARLEHEN_ERSTE
+    letzte = erste + MAX_NEUOBJEKTE - 1
+    n = prognosejahre()
+    ws["A1"] = ("Kredite der Neuobjekte (Blatt Neuobjekte, Finanzierung Rest = Kredit). "
+                "Auszahlung zum Ende des Kaufjahrs; Zins und Tilgung ab dem Folgejahr auf die "
+                "Restschuld am Vorjahresende. Annuität: gleiche Rate (Zins + anfängliche "
+                "Tilgung); linear: gleiche Tilgung; endfällig: Rückzahlung nach der Laufzeit. "
+                "Ist die Restschuld getilgt, entfallen Zins und Tilgung.")
+    ws["A1"].font = Font(italic=True)
+    _kopf(ws, 3, [s.ueberschrift for s in DARLEHEN_SPALTEN])
+    ws.row_dimensions[3].height = 45
+    for i, s in enumerate(DARLEHEN_SPALTEN, start=1):
+        bst = get_column_letter(i)
+        ws.column_dimensions[bst].width = s.breite
+        _name(wb, s.name, f"Darlehen!${bst}${erste}:${bst}${letzte}")
+    for block, (key, text, name) in enumerate(DARLEHEN_BLOECKE):
+        a, z = formeln.dl_block_spalte(block, 0), formeln.dl_block_spalte(block, n - 1)
+        ws[f"{a}2"] = text
+        ws[f"{a}2"].font = Font(bold=True)
+        _name(wb, name, f"Darlehen!${a}${erste}:${z}${letzte}")
+        for i in range(n):
+            sp = formeln.dl_block_spalte(block, i)
+            c = ws[f"{sp}3"]
+            c.value, c.number_format = f"=par_Startjahr+{i}", FMT_JAHR
+            c.font, c.fill = FONT_KOPF, FILL_KOPF
+            ws.column_dimensions[sp].width = 11
+            # Summe aller Kredite je Jahr unter der Tabelle
+            c = ws[f"{sp}{letzte + 1}"]
+            c.value, c.number_format = f"=SUM({sp}{erste}:{sp}{letzte})", FMT_EURO
+            c.font = Font(bold=True)
+        ws.column_dimensions[formeln.dl_block_spalte(block, -1)].width = 3
+    ws.cell(row=letzte + 1, column=1, value="Summe").font = Font(bold=True)
+    for neu_nr, zeile in enumerate(range(erste, letzte + 1), start=1):
+        rechnung = formeln.darlehen_zeile(zeile, neu_nr)
+        for i, s in enumerate(DARLEHEN_SPALTEN, start=1):
+            c = ws.cell(row=zeile, column=i, value=rechnung[s.key])
+            c.number_format, c.fill = s.format, FILL_BERECHNET
+        for block, (key, _, _) in enumerate(DARLEHEN_BLOECKE):
+            for i in range(n):
+                c = ws[f"{formeln.dl_block_spalte(block, i)}{zeile}"]
+                c.value, c.number_format = rechnung[(key, i)], FMT_EURO
+                c.fill = FILL_BERECHNET
+    ws.freeze_panes = f"B{erste}"
 
 
 def _blatt_ruecklagen(wb) -> None:
@@ -764,8 +834,9 @@ def _blatt_liquiditaet(wb) -> None:
         "Gewinne, Auflösung und Gewinnzuschlag), in B und C jeder Veräußerungsgewinn sofort.",
         "Zinsertrag = Liquidität am Vorjahresende × Rendite Alternativanlage; er ist steuerpflichtig. "
         "Negative Liquidität kostet denselben Satz.",
-        "freier Mittelzufluss = Einnahmen − Ausgaben + Zins + Verkaufserlöse − Steuer − Kauf "
-        "Neuobjekte.",
+        "freier Mittelzufluss = Einnahmen − Ausgaben + Zins − Kreditzinsen + Verkaufserlöse − "
+        "Steuer − Kauf Neuobjekte + Kreditauszahlung − Tilgung. Kreditzinsen mindern das "
+        "Ergebnis, die Tilgung nicht.",
         "B: Neuobjekte mit Quelle-Rücklage entfallen, ihr Geld bleibt in der Alternativanlage. "
         "C: alle Neuobjekte werden gekauft, die AfA läuft von den vollen AK.",
         "Baseline: alle Bestandsobjekte werden über das ganze Raster gehalten, ohne Verkäufe und "
@@ -780,12 +851,12 @@ def _blatt_auswertung(wb) -> None:
         (sz.titel, aus_spalten(sz), formeln.auswertung_zeile(sz)) for sz in SZENARIEN
     ], [
         "Gesamt-GuV vor Steuern = laufendes Ergebnis + steuerwirksam aus Verkauf und Rücklage "
-        "+ Zinsertrag.",
+        "+ Zinsertrag − Zinsen Kredite.",
         "stille Reserven = Verkehrswert − Buchwert (Gebäude + G+B) der Objekte im Bestand am "
         "Jahresende. In B und C ohne § 6b-Kürzung der Neuobjekte.",
         "latente Steuer = (stille Reserven + Rücklagenbestand − Verlustvortrag) × Grenzsteuersatz, "
         "mindestens 0: die Steuer, wenn alle Objekte zum Verkehrswert verkauft würden.",
-        "Gesamtvermögen = Verkehrswert Bestand + Liquidität kumuliert.",
+        "Gesamtvermögen = Verkehrswert Bestand + Liquidität kumuliert − Restschuld Kredite.",
     ])
 
 
@@ -1100,11 +1171,12 @@ REITER = {"Start": "305496", "Parameter": "FFC000", "Objekte": "FFC000", "Anlage
           "AfA-Plan": "FFC000", "Neukauf-KSt": "FFC000",
           "Verkäufe": "FFC000",
           "Neuobjekte": "FFC000", "Prognose": "A5A5A5", "Rücklagen": "A5A5A5",
-          "Liquidität": "A5A5A5", "Prüfung": "70AD47", "Varianten": "70AD47",
+          "Liquidität": "A5A5A5", "Darlehen": "A5A5A5", "Prüfung": "70AD47", "Varianten": "70AD47",
           "BWA-Zuordnung": "FFC000"}
 FARBE_AUSGABE = "5B9BD5"
 # im Schnellcheck ausgeblendet; über Rechtsklick auf einen Reiter wieder einblendbar
-SCHNELL_AUSGEBLENDET = ("AfA-Plan", "Neukauf-KSt", "Prognose", "Rücklagen", "Liquidität", "Auswertung")
+SCHNELL_AUSGEBLENDET = ("AfA-Plan", "Neukauf-KSt", "Darlehen", "Prognose", "Rücklagen", "Liquidität",
+                        "Auswertung")
 
 
 def _link(zelle, blatt: str) -> None:
@@ -1247,6 +1319,7 @@ def erstelle_mappe(modell: Modell) -> Workbook:
     _blatt_neukauf(wb, modell)
     _blatt_verkaeufe(wb, modell)
     _blatt_neuobjekte(wb, modell)
+    _blatt_darlehen(wb)
     _blatt_prognose(wb)
     _blatt_ruecklagen(wb)
     _blatt_liquiditaet(wb)
