@@ -1,14 +1,22 @@
 """Prüfskript: Mappe generieren, mit LibreOffice headless durchrechnen, gegen Sollwerte prüfen.
 
-Aufruf: python -m pruefung.pruefen [Teil des Fallnamens]
+Aufruf: python -m pruefung.pruefen [-j PROZESSE] [Teil des Fallnamens]
 Beendet sich mit Fehlercode 1, sobald ein Fall abweicht.
+
+Die Fälle laufen parallel (Standard: ein Prozess je Kern) und rechnen mit einer kleinen
+Mappe (TEST_KAPAZITAET), denn jede leere Zeile kostet LibreOffice Rechenzeit. Die Fälle in
+VOLLE_GROESSE rechnen mit der Mappe in Originalgröße.
 
 Fälle mit Makroaufrufen (Etappe 9) werden als .xlsm gebaut, in LibreOffice mit
 Makros geöffnet, die Makros ausgeführt und das Ergebnis danach geprüft.
 """
 
+import argparse
+import concurrent.futures
 import contextlib
 import dataclasses
+import io
+import os
 import shutil
 import subprocess
 import sys
@@ -21,7 +29,7 @@ from prognosemodell.einlesen import (anlagen_zusammenfuehren, lese_inventar, les
                                      ordne_anlagen_zu, zusammenfuehren)
 from prognosemodell.makros import LibreOffice, speichere_mit_makros
 from prognosemodell.mappe import erstelle_mappe
-from prognosemodell.modelle import (FEHLER, HINWEIS, MAX_OBJEKTE, PRUEFUNGEN, Anlage,
+from prognosemodell.modelle import (FEHLER, HINWEIS, PRUEFUNGEN, Anlage, Kapazitaet,
                                     LIQ_SPALTEN, NEU_FELDER, NEU_SPALTEN, VERKAUF_FELDER,
                                     VERKAUF_SPALTEN,
                                     STATUS_ANNAHME_GELOESCHT, WARNUNG, Modell, Neuobjekt,
@@ -38,6 +46,11 @@ TOLERANZ = 0.01  # ein Cent
 # Fälle vor der Alterslogik: Sollwerte ohne Alterung, Anlaufminderung und Großmaßnahmen.
 # Gilt für jeden Fall, dessen Name nicht mit „Erhaltung“ beginnt.
 OHNE_ALTERUNG = {"par_ErhAlterung": 0, "par_NeuErhAnlaufFaktor": 1, "par_SanQuote": 0}
+# Zeilen je Eingabeblatt in den Prüfmappen: reicht für jeden Fall, rechnet viel schneller
+TEST_KAPAZITAET = Kapazitaet(objekte=10, verkaeufe=10, neuobjekte=10, neukauf=5)
+# Fälle, die zur Kontrolle mit der Mappe in Originalgröße rechnen (ohne prg_neu)
+VOLLE_GROESSE = ("Etappe 7: Abnahme Summen über alle Objekte, Plan gleich Baseline",
+                 "Etappe 9: Testobjekt ohne Befund")
 KAPITALANLAGE = "Kapitalanlage (Nettoerlös − Reinvestition + Kredit − Steuer ca. − Ablösung)"
 FEHLT = object()        # Makro ohne Rückgabewert: nur prüfen, dass es fehlerfrei läuft
 AUSGEBLENDET = "Zeile ausgeblendet"  # statt Bereichsname: Zeilennummer im Blatt Prognose
@@ -72,8 +85,10 @@ def mappe(modell: Modell, zellen: dict = None):
     return wb
 
 
-def durchrechnen(modell: Modell, arbeitsordner: Path, zellen: dict = None):
-    """Mappe schreiben, per LibreOffice neu berechnen lassen, Werte zurückgeben."""
+def durchrechnen(modell: Modell, arbeitsordner: Path, zellen: dict = None, profil: Path = None):
+    """Mappe schreiben, per LibreOffice neu berechnen lassen, Werte zurückgeben.
+
+    Ein gemeinsames Profil für mehrere Aufrufe spart den Aufbau bei jedem Start."""
     roh = arbeitsordner / "roh" / "mappe.xlsx"
     roh.parent.mkdir(parents=True, exist_ok=True)
     mappe(modell, zellen).save(roh)
@@ -82,7 +97,7 @@ def durchrechnen(modell: Modell, arbeitsordner: Path, zellen: dict = None):
     if not soffice:
         sys.exit("LibreOffice (soffice) nicht gefunden.")
     subprocess.run(
-        [soffice, f"-env:UserInstallation=file://{arbeitsordner}/lo-profil", "--headless",
+        [soffice, f"-env:UserInstallation={(profil or arbeitsordner / 'lo-profil').as_uri()}", "--headless",
          "--calc", "--convert-to", "xlsx", "--outdir", str(aus), str(roh)],
         check=True, capture_output=True, timeout=120,
     )
@@ -149,7 +164,7 @@ def prg(objekt_nr: int, jahr: int) -> int:
 
 def prg_neu(neu_nr: int, jahr: int) -> int:
     """Zeile im Prognosebereich für Neuobjekt neu_nr; die Neuobjekte folgen auf alle Objektblöcke."""
-    return prg(MAX_OBJEKTE + neu_nr, jahr)
+    return prg(TEST_KAPAZITAET.objekte + neu_nr, jahr)
 
 
 def rls(jahr: int) -> int:
@@ -1632,7 +1647,7 @@ def faelle():
             (AUSGEBLENDET, 2 + 2 * 20, False),   # Block OBJ-003
             (AUSGEBLENDET, 2 + 4 * 20, True),    # leerer Block
             (AUSGEBLENDET, 2 + 5 * 20 - 1, True),
-            (AUSGEBLENDET, 2 + MAX_OBJEKTE * 20, True),  # leerer Neuobjektblock
+            (AUSGEBLENDET, 2 + TEST_KAPAZITAET.objekte * 20, True),  # leerer Neuobjektblock
         ], [
             ("modObjekte", "ObjektDuplizieren", ("OBJ-001", "OBJ-003"), 3),
             ("modObjekte", "ObjektAnlegen", ("OBJ-004",), 4),
@@ -1886,32 +1901,95 @@ def makro_lauf(lo, fall: str, modell: Modell, aufrufe, ordner: Path, zellen: dic
     return load_workbook(ordner / "gerechnet.xlsx", data_only=True), fehler
 
 
-def main() -> int:
-    """Alle Fälle prüfen; optional nur Fälle, deren Name den ersten Aufrufparameter enthält."""
-    filter_ = sys.argv[1] if len(sys.argv) > 1 else ""
+def lauf(i: int, tmp: Path, lo_stapel: contextlib.ExitStack = None) -> tuple:
+    """Fall i rechnen und prüfen. Liefert (Fallname, Ausgabe, Anzahl Abweichungen)."""
+    fall, objekte, pruefungen, *aufrufe = _faelle()[i]
+    zellen = None
+    if isinstance(objekte, Getippt):
+        objekte, zellen = objekte.modell, objekte.zellen
+    modell = objekte if isinstance(objekte, Modell) else Modell(objekte=objekte)
+    if not fall.startswith("Erhaltung"):
+        modell.parameter = {**OHNE_ALTERUNG, **modell.parameter}
+    if fall not in VOLLE_GROESSE:
+        modell.kapazitaet = TEST_KAPAZITAET
     fehler = 0
+    ausgabe = io.StringIO()
+    with contextlib.redirect_stdout(ausgabe):
+        if aufrufe:
+            lo = _libreoffice(tmp, lo_stapel)
+            wb, fehler = makro_lauf(lo, fall, modell, aufrufe[0], tmp / f"fall{i}", zellen)
+        else:
+            wb = durchrechnen(modell, tmp / f"fall{i}", zellen, tmp / "lo-profil")
+        fehler += pruefe(fall, wb, pruefungen)
+    return fall, ausgabe.getvalue(), fehler
+
+
+_FAELLE = None
+_LO = None
+
+
+def _faelle() -> list:
+    global _FAELLE
+    if _FAELLE is None:
+        _FAELLE = list(faelle())
+    return _FAELLE
+
+
+def _libreoffice(tmp: Path, stapel: contextlib.ExitStack):
+    """Eine LibreOffice-Sitzung (UNO) für alle Makrofälle eines Prozesses."""
+    global _LO
+    if _LO is None:
+        _LO = stapel.enter_context(LibreOffice(tmp / "makros"))
+    return _LO
+
+
+def main() -> int:
+    """Alle Fälle prüfen; optional nur Fälle, deren Name den Filtertext enthält."""
+    argumente = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    argumente.add_argument("filter", nargs="?", default="", help="Teil des Fallnamens")
+    argumente.add_argument("-j", "--prozesse", type=int, default=os.cpu_count() or 1,
+                           help="Fälle parallel (Standard: Anzahl Kerne)")
+    args = argumente.parse_args()
+    auswahl = [i for i, f in enumerate(_faelle()) if args.filter in f[0]]
+    # Makrofälle teilen sich eine UNO-Sitzung im Hauptprozess, die übrigen laufen im Pool
+    makro = [i for i in auswahl if len(_faelle()[i]) > 3]
+    rest = [i for i in auswahl if i not in makro]
+    fehler = 0
+    fertig = 0
+
+    def melden(fall: str, ausgabe: str, n: int) -> None:
+        nonlocal fehler, fertig
+        fehler += n
+        fertig += 1
+        print(ausgabe, end="")
+        print(f"[{fertig}/{len(auswahl)}] {'FEHLER' if n else 'OK'}  {fall}", flush=True)
+
     with tempfile.TemporaryDirectory() as tmp, contextlib.ExitStack() as stapel:
-        lo = None
-        for i, (fall, objekte, pruefungen, *aufrufe) in enumerate(faelle()):
-            if filter_ not in fall:
-                continue
-            zellen = None
-            if isinstance(objekte, Getippt):
-                objekte, zellen = objekte.modell, objekte.zellen
-            modell = objekte if isinstance(objekte, Modell) else Modell(objekte=objekte)
-            if not fall.startswith("Erhaltung"):
-                modell.parameter = {**OHNE_ALTERUNG, **modell.parameter}
-            if aufrufe:
-                if lo is None:                   # eine LibreOffice-Sitzung für alle Makrofälle
-                    lo = stapel.enter_context(LibreOffice(Path(tmp) / "makros"))
-                wb, n = makro_lauf(lo, fall, modell, aufrufe[0], Path(tmp) / f"fall{i}",
-                                   zellen)
-                fehler += n
-            else:
-                wb = durchrechnen(modell, Path(tmp) / f"fall{i}", zellen)
-            fehler += pruefe(fall, wb, pruefungen)
+        tmp = Path(tmp)
+        prozesse = max(1, min(args.prozesse, len(rest)))
+        pool = stapel.enter_context(concurrent.futures.ProcessPoolExecutor(
+            prozesse, initializer=_arbeiter_start, initargs=(str(tmp),)))
+        laeufe = [pool.submit(_im_arbeiter, i) for i in rest]
+        for i in makro:
+            melden(*lauf(i, tmp, stapel))
+        for erledigt in concurrent.futures.as_completed(laeufe):
+            melden(*erledigt.result())
     print(f"\n{fehler} Abweichung(en)" if fehler else "\nAlle Prüfungen bestanden.")
     return 1 if fehler else 0
+
+
+_ORDNER = None
+
+
+def _arbeiter_start(tmp: str) -> None:
+    """Je Arbeitsprozess ein eigener Ordner mit eigenem LibreOffice-Profil."""
+    global _ORDNER
+    _ORDNER = Path(tempfile.mkdtemp(prefix=f"prozess{os.getpid()}_", dir=tmp))
+    _faelle()
+
+
+def _im_arbeiter(i: int) -> tuple:
+    return lauf(i, _ORDNER)
 
 
 if __name__ == "__main__":
