@@ -1276,3 +1276,10 @@ Im Blatt Neuobjekte nennt die neue Spalte „Kostenstelle Neukauf“ (ne\_KSt) d
 In allen BWA-Blättern der Mappe (Kostenstellen, Neuobjekte, Neukauf-Kostenstellen, „Alle Objekte“) sind die zwölf Monatsspalten des Basisjahrs (H–S) als Gliederung gruppiert und beim Öffnen eingeklappt. Sichtbar bleiben Vorjahre, Basisjahr und Planjahre; der Schalter „+“ sitzt über der Jahresspalte T. Die Vorlage der Kostenstellen-Datei lässt die Monate offen, weil dort erfasst wird (`bwa_kopf(..., monate_einklappen=False)`).
 
 - `pruefen`, Fall „BWA: Abnahmefall Verkauf und Reinvestition“: Spalten H und S Ebene 1 und ausgeblendet, G, T und U offen, je für OBJ-001, NEU-001 und „Alle Objekte“ (nach dem Speichern durch LibreOffice).
+
+## 25. Grund und Boden über „Kostenstelle“ in der Inventarbezeichnung
+
+Im Anlagenverzeichnis der Kanzlei fehlt bei vielen Anlagen Grund und Boden die KOST1; die Bezeichnung lautet „Grund und Boden …“ oder „Grund u. Boden …“, gefolgt vom Namen oder der Nummer der Kostenstelle. Mit Namen griff die Zuordnung über die Bezeichnung schon (Füllwörter „grund“, „boden“, „u“ zählen nicht). Neu erkennt sie auch die Nummer in der Form „Kostenstelle 5“ und „Kostenst. 5“, bisher nur „KSt 5“. Der Buchwert geht dann in AK G+B des Objekts und beim Verkauf in den Gewinn auf G+B.
+
+- `pruefen_einlesen`: „Grund u. Boden Kostenstelle 4“, „Grund u. Boden Kostenst. 3“ und „Grund u. Boden Beispielweg 7“ werden zugeordnet.
+- `pruefen`, Fall „Anlagen: G+B über „Kostenstelle“ in der Bezeichnung, wirkt im Verkauf“: AK G+B 410.000 im Objekt und im Verkauf, Gewinn G+B 190.000.
