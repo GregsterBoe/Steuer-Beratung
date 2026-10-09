@@ -246,4 +246,23 @@ punkte([
     "Berufsträger prüfen.**",
 ])
 
+doc.add_heading("9. Neue Version der Mappe: Eingaben übernehmen", level=1)
+absatz("Eine neue Version wird mit denselben Dateien erzeugt und bekommt die alte Mappe "
+       "mit: python -m prognosemodell --kostenstellen Kostenstellen.xlsx --inventar "
+       "Inventar.xlsx --uebernehmen Alte_Mappe.xlsx --ausgabe Neue_Mappe.xlsx. Die alte "
+       "Mappe bleibt unverändert, der Bericht nennt je Blatt die übernommenen Werte.")
+punkte([
+    "**Übernommen werden eingetippte Werte** aus Parameter, Objekte, Anlagen (Zuordnung zum "
+    "Objekt, AfA von Hand), AfA-Plan, Neukauf-KSt, Verkäufe, Neuobjekte, BWA-Zuordnung und "
+    "Varianten. Blaue Annahmen (Formeln) rechnet die neue Mappe selbst.",
+    "**Spalten nach Überschrift:** neue Spalten einer neuen Version behalten ihre "
+    "Vorbelegung; Spalten, die es nicht mehr gibt, meldet der Bericht.",
+    "**Kostenstellen-Datei geht vor:** Werte, die beim Einlesen entstanden sind, kommen aus "
+    "der neuen Kostenstellen-Datei; nur abweichend eingetippte Werte (orange) bleiben. "
+    "Änderungen in den Kostenstellenblättern der Mappe werden nicht übernommen, dafür die "
+    "Kostenstellen-Datei pflegen.",
+    "Verkäufe und Neuobjekte behalten ihre Zeilennummer (Rücklage und Reinvestition hängen "
+    "daran); Objekte, Anlagen und Neukauf-Kostenstellen werden über ihre ID zugeordnet.",
+])
+
 doc.save(sys.argv[1])
