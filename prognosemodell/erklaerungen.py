@@ -172,8 +172,10 @@ SPALTEN = {
     # Neuobjekte
     "ne_Gueltig": "1 = rechnet im Modell: Pflichtfelder da, NeuID eindeutig und keine ObjektID, "
                   "Kaufjahr im Raster.",
-    "ne_AKGuBNeu": "(Kaufpreis + Nebenkosten) × Anteil G+B.",
-    "ne_AKGebNeu": "(Kaufpreis + Nebenkosten) × (1 − Anteil G+B).",
+    "ne_AKGuBNeu": "Eingabe AK G+B; leer: (Kaufpreis + Nebenkosten) × Anteil G+B.",
+    "ne_AKGebNeu": "Eingabe AK Gebäude; leer: Kaufpreis + Nebenkosten − AK G+B neu.",
+    "ne_AKAbweichung": "AK G+B neu + AK Gebäude neu − (Kaufpreis + Nebenkosten); ungleich 0 "
+                       "nur, wenn beide Beträge von Hand eingetragen sind (Prüfung warnt).",
     "ne_RLGeb": "Summe der Quellen: Rücklage Gebäude, soweit nicht schon von Zeilen darüber "
                 "verwendet.",
     "ne_RLGuB": "Summe der Quellen: Rücklage G+B, soweit nicht schon verwendet.",

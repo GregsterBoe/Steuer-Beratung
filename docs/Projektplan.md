@@ -410,8 +410,8 @@ Ein Neuobjekt nimmt die Rücklage auf. Der übertragene Gewinn mindert die AfA-B
 | J | Erhaltung auf Kaufpreis | ne\_ErhQuote | Eingabe, optional |
 | K | Quelle RücklageID | ne\_Quelle | Dropdown aus rl\_ID, optional |
 | L | im Modell | ne\_Gueltig | 1 bei vollständigen Pflichtfeldern, eindeutiger ID, Kaufjahr im Raster |
-| M | AK G+B neu | ne\_AKGuBNeu | (D + F) × E |
-| N | AK Gebäude neu | ne\_AKGebNeu | (D + F) × (1 − E) |
+| M | AK G+B neu | ne\_AKGuBNeu | Eingabe AK G+B, leer: (D + F) × E |
+| N | AK Gebäude neu | ne\_AKGebNeu | Eingabe AK Gebäude, leer: (D + F) − M |
 | O | Rücklage Gebäude verfügbar | ne\_RLGeb | rl\_Geb minus ü1 der Zeilen darüber mit gleicher Quelle |
 | P | Rücklage G+B verfügbar | ne\_RLGuB | rl\_GuB minus ü2 und ü3 der Zeilen darüber |
 | Q | ü1 | ne\_Ue1 | MIN(O; N) |
@@ -421,6 +421,8 @@ Ein Neuobjekt nimmt die Rücklage auf. Der übertragene Gewinn mindert die AfA-B
 | U | AfA-Basis Gebäude | ne\_AfABasis | N − Q − S |
 | V | steuerliche AK G+B | ne\_AKGuB | M − R |
 | W | Status | ne\_Status | Plausibilität |
+
+Nach den Kaufnebenkosten folgen die Eingaben AK G+B (ne\_AKGuBEingabe) und AK Gebäude (ne\_AKGebEingabe) in Euro. Sie sind mit (D + F) × E bzw. dem Rest vorbelegt (blau); ein eingetippter Betrag ersetzt die Vorbelegung. So bleibt z. B. G+B fest, während sich der Kaufpreis und damit der Gebäudeanteil ändern. Die Spalte Abweichung Aufteilung (ne\_AKAbweichung) zeigt M + N − (D + F); ungleich 0 meldet die Prüfung als Warnung.
 
 Nebenkosten wie Grunderwerbsteuer und Notar werden aktiviert und im Verhältnis des Kaufpreises auf G+B und Gebäude verteilt. Die verfügbare Rücklage (O, P) ist nur gefüllt, wenn das Kaufjahr zwischen Bildungsjahr und Fristjahr der Quelle liegt, sonst 0. Die AfA-Methode ist linear (Satz × AfA-Basis) oder degressiv nach § 7 Abs. 5a EStG.
 

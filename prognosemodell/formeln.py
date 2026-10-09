@@ -824,13 +824,16 @@ def neu_zeile(zeile: int) -> dict:
 
     ak = f"(N({_n('kaufpreis', zeile)})+N({_n('nebenkosten', zeile)}))"
     ak_geb, ak_gub = _n("ak_geb_neu", zeile), _n("ak_gub_neu", zeile)
+    gub_ein, geb_ein = _n("ak_gub_eingabe", zeile), _n("ak_geb_eingabe", zeile)
     formeln = {
         "gueltig": wenn(f"IF(AND({_gefuellt(pflicht)}={len(pflicht)},"
                         f"COUNTIF(ne_ID,{id_})=1,COUNTIF(obj_ID,{id_})=0,"
                         f"{kj}>=par_Startjahr,{kj}<=par_Endjahr),1,0)"),
-        # Nebenkosten im Verhältnis des Kaufpreises aufgeteilt und aktiviert
-        "ak_gub_neu": wenn(f"{ak}*N({_n('anteil_gub', zeile)})"),
-        "ak_geb_neu": wenn(f"{ak}*(1-N({_n('anteil_gub', zeile)}))"),
+        # Nebenkosten im Verhältnis des Kaufpreises aufgeteilt und aktiviert; eingetragene
+        # Beträge gehen vor, Gebäude ohne Eingabe = Rest nach G+B
+        "ak_gub_neu": wenn(f'IF({gub_ein}="",{ak}*N({_n("anteil_gub", zeile)}),{gub_ein})'),
+        "ak_geb_neu": wenn(f'IF({geb_ein}="",{ak}-{ak_gub},{geb_ein})'),
+        "ak_abweichung": wenn(f"{ak_gub}+{ak_geb}-{ak}"),
         "rl_geb": wenn(alle("rl_geb")),
         "rl_gub": wenn(alle("rl_gub")),
         "ue1": wenn(alle("ue1")),
@@ -1235,6 +1238,7 @@ def pruefung_anzahl() -> dict:
         "kst_abweichung": "=SUMPRODUCT(--((" + "+".join(
             f'(obk_{k}<>"")*({_feldname(k)}<>obk_{k})' for k in KST_VERKNUEPFT) + ")>0))",
         "neukauf_kst": '=SUMPRODUCT((ne_KSt<>"")*(COUNTIF(nk_ID,ne_KSt)=0))',
+        "ak_aufteilung": '=COUNTIF(ne_AKAbweichung,">0.5")+COUNTIF(ne_AKAbweichung,"<-0.5")',
         "afa_plan": '=COUNTIF(afp_Anzahl,">0")',
         "anlagen_afa": '=COUNTIF(obj_AnlDiff,">1")+COUNTIF(obj_AnlDiff,"<-1")',
         "restschuld": '=COUNTIF(dl_Getilgt,"nach*")',
@@ -1310,6 +1314,12 @@ def annahme_neu(key: str, zeile: int):
         return f'=IF({an},{aus_verkauf[key]},"")'
     if key == "quelle":
         return f'=IF(AND({an},{vk("vk_6b")}="ja"),"RL-"&{vk("vk_ID")},"")'
+    # in jeder Zeile vorbelegt; Eintippen ersetzt die Formel
+    ak = f'(N({_n("kaufpreis", zeile)})+N({_n("nebenkosten", zeile)}))'
+    if key == "ak_gub_eingabe":
+        return f'=IF({_n("neu_id", zeile)}="","",{ak}*N({_n("anteil_gub", zeile)}))'
+    if key == "ak_geb_eingabe":
+        return f'=IF({_n("neu_id", zeile)}="","",{ak}-N({_n("ak_gub_eingabe", zeile)}))'
     if key in annahmen:
         return f'=IF({eigen},"",{annahmen[key]})'
     return None
