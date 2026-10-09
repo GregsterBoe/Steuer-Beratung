@@ -505,6 +505,14 @@ NEU_FELDER = [
     Feld("nebenkosten", "Kaufnebenkosten", "ne_Nebenkosten", FMT_EURO, False, minimum=0,
          hinweis="Grunderwerbsteuer, Notar, Makler in Euro; anteilig auf G+B und Gebäude "
                  "aktiviert. Leer = 0"),
+    # vorbelegt aus dem Anteil G+B; Eingabe in Euro ersetzt die Formel, z. B. fester Wert
+    # für G+B bei sich änderndem Kaufpreis (Gebäude = Rest)
+    Feld("ak_gub_eingabe", "AK G+B", "ne_AKGuBEingabe", FMT_EURO, False, abgeleitet=True,
+         hinweis="vorbelegt: (Kaufpreis + Nebenkosten) × Anteil G+B. Betrag eintippen, um G+B "
+                 "fest vorzugeben; AK Gebäude ist dann der Rest"),
+    Feld("ak_geb_eingabe", "AK Gebäude", "ne_AKGebEingabe", FMT_EURO, False, abgeleitet=True,
+         hinweis="vorbelegt: Kaufpreis + Nebenkosten − AK G+B. Betrag eintippen, um das "
+                 "Gebäude fest vorzugeben; weicht die Summe vom Kaufpreis ab, warnt die Prüfung"),
     Feld("afa_satz", "AfA-Satz", "ne_AfASatz", FMT_PROZENT, True, 10, minimum=0, maximum=0.2,
          hinweis="AfA p. a. auf die AfA-Basis (AK Gebäude − übertragene Rücklage); "
                  "Nutzungsdauer = 1 / Satz"),
@@ -573,6 +581,8 @@ NEU_SPALTEN = [
     Spalte("gueltig", "im Modell", "ne_Gueltig", FMT_ZAHL, 8),
     Spalte("ak_gub_neu", "AK G+B neu", "ne_AKGuBNeu", FMT_EURO),
     Spalte("ak_geb_neu", "AK Gebäude neu", "ne_AKGebNeu", FMT_EURO),
+    # AK G+B + AK Gebäude − (Kaufpreis + Nebenkosten); ≠ 0 nur bei Eingabe beider Beträge
+    Spalte("ak_abweichung", "Abweichung Aufteilung", "ne_AKAbweichung", FMT_EURO, 12),
     Spalte("rl_geb", "Rücklage Gebäude verfügbar", "ne_RLGeb", FMT_EURO),
     Spalte("rl_gub", "Rücklage G+B verfügbar", "ne_RLGuB", FMT_EURO),
     Spalte("ue1", "ü1 Gebäudegewinn auf Gebäude", "ne_Ue1", FMT_EURO),
@@ -810,6 +820,8 @@ class Neuobjekt:
     name: Optional[str] = None
     afa_methode: Optional[str] = None    # "linear" (leer) oder "degressiv"
     nebenkosten: Optional[float] = None
+    ak_gub_eingabe: Optional[float] = None  # None = vorbelegt aus dem Anteil G+B
+    ak_geb_eingabe: Optional[float] = None  # None = Kaufpreis + Nebenkosten − AK G+B
     mietrendite: Optional[float] = None
     erhaltungsquote: Optional[float] = None
     quelle: Optional[str] = None         # RücklageID, z. B. "RL-OBJ-001"
@@ -889,6 +901,10 @@ PRUEFUNGEN = [
     Pruefung("neukauf_kst", "Neuobjekte mit Kostenstelle Neukauf, die im Blatt Neukauf-KSt "
              "fehlt: das Neuobjekt rechnet mit Mietrendite und Erhaltungsquote", WARNUNG,
              "Blatt Neuobjekte, Spalte Kostenstelle Neukauf"),
+    Pruefung("ak_aufteilung", "Neuobjekte, bei denen AK G+B + AK Gebäude von Kaufpreis + "
+             "Nebenkosten abweichen (beide Beträge von Hand eingetragen): AfA-Basis und "
+             "Übertragung rechnen mit den eingetragenen Beträgen", WARNUNG,
+             "Blatt Neuobjekte, Spalte Abweichung Aufteilung"),
     Pruefung("afa_plan", "Objekte mit AfA-Plan (Blatt AfA-Plan, meist aus BWA 1240 der "
              "Kostenstellen-Datei): in den Jahren mit Wert ersetzt er die AfA-Fortschreibung",
              HINWEIS, "Blatt AfA-Plan, Spalte Jahre mit Wert"),

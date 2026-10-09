@@ -112,7 +112,8 @@ tabelle(["Blatt", "Wofür"], [
     ["**Objekte**", "Ein Bestandsobjekt je Zeile: Miete, Kosten, AK, Kaufjahr, Verkehrswert, Status"],
     ["**Verkäufe**", "ObjektID, Jahr, Preis, Kosten, Anteil G+B lt. Kaufvertrag, § 6b ja/nein, "
                      "„reinvestieren = ja“ legt ein Neuobjekt aus Annahmen an"],
-    ["**Neuobjekte**", "Kaufjahr, Kaufpreis, Anteil G+B, AfA-Satz und -Methode, bis zu drei "
+    ["**Neuobjekte**", "Kaufjahr, Kaufpreis, Anteil G+B (AK G+B und AK Gebäude daraus "
+                       "vorbelegt, in Euro überschreibbar), AfA-Satz und -Methode, bis zu drei "
                        "Quell-Rücklagen, „Kostenstelle Neukauf“, Finanzierung (Abschnitt 4)"],
     ["**Darlehen**", "Tilgungsplan je Kredit: Zins, Tilgung und Restschuld je Jahr"],
     ["**Anlagen**", "Anlagenverzeichnis: AK, Buchwert und AfA je Anlage und Jahr"],

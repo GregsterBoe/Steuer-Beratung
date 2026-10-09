@@ -756,9 +756,13 @@ def _blatt_neuobjekte(wb, modell: Modell) -> None:
     _status_rot(ws, f"{st}{erste}:{st}{letzte}", f"{st}{erste}")
 
     for zeile, neu in enumerate(modell.neuobjekte, start=erste):
-        # erfasstes Neuobjekt ersetzt die ganze Annahmezeile, leere Felder bleiben leer
+        # erfasstes Neuobjekt ersetzt die ganze Annahmezeile, leere Felder bleiben leer;
+        # die Aufteilung der AK bleibt ohne Eingabe vorbelegt
         for i, f in enumerate(NEU_FELDER, start=1):
-            ws.cell(row=zeile, column=i).value = getattr(neu, f.key)  # None leert die Zelle
+            wert = getattr(neu, f.key)
+            if wert is None and f.key in ("ak_gub_eingabe", "ak_geb_eingabe"):
+                continue
+            ws.cell(row=zeile, column=i).value = wert  # None leert die Zelle
 
     hinweis = get_column_letter(status_spalte + 2)
     ws[f"{hinweis}1"] = ("Kauf zum Jahresende: Übertragung und Bestand im Kaufjahr, "
@@ -767,7 +771,10 @@ def _blatt_neuobjekte(wb, modell: Modell) -> None:
                          "ü3 Rest des G+B-Gewinns auf Gebäude. AfA-Basis = AK Gebäude − ü1 − ü3.")
     ws[f"{hinweis}3"] = ("Nutzen mehrere Neuobjekte dieselbe Rücklage, gilt die Zeilenreihenfolge: "
                          "jede Zeile erhält, was die Zeilen darüber übrig lassen.")
-    ws[f"{hinweis}4"] = "Kaufnebenkosten werden im Verhältnis G+B zu Gebäude aktiviert; leer = 0."
+    ws[f"{hinweis}4"] = ("Kaufnebenkosten werden im Verhältnis G+B zu Gebäude aktiviert; leer = 0. "
+                         "AK G+B und AK Gebäude sind aus dem Anteil G+B vorbelegt (blau); ein "
+                         "eingetippter Betrag ersetzt die Vorbelegung, z. B. G+B fest und "
+                         "Gebäude = Rest.")
     ws[f"{hinweis}6"] = ("Blau: Neuobjekt aus „reinvestieren = ja“ in derselben Zeile des Blatts "
                          "Verkäufe, Werte aus den Annahmen des Parameterblatts. Eintippen ersetzt "
                          "die Annahme.")
