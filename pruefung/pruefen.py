@@ -29,7 +29,8 @@ from prognosemodell.einlesen import (anlagen_zusammenfuehren, lese_inventar, les
                                      ordne_anlagen_zu, zusammenfuehren)
 from prognosemodell.makros import LibreOffice, speichere_mit_makros
 from prognosemodell.mappe import erstelle_mappe
-from prognosemodell.modelle import (FEHLER, HINWEIS, PRUEFUNGEN, Anlage, Kapazitaet,
+from prognosemodell.uebernahme import uebernehmen
+from prognosemodell.modelle import (FEHLER, HINWEIS, OBJEKT_FELDER, PRUEFUNGEN, Anlage, Kapazitaet,
                                     LIQ_SPALTEN, NEU_FELDER, NEU_SPALTEN, VERKAUF_FELDER,
                                     VERKAUF_SPALTEN,
                                     STATUS_ANNAHME_GELOESCHT, WARNUNG, Modell, Neuobjekt,
@@ -80,6 +81,16 @@ class Getippt:
     zellen: dict
 
 
+@dataclasses.dataclass
+class Uebernommen:
+    """Neue Mappe aus modell, dazu die Eingaben der alten Mappe (alt, eingetippte Zellen
+    alt_zellen, danach aendern(wb) wie eine ältere Version) per --uebernehmen."""
+    modell: Modell
+    alt: Modell
+    alt_zellen: dict
+    aendern: object = None
+
+
 def mappe(modell: Modell, zellen: dict = None):
     wb = erstelle_mappe(modell)
     for (blatt, zelle), wert in (zellen or {}).items():
@@ -87,13 +98,32 @@ def mappe(modell: Modell, zellen: dict = None):
     return wb
 
 
-def durchrechnen(modell: Modell, arbeitsordner: Path, zellen: dict = None, profil: Path = None):
+def mit_uebernahme(wb, modell: Modell, ue: Uebernommen, ordner: Path):
+    """Alte Mappe schreiben und ihre Eingaben in wb übernehmen."""
+    alt = dataclasses.replace(ue.alt, parameter={**modell.parameter, **ue.alt.parameter},
+                              kapazitaet=modell.kapazitaet)
+    wb_alt = mappe(alt, ue.alt_zellen)
+    if ue.aendern:
+        ue.aendern(wb_alt)
+    pfad = ordner / "alt.xlsx"
+    pfad.parent.mkdir(parents=True, exist_ok=True)
+    wb_alt.save(pfad)
+    for zeile in uebernehmen(wb, pfad, geschuetzt=modell.parameter,
+                             kapazitaet=modell.kapazitaet):
+        print(zeile)
+    return wb
+
+
+def durchrechnen(modell: Modell, arbeitsordner: Path, zellen: dict = None, profil: Path = None,
+                 ue: Uebernommen = None):
     """Mappe schreiben, per LibreOffice neu berechnen lassen, Werte zurückgeben.
 
     Ein gemeinsames Profil für mehrere Aufrufe spart den Aufbau bei jedem Start."""
     roh = arbeitsordner / "roh" / "mappe.xlsx"
     roh.parent.mkdir(parents=True, exist_ok=True)
     erzeugt = mappe(modell, zellen)
+    if ue is not None:
+        mit_uebernahme(erzeugt, modell, ue, arbeitsordner)
     erzeugt.save(roh)
     aus = arbeitsordner / "gerechnet"
     soffice = shutil.which("soffice") or shutil.which("libreoffice")
@@ -258,8 +288,49 @@ def baujahr_bestaetigt() -> Modell:
     return modell
 
 
+def uebernahme_alt() -> Modell:
+    """Alte Mappe: Kostenstellen-Vorlage mit Stammdaten, Verkauf, Neuobjekt mit Kredit."""
+    modell = vorlage_eingelesen()
+    modell.verkaeufe = [Verkauf("KSt 1", 2028, preis=1_500_000, nutzung_6b="ja")]
+    modell.neuobjekte = [Neuobjekt("NEU-1", 2029, kaufpreis=900_000, anteil_gub=0.25,
+                                   afa_satz=0.03, quelle="RL-KSt 1", fin_art="Kredit",
+                                   kredit_zins=0.04, tilgung=0.02)]
+    modell.parameter = {"par_Alternativrendite": 0.05}
+    return modell
+
+
+def uebernahme_neu() -> Modell:
+    """Neue Mappe nur aus der Kostenstellen-Datei, ohne Stammdaten."""
+    modell = vorlage_eingelesen()
+    modell.objekte = zusammenfuehren([], list(modell.kostenstellen.values()))
+    return modell
+
+
+def ohne_ak_spalten(wb) -> None:
+    """Ältere Version simulieren: Blatt Neuobjekte ohne die Spalten AK G+B und AK Gebäude."""
+    wb["Neuobjekte"].delete_cols(nr(NEU_FELDER, "ak_gub_eingabe"), 2)
+
+
 def faelle():
     obj = testobjekt()
+    ue_zellen = {("Objekte", f"{get_column_letter(nr(OBJEKT_FELDER, 'miete'))}2"): 77_777,
+                 ("AfA-Plan", "D3"): 12_000}
+    ue_soll = [
+        ("obj_ID", 1, "KSt 2"),
+        ("obj_Kaufjahr", 0, 2007),
+        ("obj_MieteBasis", 0, 77_777),
+        ("vk_Preis", 0, 1_500_000),
+        ("ne_Nebenkosten", 0, None),
+        ("ne_Mietrendite", 0, None),
+        ("ne_AKGuBNeu", 0, 225_000),
+        ("ne_Kredit", 0, 0),   # Erlös deckt den Kauf
+        ("rl_Betrag", 0, 848_000),
+        ("prg_AfA", prg(1, 2027), 12_000),
+        ("liq_Zins", lj(2030), 49_369.41),   # Alternativrendite 5 %
+        ("vg_A", 0, 7_517_662.25),
+        ("vg_B", 0, 7_759_902.95),
+        ("pr_Gesamt", 0, "2 Warnung(en)"),
+    ]
     ohne_miete = dataclasses.replace(obj, miete=None)
     zu_hoch = dataclasses.replace(obj, restbuchwert=900_000)
     spaet = dataclasses.replace(obj, kaufjahr=2030)
@@ -1899,6 +1970,12 @@ def faelle():
             ("prg_AfA", prg(2, 2028), 30_000),
             ("prg_AfA", prg(2, 2029), 27_000),
         ]),
+        # Übernahme: dieselben Sollwerte in der alten Mappe und nach --uebernehmen; Miete
+        # von Hand überschrieben, AfA-Plan 2027 getippt, Neuobjekt ohne Nebenkosten
+        ("Übernahme: alte Mappe als Bezug",
+         Getippt(uebernahme_alt(), ue_zellen), ue_soll),
+        ("Übernahme: Eingaben in die neue Mappe",
+         Uebernommen(uebernahme_neu(), uebernahme_alt(), ue_zellen, ohne_ak_spalten), ue_soll),
         ("Etappe 9: Makro Prüfung meldet Fehler und Hinweis", Modell(objekte=[ohne_miete]), [
             ("pr_Gesamt", 0, "1 Fehler"),
         ], [
@@ -2005,7 +2082,9 @@ def makro_lauf(lo, fall: str, modell: Modell, aufrufe, ordner: Path, zellen: dic
 def lauf(i: int, tmp: Path, lo_stapel: contextlib.ExitStack = None) -> tuple:
     """Fall i rechnen und prüfen. Liefert (Fallname, Ausgabe, Anzahl Abweichungen)."""
     fall, objekte, pruefungen, *aufrufe = _faelle()[i]
-    zellen = None
+    zellen = ue = None
+    if isinstance(objekte, Uebernommen):
+        ue, objekte = objekte, objekte.modell
     if isinstance(objekte, Getippt):
         objekte, zellen = objekte.modell, objekte.zellen
     modell = objekte if isinstance(objekte, Modell) else Modell(objekte=objekte)
@@ -2020,7 +2099,7 @@ def lauf(i: int, tmp: Path, lo_stapel: contextlib.ExitStack = None) -> tuple:
             lo = _libreoffice(tmp, lo_stapel)
             wb, fehler = makro_lauf(lo, fall, modell, aufrufe[0], tmp / f"fall{i}", zellen)
         else:
-            wb = durchrechnen(modell, tmp / f"fall{i}", zellen, tmp / "lo-profil")
+            wb = durchrechnen(modell, tmp / f"fall{i}", zellen, tmp / "lo-profil", ue)
         fehler += pruefe(fall, wb, pruefungen)
     return fall, ausgabe.getvalue(), fehler
 

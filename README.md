@@ -44,6 +44,7 @@ Stand: Etappen 1 bis 9 sind umgesetzt.
 - Ausgabe im DATEV-BWA-Format je Kostenstelle mit Summenblatt, Sonderbereich Verkauf und Kauf
 - Blatt BWA-Zuordnung: BWA-Zeile je Sonderposten (Verkauf netto oder brutto, § 6b-Rücklage, Neuobjekte, Zins) wählbar, Herleitung unter jeder BWA, Kontrolle gegen die Liquidität
 - Startblatt mit Handlungsempfehlung, Auffülllogik für fehlende Daten mit Farblogik, Schnellcheck-Mappe
+- Übernahme (`--uebernehmen`): eingetippte Werte einer älteren Mappe gehen in die neu erzeugte über, Spalten nach Überschrift, Objekte und Anlagen nach ID; eingelesene Werte kommen aus der neuen Kostenstellen-Datei
 - Blatt Anlagen: Anlagenverzeichnis (DATEV-Export) oder Aufschlüsselung der Abschreibungen aus den Kostenstellenblättern; liefert AK, Buchwert und Kaufjahr je Objekt und die AfA je Anlage und Jahr
 
 ## Nutzung
@@ -56,6 +57,7 @@ python -m prognosemodell --makros    # .xlsm mit VBA-Steuerung (braucht LibreOff
 python -m prognosemodell --schnellcheck --kostenstellen Kostenstellen.xlsx   # schlanke Mappe ausgabe/Schnellcheck_VV.xlsx
 python -m prognosemodell --kostenstellen Kostenstellen.xlsx --ausgabe Ordner/Prognose.xlsx   # laufende Werte je Blatt einlesen; nur Ordner = Standardname darin
 python -m prognosemodell --kostenstellen Kostenstellen.xlsx --inventar Inventar_2025.xlsx   # dazu das Anlagenverzeichnis
+python -m prognosemodell --kostenstellen Kostenstellen.xlsx --uebernehmen Alte_Mappe.xlsx --ausgabe Neue_Mappe.xlsx   # eingetippte Werte der alten Mappe übernehmen
 python -m pruefung.pruefen           # rechnet per LibreOffice headless und prüft gegen Sollwerte
 python -m pruefung.pruefen "Etappe 9"  # nur Fälle, deren Name den Text enthält
 python -m pruefung.pruefen -j 2      # höchstens 2 Fälle gleichzeitig (Standard: ein Prozess je Kern)

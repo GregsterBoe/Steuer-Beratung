@@ -1,5 +1,6 @@
 """Mappe generieren: python -m prognosemodell [--ausgabe PFAD] [--ohne-testdaten]
-[--kostenstellen PFAD] [--inventar PFAD [--inventar-stand JAHR]] [--makros] [--schnellcheck]"""
+[--kostenstellen PFAD] [--inventar PFAD [--inventar-stand JAHR]] [--makros] [--schnellcheck]
+[--uebernehmen ALTE_MAPPE]"""
 
 import argparse
 import sys
@@ -8,6 +9,7 @@ from pathlib import Path
 from .einlesen import (anlagen_zusammenfuehren, lese_inventar, lese_kostenstellen,
                        ordne_anlagen_zu, stand_aus_dateiname, zusammenfuehren)
 from .mappe import erstelle_mappe
+from .uebernahme import uebernehmen
 from .modelle import PARAMETER, ZUORDNUNG_KOST1, Modell
 from .testdaten import testmodell
 
@@ -32,9 +34,12 @@ def main() -> None:
                     help="als .xlsm mit VBA-Steuerung speichern (braucht LibreOffice beim Bauen)")
     ap.add_argument("--schnellcheck", action="store_true",
                     help="schlanke Mappe: wenige Eingaben, zentrale Annahmen, Empfehlung")
+    ap.add_argument("--uebernehmen", metavar="PFAD",
+                    help="Eingaben (eingetippte Werte) aus einer älteren Mappe übernehmen")
     args = ap.parse_args()
 
-    modell = Modell() if args.ohne_testdaten or args.kostenstellen else testmodell()
+    leer = args.ohne_testdaten or args.kostenstellen or args.uebernehmen
+    modell = Modell() if leer else testmodell()
     stand = args.inventar_stand or (stand_aus_dateiname(args.inventar) if args.inventar else None)
     if stand is not None and stand != _basisjahr() - 1:
         modell.parameter["par_AnlStand"] = stand
@@ -89,12 +94,21 @@ def main() -> None:
     if args.makros or ziel.suffix.lower() == ".xlsm":
         ziel = ziel.with_suffix(".xlsm")
     ziel.parent.mkdir(parents=True, exist_ok=True)
+    wb = erstelle_mappe(modell)
+    if args.uebernehmen:
+        alt = Path(args.uebernehmen)
+        if alt.resolve() == ziel.resolve():
+            sys.exit("Die alte Mappe würde überschrieben: bitte mit --ausgabe einen anderen "
+                     "Dateinamen angeben.")
+        for zeile in uebernehmen(wb, alt, geschuetzt=modell.parameter,
+                                 kapazitaet=modell.kapazitaet):
+            print(zeile)
     try:
         if ziel.suffix == ".xlsm":
             from .makros import speichere_mit_makros
-            speichere_mit_makros(erstelle_mappe(modell), ziel)
+            speichere_mit_makros(wb, ziel)
         else:
-            erstelle_mappe(modell).save(ziel)
+            wb.save(ziel)
     except PermissionError:
         sys.exit(f"Kann {ziel} nicht schreiben. Ist die Datei noch in Excel geöffnet? "
                  "Bitte schließen oder mit --ausgabe einen anderen Dateinamen angeben.")
