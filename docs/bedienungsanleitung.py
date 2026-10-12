@@ -275,4 +275,30 @@ punkte([
     "daran); Objekte, Anlagen und Neukauf-Kostenstellen werden über ihre ID zugeordnet.",
 ])
 
+doc.add_heading("10. Mandanten-Export", level=1)
+absatz("Für den Mandanten gibt es eine schlanke Fassung der Mappe mit sechs Blättern, nur "
+       "mit Werten: Mappe in Excel speichern und schließen, dann python -m "
+       "prognosemodell.export Prognose.xlsx. Daneben entsteht Prognose_Mandant.xlsx; mit "
+       "--ausgabe ein anderer Name. Eine frisch erzeugte, nie geöffnete Mappe rechnet "
+       "LibreOffice vorher durch.")
+tabelle(["Blatt", "Inhalt"], [
+    ["Überblick", "Empfehlung, Endvermögen je Option, Datenlage, Verkehrswert und "
+                  "Gesamtvermögen je Jahr mit Diagrammen"],
+    ["Jahresrechnung", "je Jahr vom Ergebnis über Steuer und Geldfluss zum Vermögen, Plan "
+                       "und Halten, Differenz; jede Spalte rechnet von oben nach unten"],
+    ["BWA gesamt", "Summen-BWA aller Objekte, Ist-Jahre und Planjahre, Herleitung der "
+                   "Sonderposten; bei „Vergleich mit Halten = ja“ auch Halten und Differenz"],
+    ["BWA je Objekt", "alle Kostenstellenblätter untereinander, mit Inhaltsverzeichnis"],
+    ["Verkauf und Kauf", "Verkäufe, Neuobjekte, Ergebnis und Herleitung je Vorgang "
+                         "(entfällt ohne Verkauf und Kauf)"],
+    ["Annahmen", "zentrale Annahmen, Daten je Objekt mit Herkunft (blau Annahme, grün "
+                 "Buchhaltung), auffällige Prüfungen"],
+], [3.6, 13.0])
+punkte([
+    "Zeilen ohne Wert, Monatsspalten, Hilfszeilen und ausgeschaltete Vorgänge entfallen; "
+    "Ist-Vorjahre erscheinen nur, wenn sie eingelesen sind.",
+    "Jedes Blatt ist für den Druck eingerichtet: Querformat, eine Seite breit, Blattname und "
+    "Seitenzahl in der Fußzeile.",
+])
+
 doc.save(sys.argv[1])
