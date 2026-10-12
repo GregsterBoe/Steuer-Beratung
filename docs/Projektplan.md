@@ -1300,12 +1300,12 @@ So geht kein Gebäudegewinn verloren, weil ein G+B-Gewinn das Gebäude schon bel
 
 Status je Quelle (Quelle 2 und 3 mit Vorsatz „Quelle n:“): Rücklage unbekannt, Kauf vor Bildung, Kauf nach Fristjahr, dazu „doppelt“, wenn eine Rücklage in derselben Zeile zweimal steht. Diese Meldungen und die des Kredits stehen nebeneinander, das Objekt bleibt im Modell.
 
-**Finanzierungsbedarf.** Die Rücklage ist kein Geld, sie stundet nur Steuer. Für den Kauf steht der Nettoerlös der Quell-Verkäufe bereit:
+**Finanzierungsbedarf.** Die Rücklage ist kein Geld, sie stundet nur Steuer, und wirkt nur steuerlich auf den Kauf. Den Nettoerlös der Quell-Verkäufe setzt der Kauf nur mit „Verkaufserlös zur Finanzierung = ja“ (ne\_ErloesFin) ein; leer oder „nein“ = Einsatz 0, Bedarf = ganze AK. Reinvestitionen aus dem Verkaufsblatt sind mit „ja“ vorbelegt:
 
 | Spalte | Name | Formel |
 | --- | --- | --- |
 | Kaufpreis + Nebenkosten | ne\_AKGesamt | Kaufpreis + Nebenkosten |
-| Einsatz Verkaufserlös | ne\_Erloes | je Quelle MIN(Nettoerlös − in Zeilen darüber eingesetzt; AK gesamt − Quellen davor), Verkauf bis zum Kaufjahr |
+| Einsatz Verkaufserlös | ne\_Erloes | nur mit ne\_ErloesFin = ja: je Quelle MIN(Nettoerlös − in Zeilen darüber eingesetzt; AK gesamt − Quellen davor), Verkauf bis zum Kaufjahr |
 | Finanzierungsbedarf | ne\_Bedarf | AK gesamt − Einsatz |
 | Kredit | ne\_Kredit | bei Finanzierung Rest = Kredit: Kreditbetrag, leer = Bedarf; sonst 0 |
 | Eigenmittel | ne\_Eigen | Bedarf − Kredit, aus der Liquidität |

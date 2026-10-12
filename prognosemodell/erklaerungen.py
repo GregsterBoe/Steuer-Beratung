@@ -195,7 +195,8 @@ SPALTEN = {
     "ne_MitQuelle": "1 = mindestens eine Quelle angegeben; das Neuobjekt entfällt in Szenario B.",
     "ne_AKGesamt": "Kaufpreis + Kaufnebenkosten.",
     "ne_Erloes": "Nettoerlös der Quell-Verkäufe, der in diesen Kauf fließt (höchstens Kaufpreis "
-                 "+ Nebenkosten, soweit nicht schon von Zeilen darüber eingesetzt).",
+                 "+ Nebenkosten, soweit nicht schon von Zeilen darüber eingesetzt). 0 ohne "
+                 "Verkaufserlös zur Finanzierung = ja: die Rücklage wirkt dann nur steuerlich.",
     "ne_Bedarf": "Kaufpreis + Nebenkosten − Einsatz Verkaufserlös: was anders finanziert werden "
                  "muss.",
     "ne_Kredit": "Bei Finanzierung Rest = Kredit: Kreditbetrag; sonst (Kaufpreis + "
@@ -321,5 +322,6 @@ for _n in (1, 2, 3):
                         "ü3 der Quellen davor).",
         f"ne_Q{_n}Erloes": f"Nettoerlös des Verkaufs hinter Quelle {_n}, der in diesen Kauf "
                            "fließt: höchstens der noch offene Teil von Kaufpreis + Nebenkosten "
-                           "und was Zeilen darüber nicht eingesetzt haben.",
+                           "und was Zeilen darüber nicht eingesetzt haben; 0 ohne "
+                           "Verkaufserlös zur Finanzierung = ja.",
     })

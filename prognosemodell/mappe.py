@@ -820,8 +820,10 @@ def _blatt_neuobjekte(wb, modell: Modell) -> None:
     ws[f"{hinweis}7"] = ("Bis zu drei Quell-Rücklagen: erst alle Gebäudegewinne auf das Gebäude "
                          "(ü1), dann die G+B-Gewinne auf G+B (ü2), der Rest auf das Gebäude (ü3). "
                          "Die Werte je Quelle stehen in den eingeklappten Spalten (+ über Status).")
-    ws[f"{hinweis}8"] = ("Finanzierungsbedarf = Kaufpreis + Nebenkosten − Nettoerlös der "
-                         "Quell-Verkäufe (in Zeilenreihenfolge, soweit nicht schon eingesetzt). "
+    ws[f"{hinweis}8"] = ("Finanzierungsbedarf = Kaufpreis + Nebenkosten; mit Verkaufserlös zur "
+                         "Finanzierung = ja abzüglich des Nettoerlöses der Quell-Verkäufe (in "
+                         "Zeilenreihenfolge, soweit nicht schon eingesetzt), sonst wirkt die "
+                         "Rücklage nur steuerlich. "
                          "Finanzierung Rest = Kredit: Kreditbetrag leer = ganzer Bedarf; der Rest "
                          "kommt aus Eigenmitteln (Liquidität). Tilgungsplan im Blatt Darlehen.")
     ws[f"{hinweis}9"] = "Kopf rot mit * = Pflichtfeld, blau = optional, grau = berechnet. " \

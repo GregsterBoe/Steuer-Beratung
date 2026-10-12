@@ -293,8 +293,8 @@ def uebernahme_alt() -> Modell:
     modell = vorlage_eingelesen()
     modell.verkaeufe = [Verkauf("KSt 1", 2028, preis=1_500_000, nutzung_6b="ja")]
     modell.neuobjekte = [Neuobjekt("NEU-1", 2029, kaufpreis=900_000, anteil_gub=0.25,
-                                   afa_satz=0.03, quelle="RL-KSt 1", fin_art="Kredit",
-                                   kredit_zins=0.04, tilgung=0.02)]
+                                   afa_satz=0.03, quelle="RL-KSt 1", erloes_fin="ja",
+                                   fin_art="Kredit", kredit_zins=0.04, tilgung=0.02)]
     modell.parameter = {"par_Alternativrendite": 0.05}
     return modell
 
@@ -1364,7 +1364,8 @@ def faelle():
                 verkaeufe=[Verkauf("OBJ-001", 2027, preis=1_400_000, nutzung_6b="ja")],
                 neuobjekte=[Neuobjekt("NEU-001", 2028, kaufpreis=2_000_000, nebenkosten=100_000,
                                       anteil_gub=0.3, afa_satz=0.03, quelle="RL-OBJ-001",
-                                      fin_art="Kredit", kredit_quote=0.7, kredit_zins=0.04,
+                                      erloes_fin="ja", fin_art="Kredit", kredit_quote=0.7,
+                                      kredit_zins=0.04,
                                       tilgung=0.02),
                             Neuobjekt("NEU-002", 2029, kaufpreis=1_000_000, nebenkosten=100_000,
                                       anteil_gub=0.3, afa_satz=0.03, fin_art="Kredit",
@@ -1383,6 +1384,36 @@ def faelle():
             ("ne_Kredit", 2, 0),
             ("ne_Status", 2, "Kreditangaben ohne Finanzierung Rest = Kredit, kein Kredit"),
         ]),
+        # Verkaufserlös zur Finanzierung leer: die Rücklage wirkt nur steuerlich (Übertragung
+        # ü1 220.000, ü2 500.000, AfA-Basis 1,25 Mio wie mit Erlös), finanziert wird die ganze
+        # AK 2,1 Mio: Kreditquote 70 % = 1,47 Mio, Eigenmittel 630.000. NEU-002 mit „nein“
+        # und ohne Quote: ganzer Kaufpreis per Kredit
+        ("Finanzierung: Rücklage nur steuerlich, Kredit unabhängig vom Verkaufserlös",
+         Modell(objekte=[abnahme4],
+                verkaeufe=[Verkauf("OBJ-001", 2027, preis=1_400_000, nutzung_6b="ja")],
+                neuobjekte=[Neuobjekt("NEU-001", 2028, kaufpreis=2_000_000, nebenkosten=100_000,
+                                      anteil_gub=0.3, afa_satz=0.03, quelle="RL-OBJ-001",
+                                      fin_art="Kredit", kredit_quote=0.7, kredit_zins=0.04,
+                                      tilgung=0.02),
+                            Neuobjekt("NEU-002", 2029, kaufpreis=500_000, anteil_gub=0.3,
+                                      afa_satz=0.03, quelle="RL-OBJ-001", erloes_fin="nein",
+                                      fin_art="Kredit", kredit_zins=0.04, tilgung=0.02)],
+                parameter=OHNE_ZINS), [
+            ("ne_Status", 0, "OK"),
+            ("ne_Ue1", 0, 220_000),
+            ("ne_Ue2", 0, 500_000),
+            ("ne_AfABasis", 0, 1_250_000),
+            ("ne_Erloes", 0, 0),
+            ("ne_Bedarf", 0, 2_100_000),
+            ("ne_Kredit", 0, 1_470_000),
+            ("ne_Eigen", 0, 630_000),
+            ("dl_Rate", 0, 88_200),
+            ("prg_Tilgung", prg_neu(1, 2029), 29_400),
+            ("ne_Status", 1, "OK"),
+            ("ne_Erloes", 1, 0),
+            ("ne_Kredit", 1, 500_000),
+            ("liq_Kredit", lj(2028), 1_470_000),
+        ]),
         # Finanzierung: AK 2,1 Mio − Nettoerlös 1,4 Mio = Bedarf 700.000, ganz per Kredit.
         # Annuität 4 % + 2 % = 42.000: 2029 Zins 28.000, Tilgung 14.000, Restschuld 686.000;
         # 2030 Zins 27.440, Tilgung 14.560. Übertragung ü1 220.000, ü2 500.000
@@ -1392,7 +1423,8 @@ def faelle():
                 neuobjekte=[Neuobjekt("NEU-001", 2028, kaufpreis=2_000_000, nebenkosten=100_000,
                                       anteil_gub=0.3, afa_satz=0.03, mietrendite=0.05,
                                       erhaltungsquote=0.01, quelle="RL-OBJ-001",
-                                      fin_art="Kredit", kredit_zins=0.04, tilgung=0.02)],
+                                      erloes_fin="ja", fin_art="Kredit", kredit_zins=0.04,
+                                      tilgung=0.02)],
                 parameter=OHNE_ZINS), [
             ("ne_Status", 0, "OK"),
             ("ne_AKGesamt", 0, 2_100_000),
@@ -1459,7 +1491,8 @@ def faelle():
                 neuobjekte=[
                     Neuobjekt("NEU-001", 2028, kaufpreis=3_000_000, anteil_gub=0.2,
                               afa_satz=0.03, quelle="RL-OBJ-001", quelle2="RL-OBJ-002",
-                              fin_art="Kredit", kredit_betrag=150_000, kredit_zins=0.05,
+                              erloes_fin="ja", fin_art="Kredit", kredit_betrag=150_000,
+                              kredit_zins=0.05,
                               tilgungsart="linear", tilgung=0.25),
                     Neuobjekt("NEU-002", 2029, kaufpreis=500_000, anteil_gub=0.2, afa_satz=0.02,
                               fin_art="Kredit", kredit_zins=0.03, tilgungsart="endfällig",
