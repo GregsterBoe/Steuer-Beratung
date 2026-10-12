@@ -425,7 +425,12 @@ VERKAUF_FELDER = [
     Feld("anteil_gub", "Anteil G+B lt. Kaufvertrag", "vk_AnteilGuBVertrag", FMT_PROZENT, False,
          minimum=0, maximum=1,
          hinweis="Anteil Grund und Boden am Preis, teilt Erlös und Gewinn auf Gebäude und G+B. "
-                 "Leer: 1 − Verkehrswertanteil Gebäude (Blatt Objekte)"),
+                 "Leer: 1 − Verkehrswertanteil Gebäude (Blatt Objekte). Ein Betrag G+B geht vor"),
+    # fester Betrag statt Anteil: Anteil = Betrag / Verkaufspreis, Gebäude = Rest
+    Feld("gub_betrag", "Preis G+B lt. Kaufvertrag", "vk_GuBBetrag", FMT_EURO, False, minimum=0,
+         hinweis="Betrag für Grund und Boden in Euro; das Gebäude erhält den Rest des "
+                 "Verkaufspreises. Geht vor dem Anteil G+B; die Verkaufskosten werden "
+                 "anteilig aufgeteilt"),
     Feld("nutzung_6b", "§ 6b nutzen", "vk_6b", FMT_TEXT, False, 10, auswahl=("ja", "nein"),
          hinweis="ja: positive Gewinne gehen in eine § 6b-Rücklage (Blatt Rücklagen) statt "
                  "sofort in die Steuer; nur bei Vorbesitzzeit ab der Mindestdauer. Leer = nein"),
@@ -455,6 +460,8 @@ VERKAUF_SPALTEN = [
 VERKAUF_STATUS_NAME = "vk_Status"
 # Statustexte, auf die der Rücklagenspiegel zugreift
 STATUS_OK = "OK"
+# Neuobjekt mit „Kauf aktiv = nein“: nicht im Modell, aber kein Fehler
+STATUS_AUS = "ausgeschaltet"
 # Gewinn ist gültig berechnet, wird aber sofort versteuert
 STATUS_6B_UNZULAESSIG = "§ 6b unzulässig: Vorbesitzzeit zu kurz"
 STATUS_ANNAHME_GELOESCHT = "Wert fehlt: Annahme gelöscht (Makro „Annahmen wiederherstellen“)"
@@ -499,6 +506,11 @@ NEU_FELDER = [
     Feld("neu_id", "NeuID", "ne_ID", FMT_TEXT, True, 12,
          hinweis="eindeutige Kennung, nicht gleich einer ObjektID; unter ihr führen Prognose "
                  "und BWA-Blatt das Neuobjekt"),
+    # nein = Kauf rechnet nicht mit (wie nicht erfasst), bleibt aber stehen; leer = ja
+    Feld("aktiv", "Kauf aktiv", "ne_Aktiv", FMT_TEXT, False, 9, auswahl=("ja", "nein"),
+         hinweis="nein: der Kauf rechnet nicht mit (keine Miete, AfA, Kredit, Übertragung der "
+                 "Rücklage, Liquidität); das Blatt der Kostenstelle Neukauf zeigt in den "
+                 "Planjahren 0. ja oder leer: Kauf rechnet mit"),
     Feld("name", "Name", "ne_Name", FMT_TEXT, False, 22),
     Feld("kaufjahr", "Kaufjahr", "ne_Kaufjahr", FMT_JAHR, True, 10,
          minimum=1900, maximum=2100, ganzzahl=True,
@@ -569,7 +581,13 @@ NEU_FELDER = [
          hinweis="Finanzierungsbedarf (AK − Nettoerlös der Quell-Verkäufe) aus Eigenmitteln "
                  "(leer) oder per Kredit"),
     Feld("kredit_betrag", "Kreditbetrag", "ne_KreditBetrag", FMT_EURO, False, minimum=0,
-         hinweis="leer = ganzer Finanzierungsbedarf; nur bei Finanzierung Rest = Kredit"),
+         hinweis="leer = ganzer Finanzierungsbedarf bzw. Kreditquote; nur bei Finanzierung "
+                 "Rest = Kredit"),
+    Feld("kredit_quote", "Kreditquote", "ne_KreditQuote", FMT_PROZENT, False, 10,
+         minimum=0, maximum=1,
+         hinweis="Kredit in % von Kaufpreis + Nebenkosten, z. B. 70 % bei 30 % Eigenkapital; "
+                 "höchstens der Finanzierungsbedarf (eingesetzter Verkaufserlös zählt als "
+                 "Eigenkapital). Nur bei Finanzierung Rest = Kredit und ohne Kreditbetrag"),
     Feld("kredit_zins", "Zinssatz Kredit", "ne_KreditZins", FMT_PROZENT, False, 10,
          minimum=0, maximum=0.2, hinweis="Zins p. a. auf die Restschuld am Vorjahresende"),
     Feld("tilgungsart", "Tilgungsart", "ne_Tilgungsart", FMT_TEXT, False, 11,
@@ -826,6 +844,7 @@ class Verkauf:
     preis: Optional[float] = None
     kosten: Optional[float] = None
     anteil_gub: Optional[float] = None   # Kaufvertrag; leer = Verkehrswertanteil aus Objekte
+    gub_betrag: Optional[float] = None   # G+B in Euro, geht vor anteil_gub; Gebäude = Rest
     nutzung_6b: Optional[str] = None
     neubau_6b: Optional[str] = None      # ja = Frist par_6bFristNeubau statt par_6bFrist
     reinvest: Optional[str] = None       # ja = Neuobjekt aus den Annahmen
@@ -836,6 +855,7 @@ class Neuobjekt:
     """Reinvestitionsobjekt, gekauft zum Ende des Kaufjahrs. None = Feld leer lassen."""
     neu_id: str
     kaufjahr: Optional[int]
+    aktiv: Optional[str] = None          # "nein" schaltet den Kauf aus; leer = ja
     kaufpreis: Optional[float] = None
     anteil_gub: Optional[float] = None
     afa_satz: Optional[float] = None
@@ -854,6 +874,7 @@ class Neuobjekt:
     quelle3: Optional[str] = None
     fin_art: Optional[str] = None        # "Kredit" oder leer bzw. "Eigenmittel"
     kredit_betrag: Optional[float] = None  # leer = ganzer Finanzierungsbedarf
+    kredit_quote: Optional[float] = None   # Kredit in % der AK gesamt, höchstens der Bedarf
     kredit_zins: Optional[float] = None
     tilgungsart: Optional[str] = None    # "Annuität" (leer), "linear", "endfällig"
     tilgung: Optional[float] = None      # % des Kreditbetrags, Annuität: anfänglich

@@ -13,7 +13,7 @@ from .modelle import (AFA_DEGRESSIV, ANL_NICHT_IM_MODELL, ANLAGE_FELDER, ANLAGE_
                       OBJEKT_ERSTE_ANLAGEN_SPALTE,
                       FEHLER, NEU_FELDER, STATUS_ANNAHME_GELOESCHT, NEU_SPALTEN, OBJEKT_FELDER, PROGNOSE_SPALTEN,
                       RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN, STATUS_6B_UNZULAESSIG,
-                      STATUS_OK, SZ_A, SZ_B, SZ_BASELINE, SZENARIEN, VERKAUF_FELDER,
+                      STATUS_AUS, STATUS_OK, SZ_A, SZ_B, SZ_BASELINE, SZENARIEN, VERKAUF_FELDER,
                       VERKAUF_SPALTEN, WARNUNG, Szenario, aus_spalten, liq_spalten,
                       DARLEHEN_SPALTEN, FIN_KREDIT, QUELLEN, TILGUNG_ANNUITAET,
                       TILGUNG_ENDFAELLIG, TILGUNG_LINEAR,
@@ -618,15 +618,17 @@ def verkauf_zeile(zeile: int) -> dict:
     def wenn(ausdruck):
         return f'=IF(OR({id_}="",COUNTIF(obj_ID,{id_})=0),"",{ausdruck})'
 
-    quote_vertrag = _v("anteil_gub", zeile)
+    quote_vertrag, betrag_gub = _v("anteil_gub", zeile), _v("gub_betrag", zeile)
     return {
         "vorbesitz": wenn(f"{_v('jahr', zeile)}-{obj('obj_Kaufjahr')}"),
         "buchwert_geb": wenn(f"SUMIFS(prg_Buchwert,prg_ID,{id_},prg_Jahr,{_v('jahr', zeile)})"),
         "ak_gub": wenn(obj("obj_AKGuB")),
         "nettoerloes": wenn(f"N({_v('preis', zeile)})-N({_v('kosten', zeile)})"),
         # Kaufvertrag vor Verkehrswert; ohne beides leer, der Status meldet es
-        "quote_gub": wenn(f'IF({quote_vertrag}<>"",{quote_vertrag},'
-                          f'IF({obj("obj_VKQuoteGeb")}="","",1-{obj("obj_VKQuoteGeb")}))'),
+        "quote_gub": wenn(f'IF({betrag_gub}<>"",IF(N({_v("preis", zeile)})>0,'
+                          f'{betrag_gub}/{_v("preis", zeile)},""),'
+                          f'IF({quote_vertrag}<>"",{quote_vertrag},'
+                          f'IF({obj("obj_VKQuoteGeb")}="","",1-{obj("obj_VKQuoteGeb")})))'),
         "erloes_gub": wenn(f'IF({_v("quote_gub", zeile)}="","",'
                            f'{_v("nettoerloes", zeile)}*{_v("quote_gub", zeile)})'),
         "erloes_geb": wenn(f'IF({_v("quote_gub", zeile)}="","",'
@@ -652,9 +654,10 @@ def status_verkauf(zeile: int) -> str:
         f'IF(OR({jahr}<par_Startjahr,{jahr}>par_Endjahr),"Verkaufsjahr außerhalb Raster",'
         f'IF({_v("preis", zeile)}="","Verkaufspreis fehlt",'
         f'IF({_v("quote_gub", zeile)}="","Aufteilung fehlt: Anteil G+B oder Verkehrswertanteil",'
+        f'IF({_v("quote_gub", zeile)}>1,"Preis G+B über Verkaufspreis",'
         f'IF(AND({_v("nutzung_6b", zeile)}="ja",{_v("vorbesitz", zeile)}<par_6bVorbesitz),'
         f'"{STATUS_6B_UNZULAESSIG}",'
-        f'"{STATUS_OK}"))))))))'
+        f'"{STATUS_OK}")))))))))'
     )
 
 
@@ -838,7 +841,7 @@ def neu_zeile(zeile: int) -> dict:
     ak_geb, ak_gub = _n("ak_geb_neu", zeile), _n("ak_gub_neu", zeile)
     gub_ein, geb_ein = _n("ak_gub_eingabe", zeile), _n("ak_geb_eingabe", zeile)
     formeln = {
-        "gueltig": wenn(f"IF(AND({_gefuellt(pflicht)}={len(pflicht)},"
+        "gueltig": wenn(f'IF(AND({_n("aktiv", zeile)}<>"nein",{_gefuellt(pflicht)}={len(pflicht)},'
                         f"COUNTIF(ne_ID,{id_})=1,COUNTIF(obj_ID,{id_})=0,"
                         f"{kj}>=par_Startjahr,{kj}<=par_Endjahr),1,0)"),
         # Nebenkosten im Verhältnis des Kaufpreises aufgeteilt und aktiviert; eingetragene
@@ -862,8 +865,10 @@ def neu_zeile(zeile: int) -> dict:
         "bedarf": wenn(f"IF({_n('gueltig', zeile)}=1,{_n('ak_gesamt', zeile)}"
                        f"-{_n('erloes', zeile)},0)"),
         "kredit": wenn(f'IF(AND({_n("gueltig", zeile)}=1,{_n("fin_art", zeile)}="{FIN_KREDIT}"),'
-                       f'IF({_n("kredit_betrag", zeile)}="",MAX({_n("bedarf", zeile)},0),'
-                       f'N({_n("kredit_betrag", zeile)})),0)'),
+                       f'IF({_n("kredit_betrag", zeile)}<>"",N({_n("kredit_betrag", zeile)}),'
+                       f'IF({_n("kredit_quote", zeile)}<>"",'
+                       f'MIN({_n("ak_gesamt", zeile)}*{_n("kredit_quote", zeile)},'
+                       f'MAX({_n("bedarf", zeile)},0)),MAX({_n("bedarf", zeile)},0))),0)'),
         "eigen": wenn(f"{_n('bedarf', zeile)}-{_n('kredit', zeile)}"),
         "miete_qm_jahr": wenn(f'IF(N({_n("flaeche", zeile)})*N({_n("miete_qm", zeile)})>0,'
                               f'{_n("flaeche", zeile)}*{_n("miete_qm", zeile)}*12,"")'),
@@ -916,7 +921,7 @@ def _hinweis_kredit(zeile: int) -> str:
     art = _n("tilgungsart", zeile)
     return (
         f'IF({_n("fin_art", zeile)}<>"{FIN_KREDIT}",'
-        f'IF(AND({leer("kredit_betrag")},{leer("kredit_zins")}),"",'
+        f'IF(AND({leer("kredit_betrag")},{leer("kredit_quote")},{leer("kredit_zins")}),"",'
         f'"; Kreditangaben ohne Finanzierung Rest = {FIN_KREDIT}, kein Kredit"),'
         f'IF({leer("kredit_zins")},"; Kredit: Zinssatz fehlt",'
         f'IF(AND({art}="{TILGUNG_ENDFAELLIG}",{leer("laufzeit")}),'
@@ -935,11 +940,12 @@ def status_neu(zeile: int) -> str:
                         + [_hinweis_kredit(zeile)])
     return (
         f'=IF({id_}="","",'
+        f'IF({_n("aktiv", zeile)}="nein","{STATUS_AUS}",'
         f'IF({_gefuellt(pflicht)}<{len(pflicht)},"Pflichtfeld fehlt",'
         f'IF(COUNTIF(ne_ID,{id_})>1,"NeuID doppelt",'
         f'IF(COUNTIF(obj_ID,{id_})>0,"NeuID wie Bestandsobjekt",'
         f'IF(OR({kj}<par_Startjahr,{kj}>par_Endjahr),"Kaufjahr außerhalb Raster",'
-        f'IF({hinweise}="","{STATUS_OK}",MID({hinweise},3,500)))))))'
+        f'IF({hinweise}="","{STATUS_OK}",MID({hinweise},3,500))))))))'
     )
 
 
@@ -1230,7 +1236,7 @@ def pruefung_anzahl() -> dict:
     return {
         "objekte": _nicht_ok("obj_Status"),
         "verkaeufe": _nicht_ok("vk_Status", STATUS_6B_UNZULAESSIG),
-        "neuobjekte": _nicht_ok("ne_Status"),
+        "neuobjekte": _nicht_ok("ne_Status", STATUS_AUS),
         "steuerwelt": '=IF(par_Steuerwelt="GmbH",0,1)',
         "vorbesitz": f'=SUMPRODUCT(--(vk_Status="{STATUS_6B_UNZULAESSIG}"))',
         "teiluebertrag": f"=SUMPRODUCT({rest}*({genannt}>0))",
