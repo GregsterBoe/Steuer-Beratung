@@ -23,7 +23,7 @@ from .modelle import (ANLAGE_FELDER, ANLAGE_JAHRE_NAME, ANLAGE_SPALTEN, ANLAGE_S
                       VARIANTEN_KOPF, WARNUNG,
                       NEU_FELDER, NEU_SPALTEN, NEU_STATUS_NAME, OBJEKT_FELDER, STATUS_AUS,
                       DARLEHEN_BLOECKE, DARLEHEN_ERSTE, DARLEHEN_SPALTEN, NEU_DETAIL_ERSTE, QUELLEN,
-                      PARAMETER, PROGNOSE_SPALTEN, Spalte, RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN,
+                      PARAMETER, PROGNOSE_SPALTEN, PRG_NUR_BESTAND, Spalte, RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN,
                       STATUS_NAME, STATUS_UEBERSCHRIFT, SZ_A, SZ_BASELINE, SZENARIEN,
                       VERGLEICH_KENNZAHLEN, VERKAUF_FELDER, VERKAUF_SPALTEN, VERKAUF_STATUS_NAME, Modell,
                       ZUORDNUNG_BEZEICHNUNG, ZUORDNUNG_MEHRDEUTIG, aus_spalten, liq_spalten,
@@ -647,6 +647,12 @@ def _blatt_prognose(wb, modell: Modell) -> None:
         bst = get_column_letter(i)
         ws.column_dimensions[bst].width = s.breite
         _name(wb, s.name, f"Prognose!${bst}${erste}:${bst}${letzte}")
+        # nur die Bestandsobjekte: die Verkäufe lesen daraus den Buchwert; über die ganze
+        # Spalte hingen sie von den Neuobjekten ab, die die Rücklage aus dem Verkauf
+        # nutzen, und Excel meldete einen Zirkelbezug
+        if s.key in PRG_NUR_BESTAND:
+            _name(wb, PRG_NUR_BESTAND[s.key],
+                  f"Prognose!${bst}${erste}:${bst}${k.objekte * jahre + 1}")
 
     bloecke = ([(nr, formeln.prognose_zeile) for nr in range(1, k.objekte + 1)]
                + [(nr, formeln.prognose_zeile_neu) for nr in range(1, k.neuobjekte + 1)])
