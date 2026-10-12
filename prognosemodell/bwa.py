@@ -5,6 +5,9 @@ links die Ist-Werte, rechts die Planjahre als Formeln aus der Prognose (Szenario
 Das Summenblatt „Alle Objekte“ rechnet über alle Objekte, auch über solche, die
 erst in Excel angelegt werden und kein eigenes Blatt haben, und stimmt mit dem
 Blatt Liquidität überein: Ergebnis vor Steuern = Ergebnis vor Verlustvortrag.
+Das Blatt „Alle Objekte halten“ zeigt im selben Layout die Baseline: alle
+Bestandsobjekte gehalten, ohne Verkäufe und Neuobjekte. Mit dem Schalter
+„Vergleich mit Halten“ zeigt „Alle Objekte“ rechts die Differenz je Position.
 
 Das Blatt „Verkauf und Kauf“ zeigt je Verkauf eine Ergebnissicht und eine
 Detailsicht, darunter je Neuobjekt die Detailsicht des Kaufs.
@@ -22,6 +25,7 @@ from .vorlagen import (BWA_ZEILEN, ERSTE_ZEILE, SPALTE_JAHR, SPALTE_PLAN, SPALTE
                        bwa_kopf)
 
 SUMMENBLATT = "Alle Objekte"
+HALTEBLATT = "Alle Objekte halten"
 SONDERBEREICH = "Verkauf und Kauf"
 ZEILE_JAHR = ERSTE_ZEILE - 1   # Hilfszeile mit dem Planjahr als Zahl, für die Formeln
 ZEILEN = {nr: ERSTE_ZEILE + i for i, (nr, _) in enumerate(BWA_ZEILEN)}   # wie bwa_kopf
@@ -131,10 +135,11 @@ def _brutto(ausdruck: str) -> str:
 
 
 def _posten() -> list:
-    """(Schlüssel, Bezeichnung, Standard-Nr., Erläuterung, Formel(jahr, vk, rl, prg, summe)).
+    """(Schlüssel, Bezeichnung, Standard-Nr., Erläuterung, Formel(jahr, vk, rl, prg, liq)).
 
     vk, rl, prg sind die Filter auf das Objekt des Blatts (leer im Summenblatt);
-    summe ist True im Summenblatt. Ergebnis: ergebniswirksamer Betrag ohne „=“.
+    liq ist das Namenspräfix der Liquidität im Summenblatt (liq, Halten lqb), sonst
+    None. Ergebnis: ergebniswirksamer Betrag ohne „=“.
     """
     def x(*b):
         return tuple(f for f in b if f)
@@ -142,7 +147,7 @@ def _posten() -> list:
     def prg(name, jahr, f, vz=""):
         return f"{vz}SUMIFS({name},prg_Jahr,{jahr},prg_Neu,1{f})"
 
-    zins = "SUMIFS(liq_Zins,liq_Jahr,{j})"
+    zins = "SUMIFS({liq}_Zins,{liq}_Jahr,{j})"
     return [
         ("gewinn", "Veräußerungsgewinn (netto)", 1323,
          "Gewinn gültiger Verkäufe im Verkaufsjahr; nur bei Ausweis netto",
@@ -181,14 +186,16 @@ def _posten() -> list:
          "Kredit lt. Blatt Neuobjekte, Tilgungsplan im Blatt Darlehen",
          lambda j, vk, rl, pf, s: prg("prg_KreditZins", j, pf, "-")),
         ("zinsertrag", "Zinsertrag Alternativanlage", 1322, "nur im Blatt Alle Objekte",
-         lambda j, vk, rl, pf, s: f"MAX({zins.format(j=j)},0)" if s else "0"),
+         lambda j, vk, rl, pf, s: f"MAX({zins.format(j=j, liq=s)},0)" if s else "0"),
         ("zinsaufwand", "Zinsaufwand bei negativer Liquidität", 1310,
          "nur im Blatt Alle Objekte",
-         lambda j, vk, rl, pf, s: f"MIN({zins.format(j=j)},0)" if s else "0"),
+         lambda j, vk, rl, pf, s: f"MIN({zins.format(j=j, liq=s)},0)" if s else "0"),
     ]
 
 
 POSTEN = _posten()
+# Halten-Ansicht: ohne Verkauf, Rücklage und Neuobjekte bleibt nur der Zins der Liquidität
+POSTEN_HALTEN = ("zinsertrag", "zinsaufwand")
 # Herleitungsblock unter der BWA: Titel, dann je Posten eine Zeile, dann die Summe
 HERLEITUNG_TITEL = ERSTE_ZEILE + len(BWA_ZEILEN) + 1
 HERLEITUNG_ERSTE = HERLEITUNG_TITEL + 1
@@ -224,8 +231,10 @@ def _mit_zuordnung(z: dict, sp: str, basis: dict) -> dict:
     return formeln
 
 
-def _herleitung(ws, planjahre: int, objekt: bool) -> None:
-    """Herleitungsblock unter der BWA: je Posten Ziel-Nr. und ergebniswirksamer Betrag."""
+def _herleitung(ws, planjahre: int, objekt: bool, liq: str = "liq",
+                halten: bool = False) -> None:
+    """Herleitungsblock unter der BWA: je Posten Ziel-Nr. und ergebniswirksamer Betrag.
+    liq: Liquidität des Summenblatts (liq Szenario A, lqb Baseline); halten: nur der Zins."""
     c = ws.cell(row=HERLEITUNG_TITEL, column=3,
                 value="Herleitung Sonderposten (+ Ertrag, − Aufwand); Zuordnung im Blatt "
                       f"{ZUORDNUNG}")
@@ -241,21 +250,22 @@ def _herleitung(ws, planjahre: int, objekt: bool) -> None:
         ziel.font, ziel.fill = FONT_HILFE_GROSS, FILL_BERECHNET
         for i in range(planjahre):
             jahr = f"{get_column_letter(SPALTE_PLAN + i)}${ZEILE_JAHR}"
-            zelle = ws.cell(row=zeile, column=SPALTE_PLAN + i,
-                            value="=" + formel(jahr, vk, rl, pf, not objekt))
+            betrag = ("0" if halten and key not in POSTEN_HALTEN
+                      else formel(jahr, vk, rl, pf, None if objekt else liq))
+            zelle = ws.cell(row=zeile, column=SPALTE_PLAN + i, value="=" + betrag)
             zelle.number_format, zelle.font = FMT_BWA, FONT_HILFE_GROSS
 
 
-def _finanzierung(ws, planjahre: int, id_: str = None) -> None:
+def _finanzierung(ws, planjahre: int, id_: str = None, liq: str = "liq") -> None:
     """Kredit nachrichtlich unter der Herleitung: Auszahlung, Tilgung, Restschuld je Planjahr.
-    id_: Zelle mit der NeuID; ohne: Summe aller Kredite (Summenblatt)."""
+    id_: Zelle mit der NeuID; ohne: Summe aller Kredite (Summenblatt, Liquidität liq)."""
     ws.cell(row=FINANZ_TITEL, column=3, value="Finanzierung (nachrichtlich, Zinsen in 1310)"
             ).font = Font(bold=True)
     for zeile, (text, objekt, summe) in enumerate(FINANZIERUNG, start=FINANZ_TITEL + 1):
         ws.cell(row=zeile, column=3, value=text).font = FONT_HILFE_GROSS
         for i in range(planjahre):
             jahr = f"{get_column_letter(SPALTE_PLAN + i)}${ZEILE_JAHR}"
-            formel = (summe.format(j=jahr) if id_ is None else
+            formel = (summe.format(j=jahr).replace("liq_", f"{liq}_") if id_ is None else
                       f'IF({id_}="",0,{objekt.format(id=id_, j=jahr)})')
             c = ws.cell(row=zeile, column=SPALTE_PLAN + i, value=f"={formel}")
             c.number_format, c.font = FMT_BWA, FONT_HILFE_GROSS
@@ -307,6 +317,34 @@ def _planformeln_summe(z: dict, sp: str, bestand: list) -> dict:
         basis[nr] = "+".join(f"'{b}'!{sp}{z[nr]}" for b in bestand) or "0"
     andere = "+".join(f"{sp}{z[nr]}" for nr in AUSGABEN_ZEILEN)
     basis[1260] = f"{p('prg_Ausgaben')}-({andere})"
+    return _mit_zuordnung(z, sp, basis)
+
+
+def _planformeln_halten(z: dict, sp: str) -> dict:
+    """Planspalte der Halten-Ansicht: Baseline der Liquidität, alle Bestandsobjekte gehalten.
+    Mieten und Ausgaben fortgeschrieben wie dort, die Kostenarten 1100–1220 im Verhältnis
+    des Basisjahrs, 1260 nimmt den Rest auf."""
+    jahr = f"{sp}${ZEILE_JAHR}"
+    t = get_column_letter(SPALTE_JAHR)
+
+    def stamm(name, satz):
+        return f'SUMIFS({name},obj_ID,"<>")*(1+{satz})^({jahr}-par_Basisjahr)'
+
+    def lqb(name):
+        return f"SUMIFS(lqb_{name},lqb_Jahr,{jahr})"
+
+    basis = {
+        1020: stamm("obj_MieteBasis", "par_Mietsteig"),
+        1090: stamm("obj_EinnBasis", "par_Mietsteig"),
+        1240: lqb("AfA"),
+        1250: f"SUMIFS(prg_ErhaltungHalten,prg_Jahr,{jahr})",
+        1310: lqb("KreditZins"),
+        1355: lqb("Steuer"),
+    }
+    for nr in AUSGABEN_ZEILEN:
+        basis[nr] = f"N(${t}{z[nr]})*(1+par_Kostensteig)^({jahr}-par_Basisjahr)"
+    andere = "+".join(f"{sp}{z[nr]}" for nr in AUSGABEN_ZEILEN)
+    basis[1260] = f"{stamm('obj_AusgBasis', 'par_Kostensteig')}-({andere})"
     return _mit_zuordnung(z, sp, basis)
 
 
@@ -572,6 +610,7 @@ def blaetter_bwa(wb, modell: Modell) -> list:
     basisjahr = _basisjahr(modell)
     planjahre = prognosejahre()
     summe = wb.create_sheet(blattname(SUMMENBLATT, wb.sheetnames))
+    halten = wb.create_sheet(blattname(HALTEBLATT, wb.sheetnames))
     eintraege = []
     for zeile, obj in enumerate(modell.objekte, start=2):   # Zeile im Blatt Objekte
         if not obj.objekt_id:
@@ -604,13 +643,7 @@ def blaetter_bwa(wb, modell: Modell) -> list:
     z = bwa_kopf(summe, "KSt", SUMMENBLATT, basisjahr, planjahre, monate_einklappen=True)
     _jahreszeile(summe, planjahre)
     bestand = [t for t, e in zip(titel, eintraege) if not e[4]]
-    # Ist-Werte und Basisjahr: Summe der Kostenstellenblätter
-    for spalte in range(SPALTE_VORJAHRE, SPALTE_JAHR + 1):
-        sp = get_column_letter(spalte)
-        for nr, bez in BWA_ZEILEN:
-            if bez and bestand:
-                summe.cell(row=z[nr], column=spalte,
-                           value="=" + "+".join(f"N('{b}'!{sp}{z[nr]})" for b in bestand))
+    _ist_summe(summe, z, bestand)
     _planspalten(summe, z, planjahre, lambda sp: _planformeln_summe(z, sp, bestand))
     _herleitung(summe, planjahre, objekt=False)
     _finanzierung(summe, planjahre)
@@ -620,6 +653,8 @@ def blaetter_bwa(wb, modell: Modell) -> list:
                    "Ist-Spalten und Basisjahr: Summe der Kostenstellenblätter; Objekte ohne "
                    "eigenes Blatt nur in den Planspalten.")
     summe["E2"].font = Font(italic=True)
+    _blatt_halten(halten, bestand, basisjahr, planjahre)
+    _vergleich_halten(wb, summe, z, planjahre, halten.title)
     ende = get_column_letter(SPALTE_PLAN + planjahre - 1)
     anfang = get_column_letter(SPALTE_PLAN)
     for nr, bez in BWA_ZEILEN:
@@ -628,15 +663,83 @@ def blaetter_bwa(wb, modell: Modell) -> list:
     _name(wb, "bwa_Jahr", f"'{summe.title}'!${anfang}${ZEILE_JAHR}:${ende}${ZEILE_JAHR}")
     for zeile, posten in zip(range(HERLEITUNG_ERSTE, HERLEITUNG_LETZTE + 1), POSTEN):
         _name(wb, f"bwah_{posten[0]}", f"'{summe.title}'!${anfang}${zeile}:${ende}${zeile}")
-    zuordnung = blatt_zuordnung(wb, summe, z, planjahre, modell.bwa_zuordnung)
-    return [zuordnung, summe.title] + titel + neukauf
+    for nr, bez in BWA_ZEILEN:
+        if bez:
+            _name(wb, f"bwb_{nr}", f"'{halten.title}'!${anfang}${z[nr]}:${ende}${z[nr]}")
+    zuordnung = blatt_zuordnung(wb, summe, z, planjahre, modell.bwa_zuordnung, halten.title)
+    return [zuordnung, summe.title, halten.title] + titel + neukauf
 
 
-def blatt_zuordnung(wb, summe, z: dict, planjahre: int, vorgabe: dict) -> str:
+def _ist_summe(ws, z: dict, bestand: list) -> None:
+    """Ist-Werte und Basisjahr: Summe der Kostenstellenblätter."""
+    for spalte in range(SPALTE_VORJAHRE, SPALTE_JAHR + 1):
+        sp = get_column_letter(spalte)
+        for nr, bez in BWA_ZEILEN:
+            if bez and bestand:
+                ws.cell(row=z[nr], column=spalte,
+                        value="=" + "+".join(f"N('{b}'!{sp}{z[nr]})" for b in bestand))
+
+
+def _blatt_halten(ws, bestand: list, basisjahr: int, planjahre: int) -> None:
+    """Halten-Ansicht im Layout von „Alle Objekte“: Ist wie dort, Planjahre = Baseline."""
+    z = bwa_kopf(ws, "KSt", HALTEBLATT, basisjahr, planjahre, monate_einklappen=True)
+    _jahreszeile(ws, planjahre)
+    _ist_summe(ws, z, bestand)
+    _planspalten(ws, z, planjahre, lambda sp: _planformeln_halten(z, sp))
+    _herleitung(ws, planjahre, objekt=False, liq="lqb", halten=True)
+    _finanzierung(ws, planjahre, liq="lqb")
+    ws["E2"] = ("Halten-Ansicht (Baseline): alle Bestandsobjekte werden über das ganze Raster "
+                "gehalten, ohne Verkäufe und Neuobjekte; Bestandsdarlehen laufen weiter. "
+                "Nr. 1353 = Ergebnis vor Verlustvortrag der Baseline im Blatt Liquidität "
+                f"(Kontrolle im Blatt {ZUORDNUNG}), Steuer mit Verlustvortrag. Ist-Spalten und "
+                f"Basisjahr wie in „{SUMMENBLATT}“.")
+    ws["E2"].font = Font(italic=True)
+
+
+FMT_DIFF = '[Color10]+#,##0.00;[Red]-#,##0.00;""'   # grün mehr, rot weniger als bei Halten
+
+
+def _vergleich_halten(wb, ws, z: dict, planjahre: int, halten: str) -> None:
+    """Schalter „Vergleich mit Halten“ (D3) im Summenblatt: bei ja rechts neben den
+    Planjahren je Position die Differenz Plan − Halten, sonst bleiben die Spalten leer."""
+    from openpyxl.worksheet.datavalidation import DataValidation
+    ws["C3"] = "Vergleich mit Halten:"
+    ws["C3"].font = Font(bold=True)
+    ws["D3"] = "nein"
+    ws["D3"].fill, ws["D3"].font = FILL_EINGABE, Font(bold=True)
+    dv = DataValidation(type="list", formula1='"ja,nein"', allow_blank=False)
+    ws.add_data_validation(dv)
+    dv.add("D3")
+    _name(wb, "bwa_VglHalten", f"'{ws.title}'!$D$3")
+    an = '$D$3="ja"'
+    blatt = halten.replace("'", "''")
+    erste = SPALTE_PLAN + planjahre + 1   # eine Spalte Abstand zu den Planjahren
+    kopf = ws.cell(row=3, column=erste,
+                   value=f'=IF({an},"Differenz Plan − Halten (Blatt {halten}): '
+                         f'grün mehr, rot weniger","")')
+    kopf.font = Font(bold=True)
+    zeilen = ([z[nr] for nr, bez in BWA_ZEILEN if bez and nr != 1094]
+              + list(range(HERLEITUNG_ERSTE, HERLEITUNG_LETZTE + 1))
+              + list(range(FINANZ_TITEL + 1, FINANZ_LETZTE + 1)))
+    for i in range(planjahre):
+        plan = get_column_letter(SPALTE_PLAN + i)
+        spalte = erste + i
+        c = ws.cell(row=4, column=spalte,
+                    value=f'=IF({an},"Diff. "&{plan}${ZEILE_JAHR},"")')
+        c.font, c.fill = Font(bold=True), FILL_KOPF
+        for zeile in zeilen:
+            c = ws.cell(row=zeile, column=spalte,
+                        value=f"=IF({an},N({plan}{zeile})-N('{blatt}'!{plan}{zeile}),\"\")")
+            c.number_format = FMT_DIFF
+        ws.column_dimensions[get_column_letter(spalte)].width = 12
+
+
+def blatt_zuordnung(wb, summe, z: dict, planjahre: int, vorgabe: dict, halten: str) -> str:
     """Steuerblatt: BWA-Zeile je Sonderposten, Ausweis des Verkaufs, Kontrolle.
 
     Steht vor dem Summenblatt. Die Kontrolle vergleicht je Planjahr das Ergebnis des
-    Summenblatts (Nr. 1353) mit dem Ergebnis vor Verlustvortrag im Blatt Liquidität.
+    Summenblatts (Nr. 1353) mit dem Ergebnis vor Verlustvortrag im Blatt Liquidität,
+    ebenso die Halten-Ansicht mit der Baseline.
     """
     from openpyxl.formatting.rule import FormulaRule
     from openpyxl.worksheet.datavalidation import DataValidation
@@ -718,10 +821,14 @@ def blatt_zuordnung(wb, summe, z: dict, planjahre: int, vorgabe: dict) -> str:
                                        "(Szenario A)").font = FONT_ABSCHNITT
     zeile += 1
     jahr_z, bwa_z, liq_z, diff_z = zeile, zeile + 1, zeile + 2, zeile + 3
+    bwb_z, lqb_z, diffb_z = zeile + 5, zeile + 6, zeile + 7
     for text, z_ in (("Jahr", jahr_z), ("Ergebnis lt. BWA Alle Objekte (Nr. 1353)", bwa_z),
                      ("Ergebnis vor Verlustvortrag lt. Liquidität", liq_z),
-                     ("Differenz (muss 0 sein)", diff_z)):
-        ws.cell(row=z_, column=1, value=text).font = Font(bold=z_ in (jahr_z, diff_z))
+                     ("Differenz (muss 0 sein)", diff_z),
+                     (f"Ergebnis lt. BWA {HALTEBLATT} (Nr. 1353)", bwb_z),
+                     ("Ergebnis vor Verlustvortrag lt. Liquidität Baseline", lqb_z),
+                     ("Differenz Halten (muss 0 sein)", diffb_z)):
+        ws.cell(row=z_, column=1, value=text).font = Font(bold=z_ in (jahr_z, diff_z, diffb_z))
     for i in range(planjahre):
         sp = get_column_letter(2 + i)
         quelle = get_column_letter(SPALTE_PLAN + i)
@@ -729,13 +836,18 @@ def blatt_zuordnung(wb, summe, z: dict, planjahre: int, vorgabe: dict) -> str:
                 (jahr_z, f"=par_Startjahr+{i}", FMT_JAHR),
                 (bwa_z, f"='{summe.title}'!{quelle}{z[1353]}", FMT_EURO),
                 (liq_z, f"=INDEX(liq_ZvE,{i + 1})", FMT_EURO),
-                (diff_z, f"=ROUND({sp}{bwa_z}-{sp}{liq_z},2)", FMT_EURO)):
+                (diff_z, f"=ROUND({sp}{bwa_z}-{sp}{liq_z},2)", FMT_EURO),
+                (bwb_z, f"='{halten}'!{quelle}{z[1353]}", FMT_EURO),
+                (lqb_z, f"=INDEX(lqb_ZvE,{i + 1})", FMT_EURO),
+                (diffb_z, f"=ROUND({sp}{bwb_z}-{sp}{lqb_z},2)", FMT_EURO)):
             c = ws.cell(row=z_, column=2 + i, value=formel)
             c.number_format, c.fill = fmt, FILL_BERECHNET
     ende = get_column_letter(1 + planjahre)
     _name(wb, "zuo_Differenz", f"'{ZUORDNUNG}'!$B${diff_z}:${ende}${diff_z}")
-    ws.conditional_formatting.add(
-        f"B{diff_z}:{ende}{diff_z}", FormulaRule(formula=[f"B{diff_z}<>0"], fill=FILL_FEHLER))
+    _name(wb, "zuo_DifferenzHalten", f"'{ZUORDNUNG}'!$B${diffb_z}:${ende}${diffb_z}")
+    for d in (diff_z, diffb_z):
+        ws.conditional_formatting.add(
+            f"B{d}:{ende}{d}", FormulaRule(formula=[f"B{d}<>0"], fill=FILL_FEHLER))
 
     ws.column_dimensions["A"].width = 44
     ws.column_dimensions["C"].width = 22

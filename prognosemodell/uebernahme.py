@@ -16,7 +16,7 @@ from datetime import date, datetime
 from openpyxl import load_workbook
 
 from . import formeln
-from .bwa import POSTEN, ZUORDNUNG
+from .bwa import POSTEN, SUMMENBLATT, ZUORDNUNG
 from .modelle import (ANLAGE_FELDER, ANLAGE_SPALTEN, NEU_FELDER, NEU_SPALTEN,
                       NEUKAUF_POSITIONEN, OBJEKT_EINGELESEN, OBJEKT_FELDER, PARAMETER,
                       STATUS_UEBERSCHRIFT, VARIANTEN_KOPF, VERKAUF_FELDER, VERKAUF_SPALTEN,
@@ -354,6 +354,16 @@ def _zuordnung(alt, neu, bericht: Bericht) -> None:
             bericht.zaehle(ZUORDNUNG)
 
 
+def _vergleich_halten(alt, neu, bericht: Bericht) -> None:
+    """Schalter „Vergleich mit Halten“ im Summenblatt (D3)."""
+    if SUMMENBLATT not in alt.sheetnames or SUMMENBLATT not in neu.sheetnames:
+        return
+    wert = alt[SUMMENBLATT]["D3"].value
+    if wert in ("ja", "nein") and wert != neu[SUMMENBLATT]["D3"].value:
+        neu[SUMMENBLATT]["D3"] = wert
+        bericht.zaehle(SUMMENBLATT)
+
+
 def _varianten(alt, neu, bericht: Bericht) -> None:
     if "Varianten" not in alt.sheetnames:
         return
@@ -399,5 +409,6 @@ def uebernehmen(neu, pfad, geschuetzt=(), kapazitaet=None) -> list:
     _zeilenweise(alt, neu, "Neuobjekte", NEU_FELDER, NEU_SPALTEN,
                  kapazitaet.neuobjekte, bericht, "ne_ID")
     _zuordnung(alt, neu, bericht)
+    _vergleich_halten(alt, neu, bericht)
     _varianten(alt, neu, bericht)
     return bericht.ausgabe()

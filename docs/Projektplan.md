@@ -855,6 +855,8 @@ Benannte Bereiche: zuo\_Verkauf, zuo\_<Posten> (BWA-Nr.), zuo\_Nr, zuo\_Nummern,
 
 Benannte Bereiche: bwa\_<Nr.> je Zeile über die Planjahre, bwa\_Jahr.
 
+Halten-Ansicht und Vergleich mit Halten: siehe Abschnitt 29.
+
 **Sonderbereich Verkauf und Kauf**
 
 Je Vorgang gibt es zwei Sichten. In der Referenz stehen sie rechts neben der BWA (ab Spalte AP); im Modell stehen sie im eigenen Blatt „Verkauf und Kauf“.
@@ -1395,3 +1397,21 @@ Eine Vorfälligkeitsentschädigung trägt der Anwender in die Verkaufskosten ein
 **Später:** Import der Restschulden aus der Summen- und Saldenliste (DATEV), sobald ein Muster vorliegt; Voraussetzung ist ein Sachkonto je Darlehen und dessen Zuordnung zum Objekt.
 
 **Prüfung im Prüfskript:** „Bestandsdarlehen: Tilgungsplan, Fortschreibung und Ablösung beim Verkauf“: OBJ-001 Restschuld 500.000, 4 %, Rate 40.000, Verkauf Ende 2029 (Ablösung 459.200, bei Halten Rest 437.568); OBJ-002 nur Zinsaufwand 10.000 × 0,97 je Jahr; OBJ-003 Zinssatz und Rate als Annahme (4 %, 18.000); OBJ-004 Zinsaufwand ohne Restschuld, verkauft (Warnung). Liquidität, Baseline, Auswertung, BWA 1310 mit Kontrolle gegen die Liquidität, Sonderbereich.
+
+## 29. Halten-Ansicht „Alle Objekte halten“, Vergleich mit Halten
+
+**Wunsch:** ein Extrablatt mit der unveränderten Gesamtübersicht ohne Verkäufe und Käufe, also eine reine Halten-Ansicht; dazu in „Alle Objekte“ wahlweise die Differenz zu Halten je Position.
+
+**Blatt „Alle Objekte halten“** direkt hinter „Alle Objekte“, gleiches Layout (B2 „KSt“, Zeilen 1010–1380, Herleitung, Finanzierung). Ist-Spalten und Basisjahr = Summe der Kostenstellenblätter wie in „Alle Objekte“. Planjahre = Baseline der Liquidität (lqb):
+
+- 1020, 1090: obj\_MieteBasis bzw. obj\_EinnBasis aller Objekte × (1 + par\_Mietsteig)^(Jahr − Basisjahr)
+- 1100–1220: Basisjahr der Kostenart × (1 + par\_Kostensteig)^(Jahr − Basisjahr); 1260 = obj\_AusgBasis fortgeschrieben abzüglich 1100–1220
+- 1240 = lqb\_AfA, 1250 = prg\_ErhaltungHalten, 1310 = lqb\_KreditZins (Bestandsdarlehen ohne Verkauf), 1355 = lqb\_Steuer
+- Herleitung: alle Posten 0 bis auf Zinsertrag und Zinsaufwand der Alternativanlage aus lqb\_Zins, nach der BWA-Zuordnung
+- Finanzierung: Tilgung und Restschuld aus lqb, keine Kreditauszahlung
+
+Kontrolle im Blatt BWA-Zuordnung: 1353 der Halten-Ansicht gegen lqb\_ZvE je Jahr (zuo\_DifferenzHalten); die Prüfung „bwa\_zuordnung“ zählt auch diese Jahre. Benannte Bereiche bwb\_<Nr.> je Zeile über die Planjahre.
+
+**Vergleich mit Halten:** Schalter in „Alle Objekte“ D3 (ja/nein, Standard nein, bwa\_VglHalten). Rechts neben den Planjahren, eine Spalte Abstand, je Planjahr eine Spalte „Diff. <Jahr>“: Plan − Halten je BWA-Zeile, Herleitungsposten und Finanzierungszeile, gleiche Zelle im Blatt „Alle Objekte halten“. Format grün positiv, rot negativ; bei „nein“ leer. Die Planspalten selbst bleiben unverändert, damit bwa\_<Nr.> und die Kontrolle gegen die Liquidität gelten. `--uebernehmen` übernimmt D3.
+
+**Prüfung im Prüfskript:** „BWA: Halten-Ansicht und Vergleich mit Halten“ (Abnahmefall, Schalter ja): Miete halten 2029 63.672,48, 1353/1355/1380/1240 = Baseline, Kontrolle 0, Differenzen Miete 2029 −2.472,48, 1323 und 1312 2027 je 720.000, AfA 2029 −1.600. „BWA: Kostenstellen eingelesen“: ohne Verkauf Halten = Plan, Kostenarten gleich aufgeteilt. Abnahmefall: bei „nein“ Differenzspalten leer. Übernahme: Schalter bleibt „ja“.

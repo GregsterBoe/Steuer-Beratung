@@ -143,11 +143,15 @@ def wert(wb, name: str, zeile_im_bereich: int = 0):
     """Wert eines benannten Bereichs (Spaltenbereich: n-te Zeile, Zeilenbereich: n-te Spalte).
 
     Statt eines Namens gehen auch "BWA:<Blatt>:<BWA-Nr.>" (n = Jahr),
+    "DIFF:<BWA-Nr.>" (Differenzspalte Plan − Halten in Alle Objekte, n = Jahr),
     "SB<Vorgang>:<Beschriftung>" und "KAUF:<Beschriftung>" (n = Spalte, 1 = B).
     """
     if name.startswith("BWA:"):
         _, blatt, nr = name.split(":")
         return bwa_wert(wb[blatt], int(nr), zeile_im_bereich)
+    if name.startswith("DIFF:"):
+        return bwa_wert(wb["Alle Objekte"], int(name[5:]),
+                        zeile_im_bereich + prognosejahre() + 1)
     if name.startswith(("SB", "KAUF:")):
         kennung, beschriftung = name.split(":", 1)
         start = "Detailsicht Kauf" if kennung == "KAUF" else f"Vorgang {kennung[2:]}:"
@@ -314,8 +318,9 @@ def ohne_ak_spalten(wb) -> None:
 def faelle():
     obj = testobjekt()
     ue_zellen = {("Objekte", f"{get_column_letter(nr(OBJEKT_FELDER, 'miete'))}2"): 77_777,
-                 ("AfA-Plan", "D3"): 12_000}
+                 ("AfA-Plan", "D3"): 12_000, ("Alle Objekte", "D3"): "ja"}
     ue_soll = [
+        ("bwa_VglHalten", 0, "ja"),
         ("obj_ID", 1, "KSt 2"),
         ("obj_Kaufjahr", 0, 2007),
         ("obj_MieteBasis", 0, 77_777),
@@ -1055,6 +1060,7 @@ def faelle():
             ("bwa_1020", lj(2029), 61_200),
             ("bwa_1322", lj(2028), 43_257),
             ("bwa_1310", lj(2028), 0),
+            ("DIFF:1020", 2029, None),   # Vergleich mit Halten = nein: Spalten leer
             ("BWA:OBJ-001:1020", 2026, 60_000),
             ("BWA:OBJ-001:1280", 2026, 8_000),
             # Monatsspalten H–S gruppiert und eingeklappt, Jahres- und Planspalten offen
@@ -1144,6 +1150,40 @@ def faelle():
             ("bwa_1120", lj(2027), 2_448),
             ("bwa_1260", lj(2027), 1_734),
             ("bwa_1020", lj(2027), 183_600),
+            # ohne Verkauf gleicht die Halten-Ansicht dem Plan, Kostenarten ebenso aufgeteilt
+            ("BWA:Alle Objekte halten:1020", 2026, 180_000),
+            ("bwb_1120", lj(2027), 2_448),
+            ("bwb_1260", lj(2027), 1_734),
+            ("bwb_1020", lj(2027), 183_600),
+            *[(f"bwb_{nr}", lj(2030), Wie(f"bwa_{nr}", lj(2030)))
+              for nr in (1140, 1150, 1240, 1250, 1260, 1310, 1322, 1353, 1380)],
+        ]),
+        # Halten-Ansicht zum Abnahmefall: Baseline ohne Verkauf und Neuobjekt, Miete
+        # 60.000 × 1,02³ = 63.672,48 im Jahr 2029. Vergleich mit Halten = ja: Differenz je
+        # Position, Plan − Halten; Miete 2029 61.200 (Neuobjekt) − 63.672,48
+        ("BWA: Halten-Ansicht und Vergleich mit Halten",
+         Getippt(Modell(objekte=[abnahme4],
+                        verkaeufe=[Verkauf("OBJ-001", 2027, preis=1_400_000, nutzung_6b="ja")],
+                        neuobjekte=[Neuobjekt("NEU-001", 2028, kaufpreis=1_200_000,
+                                              anteil_gub=0.3, afa_satz=0.03, mietrendite=0.05,
+                                              erhaltungsquote=0.01, quelle="RL-OBJ-001")]),
+                 {("Alle Objekte", "D3"): "ja"}), [
+            ("BWA:Alle Objekte halten:1020", 2026, 60_000),
+            ("BWA:Alle Objekte halten:1020", 2029, 63_672.48),
+            ("BWA:Alle Objekte halten:1323", 2027, 0),
+            ("BWA:Alle Objekte halten:1250", 2029, 8_615.125),
+            ("BWA:Alle Objekte halten:1240", 2029, 16_000),
+            *[(f"bwb_{nr}", lj(j), Wie(name, lj(j)))
+              for j in (2027, 2028, 2029, 2046)
+              for nr, name in ((1353, "lqb_ZvE"), (1355, "lqb_Steuer"),
+                               (1380, "asb_NachSteuer"), (1240, "lqb_AfA"))],
+            *[("zuo_DifferenzHalten", lj(j), 0) for j in (2027, 2029, 2046)],
+            ("pr_Anzahl", pr("bwa_zuordnung"), 0),
+            ("DIFF:1020", 2027, 0),
+            ("DIFF:1020", 2029, -2_472.48),
+            ("DIFF:1323", 2027, 720_000),
+            ("DIFF:1312", 2027, 720_000),
+            ("DIFF:1240", 2029, -1_600),
         ]),
         # Kostenstellenblatt führt: im Blatt KSt 1 Basisjahr Miete 66.000 und 1150 2.800
         # getippt. Objekte, Prognose und Alle Objekte folgen; Vorjahr bleibt Ist.
