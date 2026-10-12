@@ -16,7 +16,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from .modelle import (ARTEN_ABNUTZBAR, FMT_EURO, FMT_JAHR, FMT_PROZENT, QUELLEN,
-                      PARAMETER, STATUS_6B_UNZULAESSIG, STATUS_OK, Modell,
+                      PARAMETER, STATUS_6B_UNZULAESSIG, STATUS_AUS, STATUS_OK, Modell,
                       prognosejahre)
 from .vorlagen import (BWA_ZEILEN, ERSTE_ZEILE, SPALTE_JAHR, SPALTE_PLAN, SPALTE_VORJAHRE,
                        bwa_kopf)
@@ -472,6 +472,9 @@ def _blatt_neukauf_kst(wb, titel: str, lw, basisjahr: int, planjahre: int, block
                        f"SUMIFS({name},prg_ID,$D$3,prg_Jahr,{jahr}))")
             c.fill = FILL_BERECHNET
     _finanzierung(ws, planjahre, "$D$3")
+    ws["E3"] = (f'=IF($D$3="","",IF(INDEX(ne_Status,MATCH($D$3,ne_ID,0))="{STATUS_AUS}",'
+                f'"Kauf ausgeschaltet (Blatt Neuobjekte, Kauf aktiv): Planjahre 0",""))')
+    ws["E3"].font = Font(bold=True, color="C00000")
     ws["E2"] = ("Neukauf-Kostenstelle, zugleich Blatt des Neuobjekts in D3 (Blatt Neuobjekte, "
                 "Spalte Kostenstelle Neukauf). Basisjahr gelb: Miete 1020, weitere Einnahmen "
                 "1090, Erhaltung 1250 und weitere Ausgaben 1100–1220, 1260 gehen über das Blatt "

@@ -13,7 +13,7 @@ from .modelle import (AFA_DEGRESSIV, ANL_NICHT_IM_MODELL, ANLAGE_FELDER, ANLAGE_
                       OBJEKT_ERSTE_ANLAGEN_SPALTE,
                       FEHLER, NEU_FELDER, STATUS_ANNAHME_GELOESCHT, NEU_SPALTEN, OBJEKT_FELDER, PROGNOSE_SPALTEN,
                       RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN, STATUS_6B_UNZULAESSIG,
-                      STATUS_OK, SZ_A, SZ_B, SZ_BASELINE, SZENARIEN, VERKAUF_FELDER,
+                      STATUS_AUS, STATUS_OK, SZ_A, SZ_B, SZ_BASELINE, SZENARIEN, VERKAUF_FELDER,
                       VERKAUF_SPALTEN, WARNUNG, Szenario, aus_spalten, liq_spalten,
                       DARLEHEN_SPALTEN, FIN_KREDIT, QUELLEN, TILGUNG_ANNUITAET,
                       TILGUNG_ENDFAELLIG, TILGUNG_LINEAR,
@@ -841,7 +841,7 @@ def neu_zeile(zeile: int) -> dict:
     ak_geb, ak_gub = _n("ak_geb_neu", zeile), _n("ak_gub_neu", zeile)
     gub_ein, geb_ein = _n("ak_gub_eingabe", zeile), _n("ak_geb_eingabe", zeile)
     formeln = {
-        "gueltig": wenn(f"IF(AND({_gefuellt(pflicht)}={len(pflicht)},"
+        "gueltig": wenn(f'IF(AND({_n("aktiv", zeile)}<>"nein",{_gefuellt(pflicht)}={len(pflicht)},'
                         f"COUNTIF(ne_ID,{id_})=1,COUNTIF(obj_ID,{id_})=0,"
                         f"{kj}>=par_Startjahr,{kj}<=par_Endjahr),1,0)"),
         # Nebenkosten im Verhältnis des Kaufpreises aufgeteilt und aktiviert; eingetragene
@@ -940,11 +940,12 @@ def status_neu(zeile: int) -> str:
                         + [_hinweis_kredit(zeile)])
     return (
         f'=IF({id_}="","",'
+        f'IF({_n("aktiv", zeile)}="nein","{STATUS_AUS}",'
         f'IF({_gefuellt(pflicht)}<{len(pflicht)},"Pflichtfeld fehlt",'
         f'IF(COUNTIF(ne_ID,{id_})>1,"NeuID doppelt",'
         f'IF(COUNTIF(obj_ID,{id_})>0,"NeuID wie Bestandsobjekt",'
         f'IF(OR({kj}<par_Startjahr,{kj}>par_Endjahr),"Kaufjahr außerhalb Raster",'
-        f'IF({hinweise}="","{STATUS_OK}",MID({hinweise},3,500)))))))'
+        f'IF({hinweise}="","{STATUS_OK}",MID({hinweise},3,500))))))))'
     )
 
 
@@ -1235,7 +1236,7 @@ def pruefung_anzahl() -> dict:
     return {
         "objekte": _nicht_ok("obj_Status"),
         "verkaeufe": _nicht_ok("vk_Status", STATUS_6B_UNZULAESSIG),
-        "neuobjekte": _nicht_ok("ne_Status"),
+        "neuobjekte": _nicht_ok("ne_Status", STATUS_AUS),
         "steuerwelt": '=IF(par_Steuerwelt="GmbH",0,1)',
         "vorbesitz": f'=SUMPRODUCT(--(vk_Status="{STATUS_6B_UNZULAESSIG}"))',
         "teiluebertrag": f"=SUMPRODUCT({rest}*({genannt}>0))",

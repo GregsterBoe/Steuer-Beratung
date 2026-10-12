@@ -1315,6 +1315,47 @@ def faelle():
             ("BWA:KSt 32:1260", 2028, 208.08),
             ("zuo_Differenz", lj(2028), 0),
         ]),
+        # Kauf aktiv = nein: NEU-001 rechnet nicht mit (keine Übertragung, kein Kredit, kein
+        # Kauf in der Liquidität), die Rücklage 720.000 wird aufgelöst, kein Fehler in der
+        # Prüfung. NEU-002 mit „ja“ rechnet normal: 1 Mio × 5 % × 1,02 = 51.000 Miete 2030
+        ("Neuobjekte: Kauf ausgeschaltet",
+         Modell(objekte=[abnahme4],
+                verkaeufe=[Verkauf("OBJ-001", 2027, preis=1_400_000, nutzung_6b="ja")],
+                neuobjekte=[Neuobjekt("NEU-001", 2028, aktiv="nein", kaufpreis=2_000_000,
+                                      anteil_gub=0.3, afa_satz=0.03, mietrendite=0.05,
+                                      quelle="RL-OBJ-001", fin_art="Kredit", kredit_zins=0.04,
+                                      tilgung=0.02),
+                            Neuobjekt("NEU-002", 2029, aktiv="ja", kaufpreis=1_000_000,
+                                      anteil_gub=0.3, afa_satz=0.03, mietrendite=0.05)],
+                parameter=OHNE_ZINS), [
+            ("ne_Status", 0, "ausgeschaltet"),
+            ("ne_Gueltig", 0, 0),
+            ("ne_UeGesamt", 0, 0),
+            ("ne_Kredit", 0, 0),
+            ("prg_Miete", prg_neu(1, 2029), 0),
+            ("prg_AfA", prg_neu(1, 2029), 0),
+            ("rl_Aufloesung", 0, 720_000),
+            ("liq_Kauf", lj(2028), 0),
+            ("liq_Kauf", lj(2029), 1_000_000),
+            ("ne_Status", 1, "OK"),
+            ("prg_Miete", prg_neu(2, 2030), 51_000),
+            ("pr_Anzahl", pr("neuobjekte"), 0),
+            ("ueb_Neuobjekte", 0, 1),
+        ]),
+        # ausgeschalteter Kauf mit Kostenstelle Neukauf: deren Planjahre zeigen 0
+        ("Neuobjekte: ausgeschalteter Kauf leert die Kostenstelle Neukauf",
+         vorlage_eingelesen(
+             neukauf=[("KSt 31", "Neubau Nord", {1020: 50_000, 1250: 2_000})],
+             neuobjekte=[Neuobjekt("NEU-1", 2027, aktiv="nein", kaufpreis=1_000_000,
+                                   anteil_gub=0.2, afa_satz=0.02, kst="KSt 31",
+                                   fin_art="Kredit", kredit_zins=0.04, tilgung=0.02)]), [
+            ("BWA:KSt 31:1020", 2026, 50_000),     # Basisjahr bleibt
+            ("BWA:KSt 31:1020", 2028, 0),
+            ("BWA:KSt 31:1250", 2028, 0),
+            ("BWA:KSt 31:1240", 2028, 0),
+            ("BWA:KSt 31:1310", 2028, 0),
+            ("zuo_Differenz", lj(2028), 0),
+        ]),
         # Kreditquote 70 %: NEU-001 AK 2,1 Mio × 70 % = 1,47 Mio, gedeckelt auf den Bedarf
         # 700.000 (Verkaufserlös zählt als Eigenkapital); NEU-002 ohne Quelle AK 1,1 Mio ×
         # 70 % = 770.000 Kredit, 330.000 Eigenmittel; NEU-003 Quote ohne Kredit: kein Kredit

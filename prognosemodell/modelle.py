@@ -460,6 +460,8 @@ VERKAUF_SPALTEN = [
 VERKAUF_STATUS_NAME = "vk_Status"
 # Statustexte, auf die der Rücklagenspiegel zugreift
 STATUS_OK = "OK"
+# Neuobjekt mit „Kauf aktiv = nein“: nicht im Modell, aber kein Fehler
+STATUS_AUS = "ausgeschaltet"
 # Gewinn ist gültig berechnet, wird aber sofort versteuert
 STATUS_6B_UNZULAESSIG = "§ 6b unzulässig: Vorbesitzzeit zu kurz"
 STATUS_ANNAHME_GELOESCHT = "Wert fehlt: Annahme gelöscht (Makro „Annahmen wiederherstellen“)"
@@ -504,6 +506,11 @@ NEU_FELDER = [
     Feld("neu_id", "NeuID", "ne_ID", FMT_TEXT, True, 12,
          hinweis="eindeutige Kennung, nicht gleich einer ObjektID; unter ihr führen Prognose "
                  "und BWA-Blatt das Neuobjekt"),
+    # nein = Kauf rechnet nicht mit (wie nicht erfasst), bleibt aber stehen; leer = ja
+    Feld("aktiv", "Kauf aktiv", "ne_Aktiv", FMT_TEXT, False, 9, auswahl=("ja", "nein"),
+         hinweis="nein: der Kauf rechnet nicht mit (keine Miete, AfA, Kredit, Übertragung der "
+                 "Rücklage, Liquidität); das Blatt der Kostenstelle Neukauf zeigt in den "
+                 "Planjahren 0. ja oder leer: Kauf rechnet mit"),
     Feld("name", "Name", "ne_Name", FMT_TEXT, False, 22),
     Feld("kaufjahr", "Kaufjahr", "ne_Kaufjahr", FMT_JAHR, True, 10,
          minimum=1900, maximum=2100, ganzzahl=True,
@@ -848,6 +855,7 @@ class Neuobjekt:
     """Reinvestitionsobjekt, gekauft zum Ende des Kaufjahrs. None = Feld leer lassen."""
     neu_id: str
     kaufjahr: Optional[int]
+    aktiv: Optional[str] = None          # "nein" schaltet den Kauf aus; leer = ja
     kaufpreis: Optional[float] = None
     anteil_gub: Optional[float] = None
     afa_satz: Optional[float] = None

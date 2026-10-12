@@ -98,6 +98,8 @@ Im Blatt **Neuobjekte** stehen je Reinvestition Kaufjahr, Kaufpreis, Anteil G+B,
 2. G+B-Gewinne auf den neuen G+B (bis auf 0)
 3. Rest der G+B-Gewinne auf das Gebäude
 
+**Kauf ein- und ausschalten:** Mit „Kauf aktiv = nein“ im Blatt Neuobjekte rechnet ein Kauf nicht mit, die Zeile bleibt aber erhalten. Er bringt dann keine Miete, keine AfA, keinen Kredit, keine Übertragung der Rücklage und keinen Abfluss in der Liquidität. Eine Rücklage, die er nutzen sollte, wird zum Fristjahr aufgelöst. Der Status lautet „ausgeschaltet“ und zählt nicht als Fehler, die Zeile erscheint grau durchgestrichen. Das Blatt einer gewählten Kostenstelle Neukauf zeigt in den Planjahren 0 und oben den Hinweis. Mit „ja“ oder leer rechnet der Kauf wieder mit und die Kostenstelle füllt sich wieder.
+
 **Miete nach Quadratmetern:** Statt der Mietrendite lassen sich je Neuobjekt Fläche (m²) und Mietpreis je m² (monatlich, zum Kaufzeitpunkt) angeben. Dann gilt Jahresmiete = Fläche × Preis × 12, ab dem Folgejahr mit der Mietsteigerung. Instandhaltung (1250) und Verwaltung (1260, weitere Ausgaben) rechnen in % der Miete des Jahres, statt mit der Erhaltungsquote und ohne Anlauffaktor. Die Sätze stehen auf dem Parameterblatt, Standard 7 % und 2 %. Wählt das Neuobjekt eine Kostenstelle Neukauf, füllen diese Annahmen dort nur die leeren Jahre (Blatt Neukauf-KSt, fortgeschrieben, und das Blatt der Kostenstelle). Eingetragene Werte bleiben, und Jahre nach einem eingetragenen Wert schreiben diesen fort.
 
 Die AfA läuft von der geminderten AfA-Basis. Die Werte je Quelle stehen in eingeklappten Spalten rechts. Neuobjekte erscheinen in der Prognose und in der Plan-Linie der Übersicht, nicht in der Baseline.

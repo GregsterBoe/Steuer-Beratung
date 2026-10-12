@@ -21,7 +21,7 @@ from .modelle import (ANLAGE_FELDER, ANLAGE_JAHRE_NAME, ANLAGE_SPALTEN, ANLAGE_S
                       KST_VERKNUEPFT, NEUKAUF_POSITIONEN,
                       FMT_TEXT, FMT_ZAHL, HINWEIS, MAX_VARIANTEN, PRUEFUNGEN,
                       VARIANTEN_KOPF, WARNUNG,
-                      NEU_FELDER, NEU_SPALTEN, NEU_STATUS_NAME, OBJEKT_FELDER,
+                      NEU_FELDER, NEU_SPALTEN, NEU_STATUS_NAME, OBJEKT_FELDER, STATUS_AUS,
                       DARLEHEN_BLOECKE, DARLEHEN_ERSTE, DARLEHEN_SPALTEN, NEU_DETAIL_ERSTE, QUELLEN,
                       PARAMETER, PROGNOSE_SPALTEN, Spalte, RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN,
                       STATUS_NAME, STATUS_UEBERSCHRIFT, SZ_A, SZ_BASELINE, SZENARIEN,
@@ -194,10 +194,11 @@ def _farblogik(ws, spalte: str, erste: int, letzte: int, f, id_spalte: str = "A"
 
 
 def _status_rot(ws, bereich: str, erste_zelle: str) -> None:
-    """Status rot, sobald er gesetzt ist und nicht OK lautet."""
+    """Status rot, sobald er gesetzt ist und weder OK noch ausgeschaltet lautet."""
     ws.conditional_formatting.add(
         bereich,
-        FormulaRule(formula=[f'AND({erste_zelle}<>"",{erste_zelle}<>"OK")'], fill=FILL_FEHLER),
+        FormulaRule(formula=[f'AND({erste_zelle}<>"",{erste_zelle}<>"OK",'
+                             f'{erste_zelle}<>"{STATUS_AUS}")'], fill=FILL_FEHLER),
     )
 
 
@@ -777,6 +778,13 @@ def _blatt_neuobjekte(wb, modell: Modell) -> None:
         c = ws.cell(row=zeile, column=status_spalte, value=formeln.status_neu(zeile))
         c.fill = FILL_BERECHNET
     _status_rot(ws, f"{st}{erste}:{st}{letzte}", f"{st}{erste}")
+    # ausgeschalteter Kauf: ganze Zeile grau durchgestrichen
+    aktiv = get_column_letter(next(i for i, f in enumerate(NEU_FELDER, start=1)
+                                   if f.key == "aktiv"))
+    ws.conditional_formatting.add(
+        f"A{erste}:{st}{letzte}",
+        FormulaRule(formula=[f'${aktiv}{erste}="nein"'],
+                    font=Font(color="808080", strike=True), stopIfTrue=True))
 
     for zeile, neu in enumerate(modell.neuobjekte, start=erste):
         # erfasstes Neuobjekt ersetzt die ganze Annahmezeile, leere Felder bleiben leer;
