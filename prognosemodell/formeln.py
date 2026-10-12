@@ -98,22 +98,35 @@ ABNUTZBAR = f'anl_Gruppe,"{GRUPPE_ABNUTZBAR}"'
 GUB = f'anl_Gruppe,"{ART_GUB}"'
 
 
+# Feld kommt aus dem Blatt Anlagen, wenn die erste Hilfsspalte > 0 ist und, falls genannt,
+# die zweite gleich der ersten (alle abnutzbaren Anlagen mit AHK)
+ANLAGEN_DECKUNG = {
+    "ak_gebaeude": ("anl_abn", "anl_ak"),
+    "afa_satz": ("anl_abn", "anl_ak"),
+    "ak_gub": ("anl_gub",),
+    "kaufjahr": ("anl_kauf",),
+    "baujahr": ("anl_bau",),
+    "restbuchwert": ("anl_abn",),
+    "afa_jahr": ("anl_abn",),
+}
+
+
 def deckung_anlagen(key: str, zeile: int):
     """Bedingung, unter der das Feld aus dem Blatt Anlagen kommt; None = nie."""
-    def h(k):
-        return f"N(${hspalte(k)}{zeile})"
+    if key not in ANLAGEN_DECKUNG:
+        return None
+    h = [f"N(${hspalte(k)}{zeile})" for k in ANLAGEN_DECKUNG[key]]
+    if len(h) == 1:
+        return f"{h[0]}>0"
+    return f"AND({h[0]}>0,{h[1]}={h[0]})"
 
-    abnutzbar = f"{h('anl_abn')}>0"
-    mit_ak = f"AND({abnutzbar},{h('anl_ak')}={h('anl_abn')})"
-    return {
-        "ak_gebaeude": mit_ak,
-        "afa_satz": mit_ak,
-        "ak_gub": f"{h('anl_gub')}>0",
-        "kaufjahr": f"{h('anl_kauf')}>0",
-        "baujahr": f"{h('anl_bau')}>0",
-        "restbuchwert": abnutzbar,
-        "afa_jahr": abnutzbar,
-    }.get(key)
+
+def deckt_anlagen(key: str, wert) -> bool:
+    """deckung_anlagen mit Werten statt Formel; wert(Hilfsspalte) liefert die Zahl."""
+    if key not in ANLAGEN_DECKUNG:
+        return False
+    h = [wert(k) for k in ANLAGEN_DECKUNG[key]]
+    return h[0] > 0 and (len(h) == 1 or h[1] == h[0])
 
 
 def objekt_anlagen(key: str, zeile: int) -> str:

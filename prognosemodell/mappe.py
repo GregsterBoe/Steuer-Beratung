@@ -1348,6 +1348,14 @@ def _link(zelle, blatt: str) -> None:
     zelle.font = Font(color="0563C1", underline="single")
 
 
+def zentrale_annahmen() -> list:
+    """Parameter, die Start und Mandanten-Export als zentrale Annahmen zeigen."""
+    return [p for p in PARAMETER
+            if p.name.startswith(("par_Ann", "par_ErhAlterung", "par_NeuErh", "par_San"))
+            or p.name in ("par_Steuersatz", "par_Mietsteig", "par_Erhaltsteig",
+                          "par_Wertsteig", "par_Alternativrendite")]
+
+
 def _blatt_start(wb, modell: Modell) -> None:
     """Startblatt: Handlungsempfehlung, Datenlage, Anleitung und Farblegende."""
     ws = wb.create_sheet("Start", 0)
@@ -1466,17 +1474,14 @@ def _blatt_start(wb, modell: Modell) -> None:
     ws.cell(row=zeile, column=1, value="Zentrale Annahmen").font = Font(bold=True, size=13)
     _link(ws.cell(row=zeile, column=2, value="ändern im Blatt Parameter"), "Parameter")
     zeile += 1
-    for p in PARAMETER:
-        if p.name.startswith(("par_Ann", "par_ErhAlterung", "par_NeuErh", "par_San")) \
-                or p.name in ("par_Steuersatz", "par_Mietsteig", "par_Erhaltsteig",
-                                                      "par_Wertsteig", "par_Alternativrendite"):
-            kern = p.name in erklaerungen.KERNPARAMETER
-            a = ws.cell(row=zeile, column=1, value=("★ " if kern else "") + p.bezeichnung)
-            if kern:
-                a.font = Font(bold=True)
-            c = ws.cell(row=zeile, column=4, value=f"={p.name}")
-            c.number_format, c.fill = p.format, FILL_BERECHNET
-            zeile += 1
+    for p in zentrale_annahmen():
+        kern = p.name in erklaerungen.KERNPARAMETER
+        a = ws.cell(row=zeile, column=1, value=("★ " if kern else "") + p.bezeichnung)
+        if kern:
+            a.font = Font(bold=True)
+        c = ws.cell(row=zeile, column=4, value=f"={p.name}")
+        c.number_format, c.fill = p.format, FILL_BERECHNET
+        zeile += 1
 
     for spalte, breite in zip("ABCD", (62, 22, 20, 16)):
         ws.column_dimensions[spalte].width = breite

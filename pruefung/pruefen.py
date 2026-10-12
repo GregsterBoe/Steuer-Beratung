@@ -25,6 +25,7 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
+from prognosemodell.export import erstelle_export
 from prognosemodell.einlesen import (anlagen_zusammenfuehren, lese_inventar, lese_kostenstellen,
                                      ordne_anlagen_zu, zusammenfuehren)
 from prognosemodell.makros import LibreOffice, speichere_mit_makros
@@ -60,6 +61,11 @@ ZEILE_EINGEKLAPPT = "Zeile eingeklappt:"  # + Blattname; statt Zeile: Zeilennumm
 KOPF = "Kopf:"  # + Blatt:Zeile; statt Zeile: Spaltennummer, Soll Text, " [Tooltip]" mit Kommentar
 AUSWAHL = "Auswahl:"  # + Blattname; statt Zeile: Zelle, Soll (Liste, Anzahl Überprüfungen)
 UEBERLAPPT = "Datenüberprüfungen überlappen"  # Zeile 0, Soll: Liste der Fundstellen ([])
+# Mandanten-Export: + Blatt:[Block/]Beschriftung; statt Zeile: Jahr bzw. Spaltennummer
+EXPORT = "Export:"
+EXPORT_FARBE = "Export-Farbe:"   # wie EXPORT, Soll: Füllfarbe (RGB) oder None
+EXPORT_BLAETTER = "Export-Blätter"   # Zeile 0, Soll: Liste der Blattnamen
+EXPORT_KONTROLLE = "Export-Kontrolle:"   # + Block der Jahresrechnung, Soll: größte Abweichung
 
 
 def nr(spalten, key: str, versatz: int = 0) -> int:
@@ -135,6 +141,7 @@ def durchrechnen(modell: Modell, arbeitsordner: Path, zellen: dict = None, profi
         check=True, capture_output=True, timeout=120,
     )
     wb = load_workbook(aus / "mappe.xlsx", data_only=True)
+    wb.pfad = aus / "mappe.xlsx"
     wb.erzeugt = erzeugt  # Datenüberprüfungen so, wie Excel sie öffnet (LibreOffice glättet sie)
     return wb
 
@@ -188,6 +195,72 @@ def sonderbereich(wb, start: str, beschriftung: str, spalte: int):
         elif im_block and text == beschriftung:
             return ws.cell(row=zeile, column=1 + spalte).value
     raise KeyError(f"{start} / {beschriftung} nicht im Blatt Verkauf und Kauf")
+
+
+def export(wb):
+    """Mandanten-Export der gerechneten Mappe, gespeichert und wieder geladen (einmal je Fall)."""
+    if not hasattr(wb, "export"):
+        pfad = wb.pfad.with_name("export.xlsx")
+        erstelle_export(wb, wb.erzeugt, wb.pfad.name).save(pfad)
+        wb.export = load_workbook(pfad)
+    return wb.export
+
+
+def export_zelle(ex, name: str, spalte: int):
+    """Zelle im Export: erste Zeile mit der Beschriftung in Spalte A, mit „Block/“ davor erst
+    nach der fett gesetzten Zeile, die mit Block beginnt. spalte: Jahr (Spalte mit diesem Kopf
+    oder „Ist <Jahr>“ in der Kopfzeile darüber) oder Spaltennummer. None = nicht gefunden."""
+    blatt, beschriftung = name.split(":", 1)
+    ws = ex[blatt]
+    block, _, beschriftung = beschriftung.rpartition("/")
+    zeile = 1
+    if block:
+        zeile = next((z for z in range(1, ws.max_row + 1)
+                      if str(ws.cell(row=z, column=1).value or "").startswith(block)
+                      and ws.cell(row=z, column=1).font.b), None)
+        if zeile is None:
+            return None
+    zeile = next((z for z in range(zeile, ws.max_row + 1)
+                  if ws.cell(row=z, column=1).value == beschriftung), None)
+    if zeile is None:
+        return None
+    if spalte < 1000:
+        return ws.cell(row=zeile, column=spalte)
+    for kopf in range(zeile, 0, -1):
+        for c in ws[kopf]:
+            if c.value in (spalte, f"Ist {spalte}"):
+                return ws.cell(row=zeile, column=c.column)
+    return None
+
+
+def export_kontrolle(ws, block: str) -> float:
+    """Jahresrechnung: jede „= …“-Zeile ist die letzte „= …“-Zeile des Abschnitts plus die
+    Zeilen dazwischen, je Jahr und in der Summe. Liefert die größte Abweichung."""
+    erste = next(z for z in range(1, ws.max_row + 1)
+                 if str(ws.cell(row=z, column=1).value or "").startswith(block))
+    abschnitte = ("Ergebnis und Steuer", "Geldfluss", "Vermögen am Jahresende")
+    nachrichtlich = ("Steuer", "Verlustvortrag am Jahresende",
+                     "Liquidität am Jahresende (Alternativanlage)")
+    spalten = range(2, ws.max_column + 1)
+    abweichung, summe = 0, None
+    for z in range(erste + 1, ws.max_row + 1):
+        text = ws.cell(row=z, column=1).value
+        if text in abschnitte:
+            summe = [0] * len(spalten)
+            continue
+        if not text or text.startswith(("Plan:", "Halten:", "Differenz")):
+            if text:
+                break
+            continue
+        if text in nachrichtlich or text.startswith("nachrichtlich"):
+            continue
+        werte = [ws.cell(row=z, column=s).value or 0 for s in spalten]
+        if text.startswith("="):
+            abweichung = max([abweichung] + [abs(a - b) for a, b in zip(werte, summe)])
+            summe = werte
+        else:
+            summe = [a + b for a, b in zip(summe, werte)]
+    return abweichung
 
 
 def gleich(ist, soll) -> bool:
@@ -351,6 +424,15 @@ def faelle():
     # "" = Annahme in der Zelle gelöscht, None = Annahme greift
     ohne_quote = dataclasses.replace(obj, objekt_id="OBJ-005", vk_quote_gebaeude="")
     jung = dataclasses.replace(obj, objekt_id="OBJ-004", kaufjahr=2024)
+    # Mandanten-Export: Kostenstellen mit Ist-Vorjahren, Verkauf KSt 1 Ende 2028 mit § 6b,
+    # Neuobjekt mit Kredit, Bestandsdarlehen KSt 2 (Zinssatz als Annahme), Verkauf KSt 2
+    # ausgeschaltet
+    exp = vorlage_eingelesen(neuobjekte=[Neuobjekt(
+        "NEU-001", 2029, kaufpreis=1_500_000, anteil_gub=0.25, afa_satz=0.03, mietrendite=0.05,
+        quelle="RL-KSt 1", fin_art="Kredit", kredit_zins=0.04, tilgung=0.02)])
+    exp.objekte[1] = dataclasses.replace(exp.objekte[1], restschuld=300_000)
+    exp.verkaeufe = [Verkauf("KSt 1", 2028, preis=1_400_000, nutzung_6b="ja"),
+                     Verkauf("KSt 2", 2030, preis=2_000_000, aktiv="nein")]
     return [
         ("Etappe 1: Stammdaten vollständig", [obj], [
             ("par_Startjahr", 0, 2027),
@@ -1184,6 +1266,68 @@ def faelle():
             ("DIFF:1323", 2027, 720_000),
             ("DIFF:1312", 2027, 720_000),
             ("DIFF:1240", 2029, -1_600),
+        ]),
+        # Mandanten-Export (Projektplan Abschnitt 30): Werte wie in der Mappe, Zeilen ohne Wert
+        # und ausgeschaltete Vorgänge entfallen, Ist-Vorjahre nur mit Werten, jede Spalte der
+        # Jahresrechnung rechnet von oben nach unten, Herkunft der Objektdaten als Farbe
+        ("Export: Mandanten-Export mit Verkauf, Kauf und Darlehen",
+         Getippt(exp, {("Alle Objekte", "D3"): "ja"}), [
+            (EXPORT_BLAETTER, 0, ["Überblick", "Jahresrechnung", "BWA gesamt", "BWA je Objekt",
+                                  "Verkauf und Kauf", "Annahmen"]),
+            ("Export:Überblick:Ergebnis/Halten (nichts verkaufen)", 2, Wie("vg_Baseline")),
+            ("Export:Überblick:Ergebnis/Verkaufen, sofort versteuern, Erlös anlegen", 2,
+             Wie("vg_B")),
+            ("Export:Überblick:Plausibilitätsprüfung", 2, Wie("pr_Gesamt")),
+            ("Export:Jahresrechnung:Plan:/Steuer", 2029, Wie("liq_Steuer", lj(2029))),
+            ("Export:Jahresrechnung:Halten:/Steuer", 2029, Wie("lqb_Steuer", lj(2029))),
+            ("Export:Jahresrechnung:Plan:/= Gesamtvermögen nach latenter Steuer", 2046,
+             Wie("aus_VermoegenNetto", lj(2046))),
+            ("Export:Jahresrechnung:Differenz/Gesamtvermögen nach latenter Steuer", 2046,
+             Wie("ueb_VermDifferenz", ueb(2046))),
+            (f"{EXPORT_KONTROLLE}Plan:", 0, 0),
+            (f"{EXPORT_KONTROLLE}Halten:", 0, 0),
+            ("Export:BWA gesamt:Plan:/Umsatzerlöse", 2027, Wie("bwa_1020", lj(2027))),
+            ("Export:BWA gesamt:Plan:/Umsatzerlöse", 2024, Wie("BWA:Alle Objekte:1020", 2024)),
+            ("Export:BWA gesamt:Plan:/Gesamtkosten", 2026, Wie("BWA:Alle Objekte:1280", 2026)),
+            ("Export:BWA gesamt:Plan:/Personalkosten", 2027, "fehlt"),   # überall 0
+            ("Export:BWA gesamt:Plan:/Veräußerungsgewinn (netto)", 2028, Wie("vk_Gewinn")),
+            ("Export:BWA gesamt:Halten:/Umsatzerlöse", 2030, Wie("bwb_1020", lj(2030))),
+            ("Export:BWA gesamt:Differenz/Umsatzerlöse", 2030, Wie("DIFF:1020", 2030)),
+            ("Export:BWA je Objekt:KSt 1/Umsatzerlöse", 2024, Wie("BWA:KSt 1:1020", 2024)),
+            ("Export:BWA je Objekt:KSt 1/Umsatzerlöse", 2028, Wie("BWA:KSt 1:1020", 2028)),
+            ("Export:BWA je Objekt:KSt 1/Umsatzerlöse", 2029, 0),   # verkauft, leer dargestellt
+            ("Export:BWA je Objekt:KSt 2/Zinsaufwand", 2028, Wie("BWA:KSt 2:1310", 2028)),
+            ("Export:BWA je Objekt:NEU-001/Umsatzerlöse", 2030, Wie("BWA:NEU-001:1020", 2030)),
+            ("Export:Verkauf und Kauf:Verkäufe/KSt 1", 9, Wie("vk_Gewinn")),
+            ("Export:Verkauf und Kauf:Verkäufe/KSt 2", 2, "nein"),
+            ("Export:Verkauf und Kauf:Neuobjekte/NEU-001", 9, Wie("ne_Kredit")),
+            ("Export:Verkauf und Kauf:Vorgang 1:/Veräußerungspreis", 2, 1_400_000),
+            ("Export:Verkauf und Kauf:Vorgang 2:/Veräußerungspreis", 2, "fehlt"),
+            ("Export:Verkauf und Kauf:Detailsicht Kauf/NeuID (Kostenstelle)", 2, "NEU-001"),
+            ("Export:Verkauf und Kauf:Detailsicht Kauf/NeuID (Kostenstelle)", 3, None),
+            ("Export:Annahmen:Zentrale Annahmen/Grenzsteuersatz", 2, Wie("par_Steuersatz")),
+            ("Export:Annahmen:Daten je Objekt/KSt 2", 18, 300_000),
+            # Miete aus dem Kostenstellenblatt grün, Verkehrswert und Zinssatz Annahme blau,
+            # eingetippte Werte ohne Farbe, Zinssatz ohne Restschuld keine Annahme
+            ("Export-Farbe:Annahmen:Daten je Objekt/KSt 1", 3, "C6E0B4"),
+            ("Export-Farbe:Annahmen:Daten je Objekt/KSt 1", 9, None),
+            ("Export-Farbe:Annahmen:Daten je Objekt/KSt 1", 19, None),
+            ("Export-Farbe:Annahmen:Daten je Objekt/KSt 2", 9, "BDD7EE"),
+            ("Export-Farbe:Annahmen:Daten je Objekt/KSt 2", 18, None),
+            ("Export-Farbe:Annahmen:Daten je Objekt/KSt 2", 19, "BDD7EE"),
+        ]),
+        # ohne Verkauf und Kauf: kein Blatt Verkauf und Kauf, keine Halten-Blöcke
+        ("Export: ohne Verkauf und Kauf", [obj], [
+            (EXPORT_BLAETTER, 0, ["Überblick", "Jahresrechnung", "BWA gesamt", "BWA je Objekt",
+                                  "Annahmen"]),
+            ("Export:Jahresrechnung:Plan:/Steuer", 2030, Wie("liq_Steuer", lj(2030))),
+            ("Export:Jahresrechnung:Halten:/Steuer", 2030, "fehlt"),
+            (f"{EXPORT_KONTROLLE}Plan:", 0, 0),
+            ("Export:BWA gesamt:Plan:/Umsatzerlöse", 2026, 60_000),
+            ("Export:BWA gesamt:Plan:/Umsatzerlöse", 2025, "fehlt"),   # keine Ist-Vorjahre
+            ("Export:BWA gesamt:Halten:/Umsatzerlöse", 2027, "fehlt"),
+            ("Export-Farbe:Annahmen:Daten je Objekt/OBJ-001", 9, None),
+            ("Export-Farbe:Annahmen:Daten je Objekt/OBJ-001", 16, "BDD7EE"),   # AfA je Jahr
         ]),
         # Kostenstellenblatt führt: im Blatt KSt 1 Basisjahr Miete 66.000 und 1150 2.800
         # getippt. Objekte, Prognose und Alle Objekte folgen; Vorjahr bleibt Ist.
@@ -2260,6 +2404,17 @@ def pruefe(fall: str, wb, pruefungen) -> int:
             ist = auswahl(getattr(wb, "erzeugt", wb)[name[len(AUSWAHL):]], zeile)
         elif name == UEBERLAPPT:
             ist = ueberlappungen(getattr(wb, "erzeugt", wb))
+        elif name == EXPORT_BLAETTER:
+            ist = export(wb).sheetnames
+        elif name.startswith(EXPORT_KONTROLLE):
+            ist = export_kontrolle(export(wb)["Jahresrechnung"], name[len(EXPORT_KONTROLLE):])
+        elif name.startswith(EXPORT):
+            c = export_zelle(export(wb), name[len(EXPORT):], zeile)
+            ist = c.value if c is not None else "fehlt"
+        elif name.startswith(EXPORT_FARBE):
+            c = export_zelle(export(wb), name[len(EXPORT_FARBE):], zeile)
+            ist = ("fehlt" if c is None else
+                   c.fill.fgColor.rgb[-6:] if c.fill.fill_type == "solid" else None)
         elif name.startswith(KOPF):
             blatt, kopfzeile = name[len(KOPF):].rsplit(":", 1)
             c = wb[blatt].cell(row=int(kopfzeile), column=zeile)
