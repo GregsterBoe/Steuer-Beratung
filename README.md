@@ -62,10 +62,13 @@ python -m pruefung.pruefen           # rechnet per LibreOffice headless und prü
 python -m pruefung.pruefen "Etappe 9"  # nur Fälle, deren Name den Text enthält
 python -m pruefung.pruefen -j 2      # höchstens 2 Fälle gleichzeitig (Standard: ein Prozess je Kern)
 python -m pruefung.pruefen_einlesen  # prüft die Einleseschicht, ohne LibreOffice
+python -m pruefung.zirkelbezug      # sucht Zirkelbezüge, wie Excel sie sieht, ohne LibreOffice
 python -m prognosemodell.vorlagen    # schreibt vorlagen/Kostenstellen_BWA_Vorlage.xlsx und vorlagen/Inventar_Vorlage.xlsx
 ```
 
 Das Prüfskript und `--makros` brauchen LibreOffice mit Calc und der Python-UNO-Brücke (`soffice`, unter Debian/Ubuntu die Pakete `libreoffice-calc` und `python3-uno`).
+
+Excel meldet einen Zirkelbezug schon, wenn eine Formel einen Bereich nennt, in dem eine von ihr abhängige Zelle liegt, etwa SUMIFS über die ganze Prognosespalte. Das gilt auch, wenn der Wert gar nicht gebraucht wird. LibreOffice rechnet solche Ringe oft trotzdem durch, das Prüfskript sieht sie daher nicht. `pruefung.zirkelbezug` baut den Abhängigkeitsgraphen der erzeugten Mappen und meldet jeden Ring mit einem Pfad zum Nachlesen. Die Verkäufe lesen den Buchwert deshalb nur aus den Zeilen der Bestandsobjekte (`prg_BuchwertObj`), sonst hingen sie über die Rücklage von den Neuobjekten ab.
 
 Das Prüfskript rechnet die Fälle parallel und mit kleinen Mappen (10 Objekte, Verkäufe und Neuobjekte, 5 Neukauf-Kostenstellen statt 200, 50, 50 und 20), denn jede leere Zeile kostet LibreOffice Rechenzeit. Zwei Fälle rechnen zur Kontrolle mit der Mappe in Originalgröße.
 

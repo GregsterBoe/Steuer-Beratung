@@ -406,6 +406,8 @@ PROGNOSE_SPALTEN = [
     Spalte("tilgung_halten", "Tilgung bei Halten", "prg_TilgungHalten", FMT_EURO),
     Spalte("restschuld_halten", "Restschuld bei Halten", "prg_RestschuldHalten", FMT_EURO, 16),
 ]
+# dieselben Spalten nur über die Zeilen der Bestandsobjekte (Buchwert beim Verkauf)
+PRG_NUR_BESTAND = {"id": "prg_IDObj", "jahr": "prg_JahrObj", "buchwert": "prg_BuchwertObj"}
 
 # Blatt Verkäufe (Etappe 4, Projektplan Abschnitt 11): Eingaben, dann berechnete Spalten
 MAX_VERKAEUFE = 50

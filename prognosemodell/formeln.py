@@ -192,8 +192,11 @@ def annahme_objekt(key: str, zeile: int):
     aus_anlagen = {
         "ak_gebaeude": f"SUMIFS(anl_AHK,{_anl(id_, ABNUTZBAR)})",
         # durchschnittlicher Satz: AfA p. a. der abnutzbaren Anlagen / AK
-        "afa_satz": (f"IF({n('ak_gebaeude')}>0,SUMIFS(anl_AfA,{_anl(id_, ABNUTZBAR)})"
-                     f"/{n('ak_gebaeude')},{ausdruck})"),
+        # AK direkt aus den Anlagen, nicht aus der Spalte AK Gebäude: deren Annahme
+        # rechnet mit dem AfA-Satz, beide Zellen zusammen wären ein Zirkelbezug
+        "afa_satz": (f"IF(SUMIFS(anl_AHK,{_anl(id_, ABNUTZBAR)})>0,"
+                     f"SUMIFS(anl_AfA,{_anl(id_, ABNUTZBAR)})"
+                     f"/SUMIFS(anl_AHK,{_anl(id_, ABNUTZBAR)}),{ausdruck})"),
         # Buchwert G+B; gleich den AK, solange nicht außerplanmäßig abgeschrieben
         "ak_gub": f"SUMIFS(anl_BWBasis,{_anl(id_, GUB)})",
         "kaufjahr": f"{MINIFS}(anl_Zugang,{_anl(id_)})",
@@ -621,7 +624,7 @@ def verkauf_zeile(zeile: int) -> dict:
     quote_vertrag, betrag_gub = _v("anteil_gub", zeile), _v("gub_betrag", zeile)
     return {
         "vorbesitz": wenn(f"{_v('jahr', zeile)}-{obj('obj_Kaufjahr')}"),
-        "buchwert_geb": wenn(f"SUMIFS(prg_Buchwert,prg_ID,{id_},prg_Jahr,{_v('jahr', zeile)})"),
+        "buchwert_geb": wenn(f"SUMIFS(prg_BuchwertObj,prg_IDObj,{id_},prg_JahrObj,{_v('jahr', zeile)})"),
         "ak_gub": wenn(obj("obj_AKGuB")),
         "nettoerloes": wenn(f"N({_v('preis', zeile)})-N({_v('kosten', zeile)})"),
         # Kaufvertrag vor Verkehrswert; ohne beides leer, der Status meldet es
