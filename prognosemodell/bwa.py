@@ -45,7 +45,7 @@ AUSGABEN_AUS_OBJEKT = "obj_AusgBasis"
 # mindestens so viele Vorgänge und Neuobjekte im Sonderbereich, damit in Excel ergänzte passen
 MIN_VORGAENGE = 3
 
-FMT_BWA = '#,##0.00;-#,##0.00;""'   # 0 bleibt leer, etwa nach dem Verkauf
+FMT_BWA = '#,##0;-#,##0;""'   # ganze Euro; 0 bleibt leer, etwa nach dem Verkauf
 FONT_TITEL = Font(bold=True, size=14)
 FONT_ABSCHNITT = Font(bold=True, size=12)
 FONT_HILFE = Font(italic=True, color="808080", size=8)
@@ -696,7 +696,7 @@ def _blatt_halten(ws, bestand: list, basisjahr: int, planjahre: int) -> None:
     ws["E2"].font = Font(italic=True)
 
 
-FMT_DIFF = '[Color10]+#,##0.00;[Red]-#,##0.00;""'   # grün mehr, rot weniger als bei Halten
+FMT_DIFF = '[Color10]+#,##0;[Red]-#,##0;""'   # grün mehr, rot weniger als bei Halten
 
 
 def _vergleich_halten(wb, ws, z: dict, planjahre: int, halten: str) -> None:

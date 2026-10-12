@@ -72,7 +72,7 @@ AUFSCHLUESSELUNG = {
               ("sonstige", "sonstige", None, 0)],
 }
 GELB = PatternFill("solid", fgColor="FFF2CC")
-FMT_BWA = "#,##0.00"
+FMT_BWA = "#,##0"   # ganze Euro; gespeichert bleibt der genaue Wert
 
 
 def _summen(werte: dict) -> dict:

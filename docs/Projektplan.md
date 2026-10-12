@@ -1434,3 +1434,7 @@ Kontrolle im Blatt BWA-Zuordnung: 1353 der Halten-Ansicht gegen lqb\_ZvE je Jahr
 
 **Prüfung im Prüfskript:** „Export: Mandanten-Export mit Verkauf, Kauf und Darlehen“ (Kostenstellen-Vorlage, Verkauf KSt 1 Ende 2028 mit § 6b, Neuobjekt mit Kredit, Restschuld KSt 2, ausgeschalteter Verkauf, Vergleich mit Halten = ja): Blätter, Werte gegen die benannten Bereiche und BWA-Blätter, Rechenkontrolle der Jahresrechnung für Plan und Halten (jede „=“-Zeile gleich der Zeilen darüber), Ist-Vorjahre, entfallene Nullzeilen und Vorgänge, Herkunftsfarben. „Export: ohne Verkauf und Kauf“: fünf Blätter, keine Halten-Blöcke, keine Ist-Vorjahre.
 
+
+## 31. Ganze Euro in den Auswertungen
+
+Beträge erscheinen überall in ganzen Euro, auch in den BWA-Blättern, im Vergleich mit Halten und in der Eingabevorlage für die Kostenstellen. Bisher zeigten diese Blätter zwei Nachkommastellen. Geändert ist nur die Anzeige: Die Zellen behalten den genauen Wert, gerechnet wird weiter mit Cent. Nachkommastellen bleiben nur, wo sie etwas aussagen: Prozentsätze, der Mietpreis je m² und der Vervielfältiger.
