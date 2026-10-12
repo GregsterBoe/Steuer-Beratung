@@ -317,7 +317,9 @@ Die berechneten Spalten bleiben leer, solange die ObjektID fehlt oder unbekannt 
 
 Weil der Verkauf zum 31.12. gilt, reicht Verkaufsjahr − Kaufjahr ≥ 6 für die sechs Jahre Vorbesitz.
 
-**Verknüpfung zur Prognose:** Das aktiv-Flag liest das Verkaufsjahr per INDEX/MATCH aus vk\_Jahr; prg\_Bestand ist schon im Verkaufsjahr 0. Der Veräußerungsgewinn Q fließt in den Rücklagenspiegel (Abschnitt 12): bei § 6b ja in die Rücklage, sonst als sofort steuerwirksam. Noch nicht umgesetzt ist ein Verkaufspreis als Faktor × Jahresmiete.
+**Verknüpfung zur Prognose:** Das aktiv-Flag liest das Verkaufsjahr per MINIFS aus vk\_Jahr, nur aus Verkäufen mit „Verkauf aktiv“ ≠ nein; prg\_Bestand ist schon im Verkaufsjahr 0.
+
+**Verkauf ausschalten:** „Verkauf aktiv = nein“ nimmt die Zeile aus dem Modell, ohne Fehler (Status „ausgeschaltet“, Zeile grau). Das Objekt wird weiter gehalten, die § 6b-Rücklage entsteht nicht. Neuobjekte, die sie als Quelle nennen, melden „Verkauf ausgeschaltet, Rücklage entfällt“ und übertragen nichts. Die Quelle zählt dann auch nicht für Szenario B. Ausgeschaltete Zeilen zählen bei „Objekt mehrfach verkauft“ nicht mit, so lassen sich zwei Varianten eines Verkaufs nebeneinander halten. Der Veräußerungsgewinn Q fließt in den Rücklagenspiegel (Abschnitt 12): bei § 6b ja in die Rücklage, sonst als sofort steuerwirksam. Noch nicht umgesetzt ist ein Verkaufspreis als Faktor × Jahresmiete.
 
 **Abnahme Etappe 4 (geprüft in `pruefung/pruefen.py`):**
 - Preis 1,4 Mio, Kosten 0, Buchwert gesamt 680.000 (Gebäude 480.000 Ende 2027, G+B 200.000), Verkehrswertanteil Gebäude 50 %:

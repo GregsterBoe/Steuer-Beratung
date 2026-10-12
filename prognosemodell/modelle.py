@@ -413,7 +413,12 @@ PRG_NUR_BESTAND = {"id": "prg_IDObj", "jahr": "prg_JahrObj", "buchwert": "prg_Bu
 MAX_VERKAEUFE = 50
 VERKAUF_FELDER = [
     Feld("objekt_id", "ObjektID", "vk_ID", FMT_TEXT, True, 14,
-         hinweis="Objekt aus dem Blatt Objekte (Auswahlliste); je Objekt ein Verkauf"),
+         hinweis="Objekt aus dem Blatt Objekte (Auswahlliste); je Objekt ein aktiver Verkauf"),
+    # nein = Verkauf rechnet nicht mit (wie nicht erfasst), bleibt aber stehen; leer = ja
+    Feld("aktiv", "Verkauf aktiv", "vk_Aktiv", FMT_TEXT, False, 9, auswahl=("ja", "nein"),
+         hinweis="nein: der Verkauf rechnet nicht mit, das Objekt wird weiter gehalten; keine "
+                 "§ 6b-Rücklage, Neuobjekte mit dieser Rücklage als Quelle melden es und "
+                 "übertragen nichts. ja oder leer: Verkauf rechnet mit"),
     Feld("jahr", "Verkaufsjahr", "vk_Jahr", FMT_JAHR, True, 12,
          minimum=1900, maximum=2100, ganzzahl=True,
          hinweis="Verkauf zum Jahresende: Miete und AfA laufen im Verkaufsjahr noch. Muss im "
@@ -462,7 +467,8 @@ VERKAUF_SPALTEN = [
 VERKAUF_STATUS_NAME = "vk_Status"
 # Statustexte, auf die der Rücklagenspiegel zugreift
 STATUS_OK = "OK"
-# Neuobjekt mit „Kauf aktiv = nein“: nicht im Modell, aber kein Fehler
+# Verkauf mit „Verkauf aktiv = nein“ bzw. Neuobjekt mit „Kauf aktiv = nein“: nicht im
+# Modell, aber kein Fehler
 STATUS_AUS = "ausgeschaltet"
 # Gewinn ist gültig berechnet, wird aber sofort versteuert
 STATUS_6B_UNZULAESSIG = "§ 6b unzulässig: Vorbesitzzeit zu kurz"
@@ -858,6 +864,7 @@ class Verkauf:
     nutzung_6b: Optional[str] = None
     neubau_6b: Optional[str] = None      # ja = Frist par_6bFristNeubau statt par_6bFrist
     reinvest: Optional[str] = None       # ja = Neuobjekt aus den Annahmen
+    aktiv: Optional[str] = None          # "nein" schaltet den Verkauf aus; leer = ja
 
 
 @dataclass

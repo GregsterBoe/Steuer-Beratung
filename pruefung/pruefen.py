@@ -1342,6 +1342,36 @@ def faelle():
             ("pr_Anzahl", pr("neuobjekte"), 0),
             ("ueb_Neuobjekte", 0, 1),
         ]),
+        # Verkauf aktiv = nein: der Verkauf 2027 rechnet nicht mit, OBJ-001 bleibt bis zum
+        # zweiten (aktiven) Verkauf 2029 im Bestand, kein „mehrfach verkauft“. Die Rücklage
+        # RL-OBJ-001 entfällt; NEU-001 meldet es, überträgt nichts (AfA-Basis = AK Gebäude
+        # 2 Mio × 70 %) und zählt nicht als Neuobjekt mit Rücklage (bleibt in Szenario B)
+        ("Verkäufe: Verkauf ausgeschaltet, Rücklage entfällt beim Neuobjekt",
+         Modell(objekte=[abnahme4],
+                verkaeufe=[Verkauf("OBJ-001", 2027, preis=1_400_000, nutzung_6b="ja",
+                                   aktiv="nein"),
+                           Verkauf("OBJ-001", 2029, preis=1_500_000, aktiv="ja")],
+                neuobjekte=[Neuobjekt("NEU-001", 2028, kaufpreis=2_000_000, anteil_gub=0.3,
+                                      afa_satz=0.03, quelle="RL-OBJ-001")],
+                parameter=OHNE_ZINS), [
+            ("vk_Status", 0, "ausgeschaltet"),
+            ("vk_Status", 1, "OK"),
+            ("vk_PreisAnnahme", 0, 0),
+            ("rl_Betrag", 0, None),
+            ("rls_Bildung", rls(2027), 0),
+            ("ne_Status", 0, "Verkauf ausgeschaltet, Rücklage entfällt, keine Übertragung"),
+            ("ne_Gueltig", 0, 1),
+            ("ne_UeGesamt", 0, 0),
+            ("ne_AfABasis", 0, 1_400_000),
+            ("ne_MitQuelle", 0, 0),
+            ("prg_Aktiv", prg(1, 2028), 1),
+            ("prg_Aktiv", prg(1, 2029), 1),
+            ("prg_Aktiv", prg(1, 2030), 0),
+            ("liq_Verkaufserloes", lj(2027), 0),
+            ("liq_Verkaufserloes", lj(2029), 1_500_000),
+            ("pr_Anzahl", pr("verkaeufe"), 0),
+            ("ueb_Verkaeufe", 0, 1),
+        ]),
         # ausgeschalteter Kauf mit Kostenstelle Neukauf: deren Planjahre zeigen 0
         ("Neuobjekte: ausgeschalteter Kauf leert die Kostenstelle Neukauf",
          vorlage_eingelesen(

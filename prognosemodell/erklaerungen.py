@@ -146,7 +146,8 @@ SPALTEN = {
     "vk_Status": "OK oder der erste Fehler (ObjektID unbekannt, doppelt verkauft, Jahr "
                  "fehlt/außerhalb, Preis fehlt, Aufteilung fehlt). „§ 6b unzulässig“: die Zeile "
                  "rechnet, der Gewinn wird aber sofort versteuert. Andere Fehler: die Zeile "
-                 "rechnet nicht mit.",
+                 "rechnet nicht mit. „ausgeschaltet“ (Verkauf aktiv = nein): rechnet nicht mit, "
+                 "kein Fehler; zählt bei „mehrfach verkauft“ nicht.",
     "vk_PreisAnnahme": "1 = Verkaufspreis ist noch die Annahme (Verkehrswert fortgeschrieben).",
     # Rücklagen je Verkauf
     "rl_ID": "„RL-“ + ObjektID; gefüllt nur bei § 6b ja und Status OK. Diese ID wählt das "
@@ -192,7 +193,8 @@ SPALTEN = {
                    "Rücklagenspiegel.",
     "ne_AfABasis": "AK Gebäude neu − ü1 − ü3: Basis für AfA und Buchwert Gebäude.",
     "ne_AKGuB": "AK G+B neu − ü2: Buchwert G+B.",
-    "ne_MitQuelle": "1 = mindestens eine Quelle angegeben; das Neuobjekt entfällt in Szenario B.",
+    "ne_MitQuelle": "1 = mindestens eine Quelle angegeben (Quellen ausgeschalteter Verkäufe "
+                    "zählen nicht); das Neuobjekt entfällt in Szenario B.",
     "ne_AKGesamt": "Kaufpreis + Kaufnebenkosten.",
     "ne_Erloes": "Nettoerlös der Quell-Verkäufe, der in diesen Kauf fließt (höchstens Kaufpreis "
                  "+ Nebenkosten, soweit nicht schon von Zeilen darüber eingesetzt). 0 ohne "
@@ -209,8 +211,8 @@ SPALTEN = {
                       "(Parameterblatt).",
     "ne_Status": "OK oder Fehler. Pflichtfeld fehlt, NeuID doppelt bzw. wie Bestandsobjekt, "
                  "Kaufjahr außerhalb Raster: das Neuobjekt rechnet nicht. Meldungen zu Quellen "
-                 "(unbekannt, Kauf vor Bildung, nach Fristjahr) und Kredit: es rechnet, aber "
-                 "ohne diese Übertragung bzw. mit dem gemeldeten Mangel.",
+                 "(unbekannt, Verkauf ausgeschaltet, Kauf vor Bildung, nach Fristjahr) und Kredit: "
+                 "es rechnet, aber ohne diese Übertragung bzw. mit dem gemeldeten Mangel.",
     # Prognose
     "prg_Aktiv": "1 = Objekt erzielt in diesem Jahr Miete und AfA: Bestand bis einschließlich "
                  "Verkaufsjahr, Neuobjekt ab dem Jahr nach dem Kauf.",
