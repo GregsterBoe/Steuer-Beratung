@@ -85,6 +85,12 @@ PARAMETER_WIRKUNG = {
     "par_AnnNeuAfAMethode": "Neuobjekte aus „reinvestieren = ja“: AfA-Methode.",
     "par_AnnNeuMietrendite": "Neuobjekte aus „reinvestieren = ja“: Miete = Kaufpreis × Rendite.",
     "par_AnnNeuErhQuote": "Neuobjekte aus „reinvestieren = ja“: Erhaltung = Kaufpreis × Quote.",
+    "par_QmErhQuote": "Neuobjekte mit Fläche und Mietpreis je m²: Erhaltung (BWA 1250) = Miete "
+                      "des Jahres × Quote, statt Erhaltungsquote auf den Kaufpreis. Füllt leere "
+                      "Jahre der gewählten Kostenstelle Neukauf; eingetragene Werte gehen vor.",
+    "par_QmVerwQuote": "Neuobjekte mit Fläche und Mietpreis je m²: weitere Ausgaben (BWA 1260, "
+                       "Verwaltung) = Miete des Jahres × Quote. Füllt leere Jahre der gewählten "
+                       "Kostenstelle Neukauf; eingetragene Werte gehen vor.",
     "par_ErhAlterungAb": "Erhaltung aller Objekte: ab diesem Gebäudealter kommt je Jahr die "
                          "zusätzliche Steigerung dazu.",
     "par_ErhAlterung": "Zusätzliche Steigerung der Erhaltung je Jahr über dem Alter.",
@@ -196,6 +202,9 @@ SPALTEN = {
                  "Finanzierungsbedarf. Auszahlung zum Ende des Kaufjahrs, Plan im Blatt "
                  "Darlehen.",
     "ne_Eigen": "Finanzierungsbedarf − Kredit: kommt aus der Liquidität.",
+    "ne_MieteQmJahr": "Fläche × Mietpreis je m² × 12, leer ohne beide. Ersetzt Kaufpreis × "
+                      "Mietrendite; Erhaltung und Verwaltung dann in % der Miete "
+                      "(Parameterblatt).",
     "ne_Status": "OK oder Fehler. Pflichtfeld fehlt, NeuID doppelt bzw. wie Bestandsobjekt, "
                  "Kaufjahr außerhalb Raster: das Neuobjekt rechnet nicht. Meldungen zu Quellen "
                  "(unbekannt, Kauf vor Bildung, nach Fristjahr) und Kredit: es rechnet, aber "
@@ -203,8 +212,9 @@ SPALTEN = {
     # Prognose
     "prg_Aktiv": "1 = Objekt erzielt in diesem Jahr Miete und AfA: Bestand bis einschließlich "
                  "Verkaufsjahr, Neuobjekt ab dem Jahr nach dem Kauf.",
-    "prg_Miete": "Bestand: Miete Basisjahr × (1 + Mietsteigerung)^Jahre. Neuobjekt: Kaufpreis × "
-                 "Mietrendite, bzw. Planwert der Neukauf-Kostenstelle.",
+    "prg_Miete": "Bestand: Miete Basisjahr × (1 + Mietsteigerung)^Jahre. Neuobjekt: Planwert der "
+                 "Neukauf-Kostenstelle, sonst Fläche × Mietpreis je m² × 12 bzw. Kaufpreis × "
+                 "Mietrendite, ab dem Kauf mit der Mietsteigerung.",
     "prg_Erhaltung": "Erhaltung Basisjahr, fortgeschrieben mit Erhaltungssteigerung, Alterung "
                      "über dem Gebäudealter, plus Großmaßnahme im Jahr der Maßnahme.",
     "prg_AfA": "AfA laut Blatt Anlagen bzw. AfA-Plan, sonst AfA je Jahr bis der Restbuchwert "

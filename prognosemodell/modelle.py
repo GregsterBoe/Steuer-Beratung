@@ -105,6 +105,14 @@ PARAMETER = [
     Parameter("par_AnnNeuErhQuote", "Erhaltung Neuobjekt in % des Kaufpreises", 0.005,
               FMT_PROZENT, "Neubau etwa 0,3–0,5 %; in den ersten Jahren gilt zusätzlich der "
               "Anlauffaktor unten"),
+    # Neuobjekte mit Fläche und Mietpreis je m²: Erhaltung und Verwaltung in % der Miete
+    Parameter("par_QmErhQuote", "Instandhaltung in % der Miete (BWA 1250)", 0.07, FMT_PROZENT,
+              "nur Neuobjekte mit Fläche und Mietpreis je m², solange die Kostenstelle keine "
+              "Erhaltung zeigt; Platzhalter",
+              abschnitt="Neuobjekte nach Quadratmetern (Fläche × Mietpreis je m²)"),
+    Parameter("par_QmVerwQuote", "Verwaltung in % der Miete (BWA 1260)", 0.02, FMT_PROZENT,
+              "nur Neuobjekte mit Fläche und Mietpreis je m², solange die Kostenstelle keine "
+              "weiteren Ausgaben zeigt; Platzhalter"),
     # Erhaltung nach Gebäudealter: gilt für alle Objekte, auch mit Werten aus der Buchhaltung
     Parameter("par_ErhAlterungAb", "Alterung ab Gebäudealter (Jahre)", 30, FMT_ZAHL,
               "ab diesem Alter steigt die Erhaltung zusätzlich zur Erhaltungssteigerung",
@@ -525,11 +533,23 @@ NEU_FELDER = [
     Feld("mietrendite", "Mietrendite auf Kaufpreis", "ne_Mietrendite", FMT_PROZENT, False, 11,
          minimum=0, maximum=1,
          hinweis="Jahresmiete = Kaufpreis × Rendite ab dem Folgejahr, dann mit der "
-                 "Mietsteigerung. Leer = keine Miete; eine Kostenstelle Neukauf ersetzt sie"),
+                 "Mietsteigerung. Leer = keine Miete; Fläche und Mietpreis je m² oder eine "
+                 "Kostenstelle Neukauf ersetzen sie"),
     Feld("erhaltungsquote", "Erhaltung auf Kaufpreis", "ne_ErhQuote", FMT_PROZENT, False, 11,
          minimum=0, maximum=1,
          hinweis="Erhaltung = Kaufpreis × Quote, in den Anlaufjahren gemindert (Parameter). "
-                 "Leer = keine; eine Kostenstelle Neukauf ersetzt sie"),
+                 "Leer = keine; Fläche und Mietpreis je m² oder eine Kostenstelle Neukauf "
+                 "ersetzen sie"),
+    # Fläche und Mietpreis je m² ersetzen Mietrendite und Erhaltungsquote: Jahresmiete =
+    # Fläche × Preis × 12, Erhaltung und Verwaltung in % der Miete (Parameterblatt)
+    Feld("flaeche", "Fläche m²", "ne_Flaeche", "#,##0", False, 10, minimum=0,
+         hinweis="vermietbare Fläche. Mit Mietpreis je m²: Jahresmiete = Fläche × Preis × 12 "
+                 "statt Mietrendite; Instandhaltung (1250) und Verwaltung (1260) in % der Miete "
+                 "vom Parameterblatt statt Erhaltungsquote. Füllt leere Jahre der Kostenstelle "
+                 "Neukauf"),
+    Feld("miete_qm", "Mietpreis je m² mtl.", "ne_MieteQm", '#,##0.00 "€"', False, 10,
+         minimum=0, hinweis="Kaltmiete je m² und Monat zum Kaufzeitpunkt; ab dem Folgejahr mit "
+                            "der Mietsteigerung. Nur zusammen mit der Fläche"),
     # bis zu drei Rücklagen je Neuobjekt, übertragen in dieser Reihenfolge (QUELLEN)
     Feld("quelle", "Quelle 1 RücklageID", "ne_Quelle", FMT_TEXT, False, 16,
          hinweis="Rücklage aus dem Blatt Rücklagen; ihr Gewinn mindert die AK, ihr "
@@ -599,6 +619,8 @@ NEU_SPALTEN = [
     Spalte("bedarf", "Finanzierungsbedarf", "ne_Bedarf", FMT_EURO),
     Spalte("kredit", "Kredit", "ne_Kredit", FMT_EURO),
     Spalte("eigen", "Eigenmittel", "ne_Eigen", FMT_EURO),
+    # Fläche × Mietpreis je m² × 12, leer ohne beide; Basis der m²-Annahmen
+    Spalte("miete_qm_jahr", "Jahresmiete aus m²", "ne_MieteQmJahr", FMT_EURO),
 ] + [
     # je Quelle: verfügbare Rücklage, Übertragung, eingesetzter Erlös (Spalten eingeklappt)
     Spalte(f"{k}_{key}", f"Q{n} {text}", f"{praefix}{name}", FMT_EURO)
@@ -824,6 +846,8 @@ class Neuobjekt:
     ak_geb_eingabe: Optional[float] = None  # None = Kaufpreis + Nebenkosten − AK G+B
     mietrendite: Optional[float] = None
     erhaltungsquote: Optional[float] = None
+    flaeche: Optional[float] = None      # m²; mit miete_qm statt Mietrendite und Erhaltungsquote
+    miete_qm: Optional[float] = None     # € je m² und Monat zum Kaufzeitpunkt
     quelle: Optional[str] = None         # RücklageID, z. B. "RL-OBJ-001"
     kst: Optional[str] = None            # Neukauf-Kostenstelle, z. B. "KSt 31"
     quelle2: Optional[str] = None        # weitere Rücklagen, nach quelle übertragen

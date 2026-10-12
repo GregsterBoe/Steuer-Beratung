@@ -1257,6 +1257,47 @@ def faelle():
             ("BWA:KSt 32:1020", 2028, 10_404),
             ("zuo_Differenz", lj(2028), 0),
         ]),
+        # Fläche × Mietpreis je m²: NEU-1 (KSt 31 ohne Miete und Erhaltung) 500 m² × 10 € × 12
+        # = 60.000, 2028 × 1,02 = 61.200; Instandhaltung 7 % = 4.284; weitere Ausgaben stehen
+        # in der Kostenstelle und bleiben (1150 und 1260 je 1.000 × 1,02²). NEU-2 ohne
+        # Kostenstelle: 200 m² × 12,50 € × 12 = 30.000 × 1,02 = 30.600, Instandhaltung 2.142,
+        # Verwaltung 2 % = 612. NEU-3 wählt KSt 32 mit Miete 10.000: die Miete bleibt
+        # (10.404), Instandhaltung 7 % = 728,28 und Verwaltung 2 % = 208,08 füllen die leeren
+        # Jahre der Kostenstelle
+        ("Neuobjekte: Miete aus Fläche und Mietpreis je m², Kosten in % der Miete",
+         Getippt(vorlage_eingelesen(
+             neukauf=[("KSt 31", "Neubau Nord", {1150: 1_000, 1260: 1_000}),
+                      ("KSt 32", "Neubau Süd", {1020: 10_000})],
+             neuobjekte=[Neuobjekt("NEU-1", 2027, kaufpreis=1_000_000, anteil_gub=0.2,
+                                   afa_satz=0.02, mietrendite=0.03, erhaltungsquote=0.005,
+                                   flaeche=500, miete_qm=10, kst="KSt 31"),
+                         Neuobjekt("NEU-2", 2027, kaufpreis=500_000, anteil_gub=0.2,
+                                   afa_satz=0.02, flaeche=200, miete_qm=12.5),
+                         Neuobjekt("NEU-3", 2027, kaufpreis=500_000, anteil_gub=0.2,
+                                   afa_satz=0.02, flaeche=100, miete_qm=10, kst="KSt 32")]),
+             {("KSt 31", f"T{ZEILEN[1020]}"): 0, ("KSt 31", f"T{ZEILEN[1250]}"): 0,
+              ("KSt 32", f"T{ZEILEN[1250]}"): 0}), [
+            ("ne_MieteQmJahr", 0, 60_000),
+            ("prg_Miete", prg_neu(1, 2027), 0),
+            ("prg_Miete", prg_neu(1, 2028), 61_200),
+            ("prg_Miete", prg_neu(1, 2029), 62_424),
+            ("prg_Erhaltung", prg_neu(1, 2028), 4_284),
+            ("prg_Ausgaben", prg_neu(1, 2028), 2_080.80),
+            ("BWA:KSt 31:1020", 2027, 0),
+            ("BWA:KSt 31:1020", 2028, 61_200),
+            ("BWA:KSt 31:1250", 2028, 4_284),
+            ("BWA:KSt 31:1260", 2028, 1_040.40),
+            ("prg_Miete", prg_neu(2, 2028), 30_600),
+            ("prg_Erhaltung", prg_neu(2, 2028), 2_142),
+            ("prg_Ausgaben", prg_neu(2, 2028), 612),
+            ("BWA:NEU-2:1260", 2028, 612),
+            ("prg_Miete", prg_neu(3, 2028), 10_404),
+            ("prg_Erhaltung", prg_neu(3, 2028), 728.28),
+            ("prg_Ausgaben", prg_neu(3, 2028), 208.08),
+            ("BWA:KSt 32:1250", 2028, 728.28),
+            ("BWA:KSt 32:1260", 2028, 208.08),
+            ("zuo_Differenz", lj(2028), 0),
+        ]),
         # Finanzierung: AK 2,1 Mio − Nettoerlös 1,4 Mio = Bedarf 700.000, ganz per Kredit.
         # Annuität 4 % + 2 % = 42.000: 2029 Zins 28.000, Tilgung 14.000, Restschuld 686.000;
         # 2030 Zins 27.440, Tilgung 14.560. Übertragung ü1 220.000, ü2 500.000
