@@ -171,7 +171,10 @@ punkte([
     "**Quell-Rücklagen:** bis zu drei Rücklagen je Neuobjekt aus der Auswahlliste. Übertragen "
     "werden erst alle Gebäudegewinne auf das Gebäude, dann die G+B-Gewinne auf G+B, der Rest auf "
     "das Gebäude. Ob die Übertragung im Einzelfall gewollt ist, entscheidet der Berater.",
-    "**Finanzierungsbedarf** = Kaufpreis + Nebenkosten − Nettoerlös der Quell-Verkäufe.",
+    "**Die Rücklage wirkt nur steuerlich** (Übertragung, AfA-Basis). Die Finanzierung legt man "
+    "getrennt fest.",
+    "**Finanzierungsbedarf** = Kaufpreis + Nebenkosten. Mit „Verkaufserlös zur Finanzierung = "
+    "ja“ abzüglich des Nettoerlöses der Quell-Verkäufe; leer oder „nein“ = ganze AK.",
     "**Finanzierung Rest:** leer bzw. „Eigenmittel“ zahlt den Bedarf aus der Liquidität; "
     "„Kredit“ finanziert ihn. Kreditbetrag leer = ganzer Bedarf, sonst der eingetragene Betrag, "
     "der Rest kommt aus Eigenmitteln.",

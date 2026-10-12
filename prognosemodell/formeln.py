@@ -862,7 +862,7 @@ def neu_zeile(zeile: int) -> dict:
         "ak_gub": wenn(f"{ak_gub}-{_n('ue2', zeile)}"),
         "mit_quelle": wenn("IF(" + "&".join(_n(f, zeile) for f, _, _ in QUELLEN)
                            + '="",0,1)'),
-        # Finanzierung: was der Nettoerlös der Quell-Verkäufe nicht deckt
+        # Finanzierung: was der eingesetzte Nettoerlös der Quell-Verkäufe nicht deckt
         "ak_gesamt": wenn(ak),
         "erloes": wenn(alle("erloes")),
         "bedarf": wenn(f"IF({_n('gueltig', zeile)}=1,{_n('ak_gesamt', zeile)}"
@@ -891,9 +891,11 @@ def neu_zeile(zeile: int) -> dict:
             f"{feld}_ue2": wenn(f"MAX(MIN({rl_gub},{ak_gub}-({vorher('ue2', k)})),0)"),
             f"{feld}_ue3": wenn(f"MAX(MIN({rl_gub}-{ue2},{ak_geb}-({alle('ue1')})"
                                 f"-({vorher('ue3', k)})),0)"),
-            f"{feld}_erloes": wenn(f"IF({_erloes_moeglich(zeile, k)},MAX(MIN({netto}"
+            # nur mit Verkaufserlös zur Finanzierung = ja; sonst wirkt die Rücklage nur steuerlich
+            f"{feld}_erloes": wenn(f'IF({_n("erloes_fin", zeile)}<>"ja",0,'
+                                   f"IF({_erloes_moeglich(zeile, k)},MAX(MIN({netto}"
                                    f"-{verbraucht('erloes', k)},{ak}-({vorher('erloes', k)})),"
-                                   f"0),0)"),
+                                   f"0),0))"),
         })
     return formeln
 
@@ -1337,6 +1339,9 @@ def annahme_neu(key: str, zeile: int):
         return f'=IF({an},{aus_verkauf[key]},"")'
     if key == "quelle":
         return f'=IF(AND({an},{vk("vk_6b")}="ja"),"RL-"&{vk("vk_ID")},"")'
+    # die Reinvestition kauft aus dem Verkaufserlös
+    if key == "erloes_fin":
+        return f'=IF({an},"ja","")'
     # in jeder Zeile vorbelegt; Eintippen ersetzt die Formel
     ak = f'(N({_n("kaufpreis", zeile)})+N({_n("nebenkosten", zeile)}))'
     if key == "ak_gub_eingabe":

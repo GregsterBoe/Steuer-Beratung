@@ -566,8 +566,9 @@ NEU_FELDER = [
                             "der Mietsteigerung. Nur zusammen mit der Fläche"),
     # bis zu drei Rücklagen je Neuobjekt, übertragen in dieser Reihenfolge (QUELLEN)
     Feld("quelle", "Quelle 1 RücklageID", "ne_Quelle", FMT_TEXT, False, 16,
-         hinweis="Rücklage aus dem Blatt Rücklagen; ihr Gewinn mindert die AK, ihr "
-                 "Nettoerlös den Finanzierungsbedarf"),
+         hinweis="Rücklage aus dem Blatt Rücklagen; ihr Gewinn mindert die AK (steuerlich). "
+                 "Den Finanzierungsbedarf mindert ihr Nettoerlös nur mit Verkaufserlös zur "
+                 "Finanzierung = ja"),
     Feld("quelle2", "Quelle 2 RücklageID", "ne_Quelle2", FMT_TEXT, False, 16,
          hinweis="weitere Rücklage, nach Quelle 1 übertragen"),
     Feld("quelle3", "Quelle 3 RücklageID", "ne_Quelle3", FMT_TEXT, False, 16,
@@ -576,12 +577,19 @@ NEU_FELDER = [
          hinweis="z. B. KSt 31 aus dem Blatt Neukauf-KSt: dessen Jahreswerte ersetzen Miete, "
                  "weitere Einnahmen, Erhaltung und weitere Ausgaben aus Mietrendite und "
                  "Erhaltungsquote; die AfA rechnet weiter das Modell"),
-    # Finanzierung: Bedarf = AK gesamt − Nettoerlös der Quell-Verkäufe; Rest aus Eigenmitteln
-    # (Liquidität) oder per Kredit, Tilgungsplan im Blatt Darlehen
+    # Finanzierung: Bedarf = AK gesamt, mit Verkaufserlös zur Finanzierung = ja abzüglich des
+    # Nettoerlöses der Quell-Verkäufe; Rest aus Eigenmitteln (Liquidität) oder per Kredit,
+    # Tilgungsplan im Blatt Darlehen. Die Übertragung der Rücklage wirkt davon unabhängig
+    Feld("erloes_fin", "Verkaufserlös zur Finanzierung", "ne_ErloesFin", FMT_TEXT, False, 12,
+         auswahl=("ja", "nein"),
+         hinweis="ja: der Nettoerlös der Quell-Verkäufe deckt einen Teil des Kaufpreises und "
+                 "mindert den Finanzierungsbedarf (und damit den Kredit). nein oder leer: die "
+                 "Rücklage wirkt nur steuerlich (AfA-Basis), finanziert wird der ganze Kaufpreis "
+                 "+ Nebenkosten über Kredit und Eigenmittel"),
     Feld("fin_art", "Finanzierung Rest", "ne_FinArt", FMT_TEXT, False, 12,
          auswahl=(FIN_EIGEN, FIN_KREDIT),
-         hinweis="Finanzierungsbedarf (AK − Nettoerlös der Quell-Verkäufe) aus Eigenmitteln "
-                 "(leer) oder per Kredit"),
+         hinweis="Finanzierungsbedarf (AK, ggf. − eingesetzter Verkaufserlös) aus "
+                 "Eigenmitteln (leer) oder per Kredit"),
     Feld("kredit_betrag", "Kreditbetrag", "ne_KreditBetrag", FMT_EURO, False, minimum=0,
          hinweis="leer = ganzer Finanzierungsbedarf bzw. Kreditquote; nur bei Finanzierung "
                  "Rest = Kredit"),
@@ -874,6 +882,7 @@ class Neuobjekt:
     kst: Optional[str] = None            # Neukauf-Kostenstelle, z. B. "KSt 31"
     quelle2: Optional[str] = None        # weitere Rücklagen, nach quelle übertragen
     quelle3: Optional[str] = None
+    erloes_fin: Optional[str] = None     # "ja": Verkaufserlös mindert den Bedarf; leer = nein
     fin_art: Optional[str] = None        # "Kredit" oder leer bzw. "Eigenmittel"
     kredit_betrag: Optional[float] = None  # leer = ganzer Finanzierungsbedarf
     kredit_quote: Optional[float] = None   # Kredit in % der AK gesamt, höchstens der Bedarf
