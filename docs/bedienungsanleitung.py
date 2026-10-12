@@ -122,6 +122,8 @@ tabelle(["Blatt", "Wofür"], [
     ["**Prüfung**", "Alle Plausibilitätsprüfungen als Fehler, Warnung oder Hinweis"],
     ["**Alle Objekte, KSt-Blätter**", "Ist und Plan im BWA-Format je Kostenstelle und "
                                       "als Summe; Verkauf und Kauf als eigenes Blatt"],
+    ["**Alle Objekte halten**", "Summe im BWA-Format als reine Halten-Ansicht: ohne Verkäufe "
+                                "und Käufe (Abschnitt 5)"],
 ], [4.2, 12.4])
 
 # ---------------------------------------------------------------- 3
@@ -206,6 +208,10 @@ punkte([
     "mit und ohne die geplanten Verkäufe.",
     "**Vergleich:** Kennzahlen der Szenarien am Ende des Prognosezeitraums nebeneinander.",
     "**Varianten:** mit „Variante festhalten“ gesicherte Stände, etwa verschiedene Verkaufsjahre.",
+    "**Alle Objekte halten:** die Summen-BWA, als würden alle Objekte gehalten und nichts "
+    "gekauft (Baseline).",
+    "**Vergleich mit Halten:** in „Alle Objekte“ D3 auf „ja“ stellen. Rechts neben den "
+    "Planjahren steht dann je Position und Jahr Plan − Halten, grün mehr, rot weniger.",
 ])
 tabelle(["Szenario", "Inhalt"], [
     ["A Plan", "§ 6b-Kette wie erfasst"],
@@ -257,8 +263,8 @@ absatz("Eine neue Version wird mit denselben Dateien erzeugt und bekommt die alt
        "Mappe bleibt unverändert, der Bericht nennt je Blatt die übernommenen Werte.")
 punkte([
     "**Übernommen werden eingetippte Werte** aus Parameter, Objekte, Anlagen (Zuordnung zum "
-    "Objekt, AfA von Hand), AfA-Plan, Neukauf-KSt, Verkäufe, Neuobjekte, BWA-Zuordnung und "
-    "Varianten. Blaue Annahmen (Formeln) rechnet die neue Mappe selbst.",
+    "Objekt, AfA von Hand), AfA-Plan, Neukauf-KSt, Verkäufe, Neuobjekte, BWA-Zuordnung, "
+    "Schalter „Vergleich mit Halten“ und Varianten. Blaue Annahmen (Formeln) rechnet die neue Mappe selbst.",
     "**Spalten nach Überschrift:** neue Spalten einer neuen Version behalten ihre "
     "Vorbelegung; Spalten, die es nicht mehr gibt, meldet der Bericht.",
     "**Kostenstellen-Datei geht vor:** Werte, die beim Einlesen entstanden sind, kommen aus "

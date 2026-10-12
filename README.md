@@ -15,7 +15,7 @@
 
 | Eingabe | Rechnung | Ausgabe | Kontrolle | BWA |
 | --- | --- | --- | --- | --- |
-| Parameter, Objekte, Anlagen, Verkäufe, Neuobjekte | Prognose, Rücklagen, Darlehen, Liquidität | Start, Übersicht, Vergleich, Auswertung | Prüfung, Varianten | Alle Objekte, je Kostenstelle ein Blatt, Verkauf und Kauf |
+| Parameter, Objekte, Anlagen, Verkäufe, Neuobjekte | Prognose, Rücklagen, Darlehen, Liquidität | Start, Übersicht, Vergleich, Auswertung | Prüfung, Varianten | Alle Objekte, Alle Objekte halten, je Kostenstelle ein Blatt, Verkauf und Kauf |
 
 ## Etappen
 
@@ -155,6 +155,8 @@ Die Ergebnisse stehen auch im **DATEV-BWA-Format** (Projektplan, Abschnitt 18):
 - **Kostenarten:** Die weiteren Ausgaben werden nach dem Anteil der Kostenart im Basisjahr aufgeteilt.
 - **Verkauf und Rücklage:** Gewinn, Einstellung und Auflösung stehen im neutralen Ergebnis.
 - **Summenblatt „Alle Objekte“:** Es trägt dazu Zinsertrag und Steuer und stimmt mit Liquidität und Auswertung überein.
+- **Blatt „Alle Objekte halten“:** dieselbe Summen-BWA als reine Halten-Ansicht (Baseline): alle Bestandsobjekte über das ganze Raster gehalten, ohne Verkäufe und Neuobjekte, Bestandsdarlehen laufen weiter. Ist-Spalten wie in „Alle Objekte“, Zinsertrag und Steuer aus der Baseline der Liquidität; die Kontrolle im Blatt BWA-Zuordnung prüft auch dieses Blatt.
+- **Vergleich mit Halten:** In „Alle Objekte“ steht in D3 der Schalter „Vergleich mit Halten“ (ja/nein). Bei „ja“ zeigen die Spalten rechts neben den Planjahren je Position und Jahr die Differenz Plan − Halten (grün mehr, rot weniger), auch für Herleitung und Finanzierung; bei „nein“ bleiben sie leer. `--uebernehmen` übernimmt den Schalter.
 - **Blatt Verkauf und Kauf:** je Verkauf eine Ergebnissicht für die Berichterstattung und eine Detailsicht. Die Ergebnissicht zeigt Erlös, Reinvestition, Kapitalanlage, Übertrag § 6b und den Vergleich Halten gegen Alternative im ersten vollen Jahr. Die Detailsicht zeigt die Einzelauflistung nach G+B und Gebäude und die Planung. Dazu kommt je Neuobjekt die Detailsicht des Kaufs.
 
 **Startblatt und Datenlage**

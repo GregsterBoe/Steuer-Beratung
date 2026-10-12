@@ -1267,7 +1267,8 @@ def pruefung_anzahl() -> dict:
         "liquiditaet": "=SUMPRODUCT(--(liq_Kum<-0.005))",
         "kritisch": '=COUNTIF(obj_Kritisch,">0")+SUM(vk_PreisAnnahme)',
         "bwa_zuordnung": ("=SUMPRODUCT(--(COUNTIF(zuo_Nummern,zuo_Nr)=0))"
-                          "+SUMPRODUCT(--(ABS(zuo_Differenz)>0.5))"),
+                          "+SUMPRODUCT(--(ABS(zuo_Differenz)>0.5))"
+                          "+SUMPRODUCT(--(ABS(zuo_DifferenzHalten)>0.5))"),
         "annahmen": '=COUNTIF(obj_Annahmen,">0")',
         "anlagen": (f'=SUMPRODUCT((anl_Status<>"")*(anl_Status<>"{STATUS_OK}")'
                     f'*(anl_Status<>"{ANL_NICHT_IM_MODELL}"))'),

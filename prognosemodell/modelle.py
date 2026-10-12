@@ -943,7 +943,8 @@ PRUEFUNGEN = [
              "(orange): Veräußerungsgewinn und § 6b-Rücklage sind nur geschätzt", WARNUNG,
              "Blätter Objekte und Verkäufe, orange Zellen"),
     Pruefung("bwa_zuordnung", "BWA-Zuordnung mit ungültiger BWA-Nr. oder BWA Alle Objekte "
-             "weicht vom Ergebnis der Liquidität ab (Anzahl Posten bzw. Jahre)", WARNUNG,
+             "bzw. Alle Objekte halten weicht vom Ergebnis der Liquidität ab (Anzahl Posten "
+             "bzw. Jahre)", WARNUNG,
              "Blatt BWA-Zuordnung, Spalte BWA-Nr. und Kontrolle"),
     Pruefung("annahmen", "Objekte mit Annahmen (blau): Werte aus der Auffülllogik des "
              "Parameterblatts", HINWEIS, "Blatt Objekte, Spalte Annahmen"),
