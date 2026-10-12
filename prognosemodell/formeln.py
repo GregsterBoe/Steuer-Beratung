@@ -75,6 +75,8 @@ def nk_spalten() -> tuple:
 
 ISFORMEL = "_xlfn.ISFORMULA"   # Excel 2013+, in der Datei mit Präfix
 MINIFS = "_xlfn.MINIFS"        # Excel 2019+, LibreOffice ab 5.2
+# Bedingung für SUMIFS/COUNTIFS: Verkauf nicht ausgeschaltet (leer zählt als ja)
+VK_AKTIV = 'vk_Aktiv,"<>nein"'
 
 
 def _gefuellt(zellen: list) -> str:
@@ -244,7 +246,7 @@ def annahmen_objekt(zeile: int, nur_kritisch: bool = False) -> str:
 
     summe = "+".join(zaehlt(f) for f in felder)
     if nur_kritisch:
-        summe = f"IF(COUNTIF(vk_ID,{id_})>0,{summe},0)"
+        summe = f"IF(COUNTIFS(vk_ID,{id_},{VK_AKTIV})>0,{summe},0)"
     return f'=IF({id_}="","",{summe})'
 
 
@@ -388,9 +390,9 @@ def _erhaltung_bestand(zeile: int, objekt_nr: int) -> str:
 
 
 def _verkaufsjahr(zeile: int) -> str:
-    """Verkaufsjahr laut Blatt Verkäufe; ohne Verkauf 9999, also nie."""
-    treffer = f"INDEX(vk_Jahr,MATCH({_p('id', zeile)},vk_ID,0))"
-    return f'IFERROR(IF({treffer}="",9999,{treffer}),9999)'
+    """Verkaufsjahr laut Blatt Verkäufe (nur aktive Verkäufe); ohne Verkauf 9999, also nie."""
+    bedingung = f'vk_ID,{_p("id", zeile)},{VK_AKTIV},vk_Jahr,"<>"'
+    return f"IF(COUNTIFS({bedingung})=0,9999,{MINIFS}(vk_Jahr,{bedingung}))"
 
 
 def prognose_zeile(zeile: int, objekt_nr: int, erstes_jahr: bool) -> dict:
@@ -651,8 +653,9 @@ def status_verkauf(zeile: int) -> str:
     id_, jahr = _v("objekt_id", zeile), _v("jahr", zeile)
     return (
         f'=IF({id_}="","",'
+        f'IF({_v("aktiv", zeile)}="nein","{STATUS_AUS}",'
         f'IF(COUNTIF(obj_ID,{id_})=0,"ObjektID unbekannt",'
-        f'IF(COUNTIF(vk_ID,{id_})>1,"Objekt mehrfach verkauft",'
+        f'IF(COUNTIFS(vk_ID,{id_},{VK_AKTIV})>1,"Objekt mehrfach verkauft",'
         f'IF({jahr}="","Verkaufsjahr fehlt",'
         f'IF(OR({jahr}<par_Startjahr,{jahr}>par_Endjahr),"Verkaufsjahr außerhalb Raster",'
         f'IF({_v("preis", zeile)}="","Verkaufspreis fehlt",'
@@ -660,7 +663,7 @@ def status_verkauf(zeile: int) -> str:
         f'IF({_v("quote_gub", zeile)}>1,"Preis G+B über Verkaufspreis",'
         f'IF(AND({_v("nutzung_6b", zeile)}="ja",{_v("vorbesitz", zeile)}<par_6bVorbesitz),'
         f'"{STATUS_6B_UNZULAESSIG}",'
-        f'"{STATUS_OK}")))))))))'
+        f'"{STATUS_OK}"))))))))))'
     )
 
 
@@ -784,6 +787,14 @@ def _quelle_bekannt(zeile: int, k: int) -> str:
             f'NOT({doppelt}))')
 
 
+def _quelle_aus(zeile: int, k: int) -> str:
+    """Bedingung: Quelle k nennt die Rücklage eines ausgeschalteten Verkaufs
+    (RücklageID = "RL-" & ObjektID); sie zählt wie nicht eingetragen."""
+    q = _n(QUELLEN[k][0], zeile)
+    return (f'AND(COUNTIF(rl_ID,{q})=0,LEFT({q},3)="RL-",'
+            f'COUNTIFS(vk_ID,MID({q},4,500),vk_Aktiv,"nein")>0)')
+
+
 def _rl(name: str, q: str) -> str:
     return f"INDEX({name},MATCH({q},rl_ID,0))"
 
@@ -860,8 +871,11 @@ def neu_zeile(zeile: int) -> dict:
         "ue_gesamt": wenn(f"{_n('ue1', zeile)}+{_n('ue2', zeile)}+{_n('ue3', zeile)}"),
         "afa_basis": wenn(f"{ak_geb}-{_n('ue1', zeile)}-{_n('ue3', zeile)}"),
         "ak_gub": wenn(f"{ak_gub}-{_n('ue2', zeile)}"),
-        "mit_quelle": wenn("IF(" + "&".join(_n(f, zeile) for f, _, _ in QUELLEN)
-                           + '="",0,1)'),
+        # Quelle eines ausgeschalteten Verkaufs zählt nicht: das Neuobjekt bleibt auch in
+        # Szenario B, als Kauf ohne Verkauf
+        "mit_quelle": wenn("IF(OR(" + ",".join(
+            f'AND({_n(f, zeile)}<>"",NOT({_quelle_aus(zeile, k)}))'
+            for k, (f, _, _) in enumerate(QUELLEN)) + "),1,0)"),
         # Finanzierung: was der eingesetzte Nettoerlös der Quell-Verkäufe nicht deckt
         "ak_gesamt": wenn(ak),
         "erloes": wenn(alle("erloes")),
@@ -905,6 +919,7 @@ def _hinweis_quelle(zeile: int, k: int) -> str:
     q, kj = _n(QUELLEN[k][0], zeile), _n("kaufjahr", zeile)
     vor = f"; Quelle {k + 1}: " if k else "; "
     pruefungen = [
+        (_quelle_aus(zeile, k), "Verkauf ausgeschaltet, Rücklage entfällt, keine Übertragung"),
         (f"COUNTIF(rl_ID,{q})=0", "Rücklage unbekannt, keine Übertragung"),
         (f"{kj}<{_rl('rl_Jahr', q)}", "Kauf vor Bildung der Rücklage, keine Übertragung"),
         (f"{kj}>{_rl('rl_Fristjahr', q)}", "Kauf nach Fristjahr, keine Übertragung"),
@@ -1225,8 +1240,8 @@ def _feldname(key: str) -> str:
     return next(f.name for f in OBJEKT_FELDER if f.key == key)
 
 
-def _nicht_ok(status: str, ausnahme: str = None) -> str:
-    weitere = f'*({status}<>"{ausnahme}")' if ausnahme else ""
+def _nicht_ok(status: str, *ausnahmen: str) -> str:
+    weitere = "".join(f'*({status}<>"{a}")' for a in ausnahmen)
     return f'=SUMPRODUCT(({status}<>"")*({status}<>"{STATUS_OK}"){weitere})'
 
 
@@ -1240,7 +1255,7 @@ def pruefung_anzahl() -> dict:
         for st in (STATUS_OK, STATUS_6B_UNZULAESSIG))
     return {
         "objekte": _nicht_ok("obj_Status"),
-        "verkaeufe": _nicht_ok("vk_Status", STATUS_6B_UNZULAESSIG),
+        "verkaeufe": _nicht_ok("vk_Status", STATUS_6B_UNZULAESSIG, STATUS_AUS),
         "neuobjekte": _nicht_ok("ne_Status", STATUS_AUS),
         "steuerwelt": '=IF(par_Steuerwelt="GmbH",0,1)',
         "vorbesitz": f'=SUMPRODUCT(--(vk_Status="{STATUS_6B_UNZULAESSIG}"))',
@@ -1268,7 +1283,7 @@ def pruefung_anzahl() -> dict:
         "anlagen_afa": '=COUNTIF(obj_AnlDiff,">1")+COUNTIF(obj_AnlDiff,"<-1")',
         "restschuld": '=COUNTIF(dl_Getilgt,"nach*")',
         "zins_verkauf": ('=SUMPRODUCT((obj_ID<>"")*(obj_ZinsBasis>0)*NOT(obj_Restschuld>0)'
-                         '*(COUNTIF(vk_ID,obj_ID)>0))'),
+                         f'*(COUNTIFS(vk_ID,obj_ID,{VK_AKTIV})>0))'),
         "zins_grob": '=SUMPRODUCT((obj_ID<>"")*(obj_ZinsBasis>0)*NOT(obj_Restschuld>0))',
     }
 
@@ -1301,7 +1316,8 @@ def annahme_verkauf(key: str, zeile: int, schnellcheck: bool):
 def preis_annahme(zeile: int) -> str:
     """1, solange der Verkaufspreis eine Annahme ist (Formel statt Eingabe)."""
     id_ = _v("objekt_id", zeile)
-    return f'=IF({id_}="","",IF({ISFORMEL}({_v("preis", zeile)}),1,0))'
+    return (f'=IF({id_}="","",IF(AND({_v("aktiv", zeile)}<>"nein",'
+            f'{ISFORMEL}({_v("preis", zeile)})),1,0))')
 
 
 def annahme_neu(key: str, zeile: int):

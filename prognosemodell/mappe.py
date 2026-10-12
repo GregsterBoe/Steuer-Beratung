@@ -193,6 +193,16 @@ def _farblogik(ws, spalte: str, erste: int, letzte: int, f, id_spalte: str = "A"
             bereich, FormulaRule(formula=[formel], fill=fill, stopIfTrue=True))
 
 
+def _ausgeschaltet_grau(ws, felder, erste: int, letzte: int, bis: str) -> None:
+    """Ausgeschaltete Zeile (Feld aktiv = nein): ganze Zeile grau durchgestrichen."""
+    aktiv = get_column_letter(next(i for i, f in enumerate(felder, start=1)
+                                   if f.key == "aktiv"))
+    ws.conditional_formatting.add(
+        f"A{erste}:{bis}{letzte}",
+        FormulaRule(formula=[f'${aktiv}{erste}="nein"'],
+                    font=Font(color="808080", strike=True), stopIfTrue=True))
+
+
 def _status_rot(ws, bereich: str, erste_zelle: str) -> None:
     """Status rot, sobald er gesetzt ist und weder OK noch ausgeschaltet lautet."""
     ws.conditional_formatting.add(
@@ -307,7 +317,7 @@ def _blatt_objekte(wb, modell: Modell) -> None:
         ws.column_dimensions[bst].width = f.breite
         _name(wb, f.name, f"Objekte!${bst}${erste}:${bst}${letzte}")
         _validierung(ws, f, f"{bst}{erste}:{bst}{letzte}")
-        _farblogik(ws, bst, erste, letzte, f, verkauft=f"COUNTIF(vk_ID,$A{erste})>0",
+        _farblogik(ws, bst, erste, letzte, f, verkauft=f'COUNTIFS(vk_ID,$A{erste},vk_Aktiv,"<>nein")>0',
                    eingelesen=f"${import_spalte[f.key]}{erste}" if f.key in import_spalte
                    else None, anlagen=formeln.deckung_anlagen(f.key, erste),
                    anlagen_fill=FILL_KRITISCH if f.key in ANLAGEN_PRUEFEN else FILL_EINGELESEN,
@@ -720,6 +730,7 @@ def _blatt_verkaeufe(wb, modell: Modell) -> None:
         c = ws.cell(row=zeile, column=status_spalte, value=formeln.status_verkauf(zeile))
         c.fill = FILL_BERECHNET
     _status_rot(ws, f"{st}{erste}:{st}{letzte}", f"{st}{erste}")
+    _ausgeschaltet_grau(ws, VERKAUF_FELDER, erste, letzte, st)
 
     for zeile, vk in enumerate(modell.verkaeufe, start=erste):
         for i, f in enumerate(VERKAUF_FELDER, start=1):
@@ -736,6 +747,9 @@ def _blatt_verkaeufe(wb, modell: Modell) -> None:
                          "begonnen, die Rücklage läuft dann par_6bFristNeubau statt par_6bFrist Jahre.")
     ws[f"{hinweis}4"] = "Kopf rot mit * = Pflichtfeld, blau = optional, grau = berechnet. " \
         + TOOLTIP_HINWEIS
+    ws[f"{hinweis}5"] = ("Verkauf aktiv = nein: Verkauf rechnet nicht mit (Zeile grau), das Objekt "
+                         "wird weiter gehalten, die § 6b-Rücklage entfällt. Neuobjekte, die sie "
+                         "als Quelle nennen, melden es im Status und übertragen nichts.")
     ws.freeze_panes = "B2"
 
 
@@ -784,13 +798,7 @@ def _blatt_neuobjekte(wb, modell: Modell) -> None:
         c = ws.cell(row=zeile, column=status_spalte, value=formeln.status_neu(zeile))
         c.fill = FILL_BERECHNET
     _status_rot(ws, f"{st}{erste}:{st}{letzte}", f"{st}{erste}")
-    # ausgeschalteter Kauf: ganze Zeile grau durchgestrichen
-    aktiv = get_column_letter(next(i for i, f in enumerate(NEU_FELDER, start=1)
-                                   if f.key == "aktiv"))
-    ws.conditional_formatting.add(
-        f"A{erste}:{st}{letzte}",
-        FormulaRule(formula=[f'${aktiv}{erste}="nein"'],
-                    font=Font(color="808080", strike=True), stopIfTrue=True))
+    _ausgeschaltet_grau(ws, NEU_FELDER, erste, letzte, st)
 
     for zeile, neu in enumerate(modell.neuobjekte, start=erste):
         # erfasstes Neuobjekt ersetzt die ganze Annahmezeile, leere Felder bleiben leer;
@@ -1106,7 +1114,7 @@ def _blatt_uebersicht(wb) -> None:
         ("Objekte im Modell", "ueb_Objekte", '=SUMPRODUCT(--(obj_ID<>""))', FMT_ZAHL),
         ("davon mit Annahmen (blau)", "ueb_MitAnnahmen", '=COUNTIF(obj_Annahmen,">0")',
          FMT_ZAHL),
-        ("geplante Verkäufe", "ueb_Verkaeufe", '=SUMPRODUCT(--(vk_ID<>""))', FMT_ZAHL),
+        ("geplante Verkäufe", "ueb_Verkaeufe", '=SUMPRODUCT((vk_ID<>"")*(vk_Aktiv<>"nein"))', FMT_ZAHL),
         ("Neuobjekte im Modell", "ueb_Neuobjekte", "=SUM(ne_Gueltig)", FMT_ZAHL),
         ("Wertsteigerung p. a.", None, "=par_Wertsteig", FMT_PROZENT),
         ("Plausibilitätsprüfung (Blatt Prüfung)", "ueb_Pruefung", "=pr_Gesamt", FMT_TEXT),

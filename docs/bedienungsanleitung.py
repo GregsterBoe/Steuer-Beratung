@@ -110,7 +110,8 @@ tabelle(["Blatt", "Wofür"], [
                   "Vorsprung gegenüber Halten, tiefster Liquiditätsstand, Anleitung mit Links"],
     ["**Parameter**", "Alle Sätze und Annahmen zentral; Schaltflächen (Abschnitt 7)"],
     ["**Objekte**", "Ein Bestandsobjekt je Zeile: Miete, Kosten, AK, Kaufjahr, Verkehrswert, Status"],
-    ["**Verkäufe**", "ObjektID, Jahr, Preis, Kosten, Anteil G+B lt. Kaufvertrag, § 6b ja/nein, "
+    ["**Verkäufe**", "ObjektID, Verkauf aktiv (nein = ausgeschaltet, Rücklage entfällt), Jahr, "
+                     "Preis, Kosten, Anteil G+B lt. Kaufvertrag, § 6b ja/nein, "
                      "„reinvestieren = ja“ legt ein Neuobjekt aus Annahmen an"],
     ["**Neuobjekte**", "Kaufjahr, Kaufpreis, Anteil G+B (AK G+B und AK Gebäude daraus "
                        "vorbelegt, in Euro überschreibbar), AfA-Satz und -Methode, bis zu drei "
