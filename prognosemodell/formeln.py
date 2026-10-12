@@ -618,15 +618,17 @@ def verkauf_zeile(zeile: int) -> dict:
     def wenn(ausdruck):
         return f'=IF(OR({id_}="",COUNTIF(obj_ID,{id_})=0),"",{ausdruck})'
 
-    quote_vertrag = _v("anteil_gub", zeile)
+    quote_vertrag, betrag_gub = _v("anteil_gub", zeile), _v("gub_betrag", zeile)
     return {
         "vorbesitz": wenn(f"{_v('jahr', zeile)}-{obj('obj_Kaufjahr')}"),
         "buchwert_geb": wenn(f"SUMIFS(prg_Buchwert,prg_ID,{id_},prg_Jahr,{_v('jahr', zeile)})"),
         "ak_gub": wenn(obj("obj_AKGuB")),
         "nettoerloes": wenn(f"N({_v('preis', zeile)})-N({_v('kosten', zeile)})"),
         # Kaufvertrag vor Verkehrswert; ohne beides leer, der Status meldet es
-        "quote_gub": wenn(f'IF({quote_vertrag}<>"",{quote_vertrag},'
-                          f'IF({obj("obj_VKQuoteGeb")}="","",1-{obj("obj_VKQuoteGeb")}))'),
+        "quote_gub": wenn(f'IF({betrag_gub}<>"",IF(N({_v("preis", zeile)})>0,'
+                          f'{betrag_gub}/{_v("preis", zeile)},""),'
+                          f'IF({quote_vertrag}<>"",{quote_vertrag},'
+                          f'IF({obj("obj_VKQuoteGeb")}="","",1-{obj("obj_VKQuoteGeb")})))'),
         "erloes_gub": wenn(f'IF({_v("quote_gub", zeile)}="","",'
                            f'{_v("nettoerloes", zeile)}*{_v("quote_gub", zeile)})'),
         "erloes_geb": wenn(f'IF({_v("quote_gub", zeile)}="","",'
@@ -652,9 +654,10 @@ def status_verkauf(zeile: int) -> str:
         f'IF(OR({jahr}<par_Startjahr,{jahr}>par_Endjahr),"Verkaufsjahr außerhalb Raster",'
         f'IF({_v("preis", zeile)}="","Verkaufspreis fehlt",'
         f'IF({_v("quote_gub", zeile)}="","Aufteilung fehlt: Anteil G+B oder Verkehrswertanteil",'
+        f'IF({_v("quote_gub", zeile)}>1,"Preis G+B über Verkaufspreis",'
         f'IF(AND({_v("nutzung_6b", zeile)}="ja",{_v("vorbesitz", zeile)}<par_6bVorbesitz),'
         f'"{STATUS_6B_UNZULAESSIG}",'
-        f'"{STATUS_OK}"))))))))'
+        f'"{STATUS_OK}")))))))))'
     )
 
 
@@ -862,8 +865,10 @@ def neu_zeile(zeile: int) -> dict:
         "bedarf": wenn(f"IF({_n('gueltig', zeile)}=1,{_n('ak_gesamt', zeile)}"
                        f"-{_n('erloes', zeile)},0)"),
         "kredit": wenn(f'IF(AND({_n("gueltig", zeile)}=1,{_n("fin_art", zeile)}="{FIN_KREDIT}"),'
-                       f'IF({_n("kredit_betrag", zeile)}="",MAX({_n("bedarf", zeile)},0),'
-                       f'N({_n("kredit_betrag", zeile)})),0)'),
+                       f'IF({_n("kredit_betrag", zeile)}<>"",N({_n("kredit_betrag", zeile)}),'
+                       f'IF({_n("kredit_quote", zeile)}<>"",'
+                       f'MIN({_n("ak_gesamt", zeile)}*{_n("kredit_quote", zeile)},'
+                       f'MAX({_n("bedarf", zeile)},0)),MAX({_n("bedarf", zeile)},0))),0)'),
         "eigen": wenn(f"{_n('bedarf', zeile)}-{_n('kredit', zeile)}"),
         "miete_qm_jahr": wenn(f'IF(N({_n("flaeche", zeile)})*N({_n("miete_qm", zeile)})>0,'
                               f'{_n("flaeche", zeile)}*{_n("miete_qm", zeile)}*12,"")'),
@@ -916,7 +921,7 @@ def _hinweis_kredit(zeile: int) -> str:
     art = _n("tilgungsart", zeile)
     return (
         f'IF({_n("fin_art", zeile)}<>"{FIN_KREDIT}",'
-        f'IF(AND({leer("kredit_betrag")},{leer("kredit_zins")}),"",'
+        f'IF(AND({leer("kredit_betrag")},{leer("kredit_quote")},{leer("kredit_zins")}),"",'
         f'"; Kreditangaben ohne Finanzierung Rest = {FIN_KREDIT}, kein Kredit"),'
         f'IF({leer("kredit_zins")},"; Kredit: Zinssatz fehlt",'
         f'IF(AND({art}="{TILGUNG_ENDFAELLIG}",{leer("laufzeit")}),'

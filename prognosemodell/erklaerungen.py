@@ -134,8 +134,8 @@ SPALTEN = {
                       "der AfA des Verkaufsjahrs).",
     "vk_AKGuB": "AK G+B aus dem Blatt Objekte = Buchwert G+B (keine AfA).",
     "vk_Nettoerloes": "Verkaufspreis − Verkaufskosten.",
-    "vk_AnteilGuB": "Anteil G+B lt. Kaufvertrag; leer: 1 − Verkehrswertanteil Gebäude aus dem "
-                    "Blatt Objekte.",
+    "vk_AnteilGuB": "Preis G+B lt. Kaufvertrag / Verkaufspreis, sonst Anteil G+B lt. "
+                    "Kaufvertrag, sonst 1 − Verkehrswertanteil Gebäude aus dem Blatt Objekte.",
     "vk_ErloesGeb": "Nettoerlös − Erlösanteil G+B.",
     "vk_ErloesGuB": "Nettoerlös × Anteil G+B verwendet.",
     "vk_GewinnGeb": "Erlösanteil Gebäude − Buchwert Gebäude Ende Verkaufsjahr. Positiv: "
@@ -198,8 +198,9 @@ SPALTEN = {
                  "+ Nebenkosten, soweit nicht schon von Zeilen darüber eingesetzt).",
     "ne_Bedarf": "Kaufpreis + Nebenkosten − Einsatz Verkaufserlös: was anders finanziert werden "
                  "muss.",
-    "ne_Kredit": "Bei Finanzierung Rest = Kredit: Kreditbetrag, leer = ganzer "
-                 "Finanzierungsbedarf. Auszahlung zum Ende des Kaufjahrs, Plan im Blatt "
+    "ne_Kredit": "Bei Finanzierung Rest = Kredit: Kreditbetrag; sonst (Kaufpreis + "
+                 "Nebenkosten) × Kreditquote, höchstens der Finanzierungsbedarf; ohne beides der "
+                 "ganze Finanzierungsbedarf. Auszahlung zum Ende des Kaufjahrs, Plan im Blatt "
                  "Darlehen.",
     "ne_Eigen": "Finanzierungsbedarf − Kredit: kommt aus der Liquidität.",
     "ne_MieteQmJahr": "Fläche × Mietpreis je m² × 12, leer ohne beide. Ersetzt Kaufpreis × "

@@ -489,6 +489,23 @@ def faelle():
             ("vk_GewinnGuB", 0, 208_000),
             ("vk_Gewinn", 0, 744_000),
         ]),
+        # Preis G+B 350.000 lt. Kaufvertrag geht vor Anteil 30 %: Anteil 25 %, Gebäude = Rest;
+        # Nettoerlös 1.360.000 × 25 % = 340.000 G+B, Gewinn G+B 140.000, Gebäude 604.000.
+        # OBJ-004: Preis G+B über dem Verkaufspreis
+        ("Etappe 4: Preis G+B als Betrag lt. Kaufvertrag, Gebäude ist der Rest",
+         Modell(objekte=[obj, jung],
+                verkaeufe=[Verkauf("OBJ-001", 2030, preis=1_400_000, kosten=40_000,
+                                   anteil_gub=0.3, gub_betrag=350_000),
+                           Verkauf("OBJ-004", 2030, preis=100_000, gub_betrag=200_000)]), [
+            ("vk_Status", 0, "OK"),
+            ("vk_AnteilGuB", 0, 0.25),
+            ("vk_ErloesGuB", 0, 340_000),
+            ("vk_ErloesGeb", 0, 1_020_000),
+            ("vk_GewinnGeb", 0, 604_000),
+            ("vk_GewinnGuB", 0, 140_000),
+            ("vk_Gewinn", 0, 744_000),
+            ("vk_Status", 1, "Preis G+B über Verkaufspreis"),
+        ]),
         ("Etappe 4: Statusprüfung Preis, Aufteilung, § 6b-Vorbesitzzeit",
          Modell(objekte=[obj, jung, ohne_quote],
                 verkaeufe=[Verkauf("OBJ-001", 2028, preis=""),
@@ -1298,6 +1315,33 @@ def faelle():
             ("BWA:KSt 32:1260", 2028, 208.08),
             ("zuo_Differenz", lj(2028), 0),
         ]),
+        # Kreditquote 70 %: NEU-001 AK 2,1 Mio × 70 % = 1,47 Mio, gedeckelt auf den Bedarf
+        # 700.000 (Verkaufserlös zählt als Eigenkapital); NEU-002 ohne Quelle AK 1,1 Mio ×
+        # 70 % = 770.000 Kredit, 330.000 Eigenmittel; NEU-003 Quote ohne Kredit: kein Kredit
+        ("Finanzierung: Kreditquote in % von Kaufpreis + Nebenkosten",
+         Modell(objekte=[abnahme4],
+                verkaeufe=[Verkauf("OBJ-001", 2027, preis=1_400_000, nutzung_6b="ja")],
+                neuobjekte=[Neuobjekt("NEU-001", 2028, kaufpreis=2_000_000, nebenkosten=100_000,
+                                      anteil_gub=0.3, afa_satz=0.03, quelle="RL-OBJ-001",
+                                      fin_art="Kredit", kredit_quote=0.7, kredit_zins=0.04,
+                                      tilgung=0.02),
+                            Neuobjekt("NEU-002", 2029, kaufpreis=1_000_000, nebenkosten=100_000,
+                                      anteil_gub=0.3, afa_satz=0.03, fin_art="Kredit",
+                                      kredit_quote=0.7, kredit_zins=0.04, tilgung=0.02),
+                            Neuobjekt("NEU-003", 2029, kaufpreis=1_000_000, anteil_gub=0.3,
+                                      afa_satz=0.03, kredit_quote=0.7)],
+                parameter=OHNE_ZINS), [
+            ("ne_Status", 0, "OK"),
+            ("ne_Kredit", 0, 700_000),
+            ("ne_Eigen", 0, 0),
+            ("ne_Status", 1, "OK"),
+            ("ne_Kredit", 1, 770_000),
+            ("ne_Eigen", 1, 330_000),
+            ("dl_Rate", 1, 46_200),
+            ("prg_KreditZins", prg_neu(2, 2030), 30_800),
+            ("ne_Kredit", 2, 0),
+            ("ne_Status", 2, "Kreditangaben ohne Finanzierung Rest = Kredit, kein Kredit"),
+        ]),
         # Finanzierung: AK 2,1 Mio − Nettoerlös 1,4 Mio = Bedarf 700.000, ganz per Kredit.
         # Annuität 4 % + 2 % = 42.000: 2029 Zins 28.000, Tilgung 14.000, Restschuld 686.000;
         # 2030 Zins 27.440, Tilgung 14.560. Übertragung ü1 220.000, ü2 500.000
@@ -1563,7 +1607,8 @@ def faelle():
             # Auswahllisten: je Zelle genau eine Überprüfung, sonst verwirft Excel sie
             (UEBERLAPPT, 0, []),
             (f"{AUSWAHL}Verkäufe", "A2", ("obj_ID", 1)),
-            (f"{AUSWAHL}Verkäufe", "F2", ('"ja,nein"', 1)),
+            (f"{AUSWAHL}Verkäufe", f"{get_column_letter(nr(VERKAUF_FELDER, 'nutzung_6b'))}2",
+             ('"ja,nein"', 1)),
             (f"{AUSWAHL}Neuobjekte", "A2", (None, 1)),
             (f"{AUSWAHL}Neuobjekte", f"{get_column_letter(nr(NEU_FELDER, 'quelle'))}2",
              ("rl_ID", 1)),
