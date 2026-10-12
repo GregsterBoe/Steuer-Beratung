@@ -529,18 +529,30 @@ def prognose_zeile_neu(zeile: int, neu_nr: int, erstes_jahr: bool) -> dict:
         return _leer_oder(zeile, f"IF({aktiv},IF(ISNUMBER({kst(pos)}),{kst(pos)},"
                                  f"{basis}*(1+{satz})^({t}-{kj})),0)")
 
+    # Fläche × Mietpreis je m²: Miete daraus statt aus der Mietrendite, Erhaltung und weitere
+    # Ausgaben in % der Miete statt aus der Erhaltungsquote; Werte der Kostenstelle gehen vor
+    qm = ne("ne_MieteQmJahr")
+    mit_qm = f"ISNUMBER({qm})"
+    miete = _p("miete", zeile)
+
+    def aus_kst_oder(pos, sonst):
+        return _leer_oder(zeile, f"IF({aktiv},IF(ISNUMBER({kst(pos)}),{kst(pos)},{sonst}),0)")
+
     return {
         "id": f'=IF({ne("ne_ID")}="","",{ne("ne_ID")})',
         "jahr": "=par_Startjahr" if erstes_jahr else f"={_p('jahr', zeile - 1)}+1",
         "aktiv": _leer_oder(zeile, f"IF({gueltig},IF({t}>{kj},1,0),0)"),
-        "miete": ab_kauf(f'{ne("ne_Kaufpreis")}*{ne("ne_Mietrendite")}', "par_Mietsteig",
-                         "miete"),
+        "miete": ab_kauf(f'IF({mit_qm},{qm},{ne("ne_Kaufpreis")}*{ne("ne_Mietrendite")})',
+                         "par_Mietsteig", "miete"),
         "einnahmen": _leer_oder(zeile, f"IF({aktiv},N({kst('einnahmen')}),0)"),
         # in den Anlaufjahren nach dem Kauf gemindert (Neubau oder frisch saniert)
-        "erhaltung": ab_kauf(f'{ne("ne_Kaufpreis")}*{ne("ne_ErhQuote")}'
-                             f'*IF({t}-{kj}<=par_NeuErhAnlaufJahre,par_NeuErhAnlaufFaktor,1)',
-                             "par_Erhaltsteig", "erhaltung"),
-        "ausgaben": _leer_oder(zeile, f"IF({aktiv},N({kst('ausgaben')}),0)"),
+        "erhaltung": aus_kst_oder(
+            "erhaltung",
+            f"IF({mit_qm},{miete}*par_QmErhQuote,"
+            f'{ne("ne_Kaufpreis")}*{ne("ne_ErhQuote")}'
+            f"*IF({t}-{kj}<=par_NeuErhAnlaufJahre,par_NeuErhAnlaufFaktor,1)"
+            f"*(1+par_Erhaltsteig)^({t}-{kj}))"),
+        "ausgaben": aus_kst_oder("ausgaben", f"IF({mit_qm},{miete}*par_QmVerwQuote,0)"),
         "afa": afa_plan,
         "buchwert": buchwert_plan,
         "ergebnis": _leer_oder(
@@ -853,6 +865,8 @@ def neu_zeile(zeile: int) -> dict:
                        f'IF({_n("kredit_betrag", zeile)}="",MAX({_n("bedarf", zeile)},0),'
                        f'N({_n("kredit_betrag", zeile)})),0)'),
         "eigen": wenn(f"{_n('bedarf', zeile)}-{_n('kredit', zeile)}"),
+        "miete_qm_jahr": wenn(f'IF(N({_n("flaeche", zeile)})*N({_n("miete_qm", zeile)})>0,'
+                              f'{_n("flaeche", zeile)}*{_n("miete_qm", zeile)}*12,"")'),
     }
     for k, (feld, _, _) in enumerate(QUELLEN):
         q = _n(feld, zeile)

@@ -556,8 +556,13 @@ def _blatt_neukauf(wb, modell: Modell) -> None:
     for block in range(max_nk):
         ws[f"{liste}{erste + block}"] = f'=IF($A${erste + block * je}="","",$A${erste + block * je})'
     _name(wb, "nk_Liste", f"'Neukauf-KSt'!${liste}${erste}:${liste}${erste + max_nk - 1}")
+    # je Kostenstelle: Jahresmiete aus m² und Kaufjahr des Neuobjekts, das sie wählt
+    qm, kj = get_column_letter(import0 + n + 2), get_column_letter(import0 + n + 3)
     for block in range(max_nk):
         kopf = erste + block * je
+        nr_ne = f"MATCH($A${kopf},ne_KSt,0)"
+        ws[f"{qm}{kopf}"] = f'=IF($A${kopf}="","",IFERROR(INDEX(ne_MieteQmJahr,{nr_ne})*1,""))'
+        ws[f"{kj}{kopf}"] = f'=IF($A${kopf}="","",IFERROR(INDEX(ne_Kaufjahr,{nr_ne})*1,""))'
         for k, (key, text, nr, satz) in enumerate(NEUKAUF_POSITIONEN):
             zeile = kopf + k
             for spalte in (1, 2):
@@ -574,11 +579,29 @@ def _blatt_neukauf(wb, modell: Modell) -> None:
                 c.fill, c.number_format = FILL_EINGABE, FMT_EURO
                 wert = f"{get_column_letter(j0 + i)}{zeile}"
                 vor = f"{get_column_letter(fort0 + i - 1)}{zeile}"
+                jahr = f"{get_column_letter(fort0 + i)}$2"
+                # Annahme für Jahre ohne Wert und ohne Wert davor, wenn das Neuobjekt Fläche
+                # und Mietpreis je m² hat: Miete ab dem Jahr nach dem Kauf, Erhaltung und
+                # weitere Ausgaben in % der Miete dieses Jahrs
+                miete = f"{get_column_letter(fort0 + i)}{kopf}"
+                annahme = {
+                    "miete": f'IF(AND(ISNUMBER(${qm}${kopf}),{jahr}>N(${kj}${kopf})),'
+                             f'${qm}${kopf}*(1+par_Mietsteig)^({jahr}-N(${kj}${kopf})),"")',
+                    "erhaltung": f'IF(AND(ISNUMBER(${qm}${kopf}),ISNUMBER({miete})),'
+                                 f'{miete}*par_QmErhQuote,"")',
+                    "ausgaben": f'IF(AND(ISNUMBER(${qm}${kopf}),ISNUMBER({miete})),'
+                                f'{miete}*par_QmVerwQuote,"")',
+                }.get(key, '""')
                 # 0 vor dem ersten anderen Wert gilt als leer: Kostenstelle ohne Buchungen,
-                # das Neuobjekt rechnet dann mit Mietrendite und Erhaltungsquote
-                formel = (f'=IF(N({wert})<>0,{wert},"")' if i == 0 else
-                          f'=IF(AND(ISNUMBER({wert}),OR(N({wert})<>0,ISNUMBER({vor}))),{wert},'
-                          f'IF(ISNUMBER({vor}),{vor}*(1+{satz}),""))')
+                # das Neuobjekt rechnet dann mit der Annahme bzw. Mietrendite und
+                # Erhaltungsquote. Jahre ohne Wert nach einem Wert schreiben diesen fort.
+                vorher = (f'COUNTIFS(${get_column_letter(j0)}{zeile}:'
+                          f'{get_column_letter(j0 + i - 1)}{zeile},"<>0",'
+                          f'${get_column_letter(j0)}{zeile}:'
+                          f'{get_column_letter(j0 + i - 1)}{zeile},"<>")>0')
+                formel = (f'=IF(N({wert})<>0,{wert},{annahme})' if i == 0 else
+                          f'=IF(AND(ISNUMBER({wert}),OR(N({wert})<>0,{vorher})),{wert},'
+                          f'IF({vorher},{vor}*(1+{satz}),{annahme}))')
                 c = ws.cell(row=zeile, column=fort0 + i, value=formel)
                 c.fill, c.number_format = FILL_BERECHNET, FMT_EURO
             ws.cell(row=zeile, column=import0 + n,
@@ -599,7 +622,7 @@ def _blatt_neukauf(wb, modell: Modell) -> None:
         f"{a}{erste}:{get_column_letter(j0 + n - 1)}{letzte}",
         FormulaRule(formula=[f"AND(ISNUMBER({a}{erste}),{a}{erste}={imp}{erste})"],
                     fill=FILL_EINGELESEN))
-    for i in range(n + 2):
+    for i in range(n + 4):
         ws.column_dimensions[get_column_letter(import0 + i)].hidden = True
     for i in range(n):
         ws.column_dimensions[get_column_letter(j0 + i)].width = 11
