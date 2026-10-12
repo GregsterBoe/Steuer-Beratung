@@ -157,6 +157,7 @@ Die Ergebnisse stehen auch im **DATEV-BWA-Format** (Projektplan, Abschnitt 18):
 - **Verkauf und Rücklage:** Gewinn, Einstellung und Auflösung stehen im neutralen Ergebnis.
 - **Summenblatt „Alle Objekte“:** Es trägt dazu Zinsertrag und Steuer und stimmt mit Liquidität und Auswertung überein.
 - **Blatt „Alle Objekte halten“:** dieselbe Summen-BWA als reine Halten-Ansicht (Baseline): alle Bestandsobjekte über das ganze Raster gehalten, ohne Verkäufe und Neuobjekte, Bestandsdarlehen laufen weiter. Ist-Spalten wie in „Alle Objekte“, Zinsertrag und Steuer aus der Baseline der Liquidität; die Kontrolle im Blatt BWA-Zuordnung prüft auch dieses Blatt.
+- **Zahlenformat:** Beträge in ganzen Euro. Die Zellen behalten den genauen Wert, gerundet wird nur die Anzeige.
 - **Vergleich mit Halten:** In „Alle Objekte“ steht in D3 der Schalter „Vergleich mit Halten“ (ja/nein). Bei „ja“ zeigen die Spalten rechts neben den Planjahren je Position und Jahr die Differenz Plan − Halten (grün mehr, rot weniger), auch für Herleitung und Finanzierung; bei „nein“ bleiben sie leer. `--uebernehmen` übernimmt den Schalter.
 - **Blatt Verkauf und Kauf:** je Verkauf eine Ergebnissicht für die Berichterstattung und eine Detailsicht. Die Ergebnissicht zeigt Erlös, Reinvestition, Kapitalanlage, Übertrag § 6b und den Vergleich Halten gegen Alternative im ersten vollen Jahr. Die Detailsicht zeigt die Einzelauflistung nach G+B und Gebäude und die Planung. Dazu kommt je Neuobjekt die Detailsicht des Kaufs.
 
