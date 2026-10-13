@@ -1100,6 +1100,8 @@ def _kauf(b: _Block, anzahl: int) -> None:
     zeile("steuerliche AK G+B", f"N({ne('ne_AKGuB')})")
     zeile("AfA-Methode", f'IF({ne("ne_AfAMethode")}="","linear",{ne("ne_AfAMethode")})', "@")
     zeile("AfA-Satz", f"N({ne('ne_AfASatz')})", FMT_PROZENT)
+    zeile("Sonder-AfA § 7b (QNG)", f'IF({ne("ne_QNG")}="ja","ja","nein")', "@")
+    zeile("Bemessungsgrundlage § 7b", f"N({ne('ne_QNGBasis')})")
     zeile("Kaufpreis + Nebenkosten", f"N({ne('ne_AKGesamt')})")
     zeile("./. Einsatz Verkaufserlös (Quell-Verkäufe)", f"-N({ne('ne_Erloes')})")
     zeile("= Finanzierungsbedarf", f"N({ne('ne_Bedarf')})", fett=True)

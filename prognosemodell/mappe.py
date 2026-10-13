@@ -833,7 +833,9 @@ def _blatt_neuobjekte(wb, modell: Modell) -> None:
                          "die Annahme.")
     ws[f"{hinweis}5"] = ("AfA-Methode degressiv: par_AfADegressiv vom Restbuchwert; mit "
                          "par_AfAWechsel = ja Wechsel zur linearen AfA über die "
-                         "Restnutzungsdauer (1 / AfA-Satz), sobald höher.")
+                         "Restnutzungsdauer (1 / AfA-Satz), sobald höher. Sonder-AfA § 7b "
+                         "(QNG) = ja: zusätzlich Satz × Bemessungsgrundlage im Kaufjahr und den "
+                         "Folgejahren, vor der regulären AfA; danach linear Restwert × Satz.")
     ws[f"{hinweis}7"] = ("Bis zu drei Quell-Rücklagen: erst alle Gebäudegewinne auf das Gebäude "
                          "(ü1), dann die G+B-Gewinne auf G+B (ü2), der Rest auf das Gebäude (ü3). "
                          "Die Werte je Quelle stehen in den eingeklappten Spalten (+ über Status).")

@@ -76,6 +76,18 @@ PARAMETER = [
               "mehr Verkäufe im Zeitraum: Warnung gewerblicher Grundstückshandel"),
     Parameter("par_DOJahre", "Zeitraum Drei-Objekt-Grenze (Jahre)", 5, FMT_ZAHL,
               "vereinfacht: Verkäufe innerhalb dieses Zeitraums; fachlich prüfen"),
+    Parameter("par_QNGSatz", "Sonder-AfA § 7b (QNG) p. a.", 0.05, FMT_PROZENT,
+              "Neuobjekte mit „Sonder-AfA § 7b (QNG)“ = ja: Satz × Bemessungsgrundlage, fest "
+              "je Jahr, zusätzlich zur regulären AfA",
+              abschnitt="Sonder-AfA § 7b EStG (Mietwohnungsneubau, EH 40 mit QNG)"),
+    Parameter("par_QNGJahre", "Sonder-AfA § 7b: Jahre", 4, FMT_ZAHL,
+              "Kaufjahr und die drei Folgejahre (§ 7b Abs. 1 EStG); voller Satz auch bei Kauf "
+              "zum Jahresende"),
+    Parameter("par_QNGHoechstQm", "§ 7b: Bemessungsgrundlage höchstens je m²", 4000, FMT_EURO,
+              "Bauantrag ab 2023: 4.000 € je m² Wohnfläche; greift nur mit Fläche im Blatt "
+              "Neuobjekte"),
+    Parameter("par_QNGObergrenzeQm", "§ 7b: Baukostenobergrenze je m²", 5200, FMT_EURO,
+              "AK Gebäude je m² darüber: keine Sonder-AfA; greift nur mit Fläche"),
     # Auffülllogik: stehen als Formel (blau) in leeren Eingabezellen, überschreibbar
     Parameter("par_AnnVervielfaeltiger", "Verkehrswert = Jahresmiete ×", 20, "0.0",
               "Vervielfältiger, 20 = Bruttomietrendite 5 %; Platzhalter",
@@ -376,6 +388,8 @@ PROGNOSE_SPALTEN = [
     Spalte("erhaltung", "Erhaltung", "prg_Erhaltung", FMT_EURO),
     Spalte("ausgaben", "weitere Ausgaben", "prg_Ausgaben", FMT_EURO),
     Spalte("afa", "AfA Gebäude", "prg_AfA", FMT_EURO),
+    # Sonder-AfA § 7b (QNG), in der AfA enthalten; Neuobjekt schon im Kaufjahr
+    Spalte("afa_qng", "davon Sonder-AfA § 7b", "prg_AfAQNG", FMT_EURO),
     Spalte("buchwert", "Buchwert Gebäude Ende", "prg_Buchwert", FMT_EURO, 16),
     Spalte("ergebnis", "Ergebnis vor Finanzierung", "prg_Ergebnis", FMT_EURO, 16),
     # Wertentwicklung bei Halten, unabhängig vom Verkauf (Baseline der Übersicht)
@@ -392,6 +406,7 @@ PROGNOSE_SPALTEN = [
     # (entfällt in Szenario B); für Bestandsobjekte gleich den Werten oben
     Spalte("mit_quelle", "Neuobjekt mit Rücklage", "prg_MitQuelle", FMT_ZAHL, 10),
     Spalte("afa_ohne6b", "AfA ohne § 6b", "prg_AfAOhne6b", FMT_EURO),
+    Spalte("afa_qng_ohne6b", "davon Sonder-AfA § 7b ohne § 6b", "prg_AfAQNGOhne6b", FMT_EURO),
     Spalte("buchwert_ohne6b", "Buchwert Gebäude ohne § 6b", "prg_BuchwertOhne6b", FMT_EURO, 16),
     Spalte("buchwert_gub_ohne6b", "Buchwert G+B ohne § 6b", "prg_BuchwertGuBOhne6b", FMT_EURO, 16),
     # Erhaltung, als würde das Objekt nie verkauft (Baseline, Ausgangsfall im Sonderbereich)
@@ -570,6 +585,13 @@ NEU_FELDER = [
          auswahl=(AFA_LINEAR, AFA_DEGRESSIV),
          hinweis="leer = linear. Degressiv: Satz „AfA degressiv“ (Parameter) vom Restbuchwert; "
                  "Wechsel zur linearen AfA nur mit „Wechsel degressiv → linear“ = ja"),
+    # Sonder-AfA § 7b EStG (QNG): par_QNGSatz × Bemessungsgrundlage im Kaufjahr und den
+    # Folgejahren, vor der regulären AfA; danach linear vom Restwert (§ 7a Abs. 9 EStG)
+    Feld("qng", "Sonder-AfA § 7b (QNG)", "ne_QNG", FMT_TEXT, False, 11, auswahl=("ja", "nein"),
+         hinweis="ja: Sonder-AfA „Sonder-AfA § 7b (QNG) p. a.“ (Parameter, 5 %) auf die "
+                 "AfA-Basis, im Kaufjahr und den drei Folgejahren, vor der regulären AfA. Mit "
+                 "Fläche höchstens 4.000 € je m², über der Baukostenobergrenze keine. Danach "
+                 "linear: Restwert × AfA-Satz. leer = nein"),
     Feld("mietrendite", "Mietrendite auf Kaufpreis", "ne_Mietrendite", FMT_PROZENT, False, 11,
          minimum=0, maximum=1,
          hinweis="Jahresmiete = Kaufpreis × Rendite ab dem Folgejahr, dann mit der "
@@ -665,6 +687,11 @@ NEU_SPALTEN = [
     Spalte("ue_gesamt", "übertragen gesamt", "ne_UeGesamt", FMT_EURO),
     Spalte("afa_basis", "AfA-Basis Gebäude", "ne_AfABasis", FMT_EURO, 16),
     Spalte("ak_gub", "steuerliche AK G+B", "ne_AKGuB", FMT_EURO),
+    # Sonder-AfA § 7b: AfA-Basis bzw. volle AK Gebäude (Szenarien B und C), mit Fläche
+    # höchstens par_QNGHoechstQm je m², 0 über der Baukostenobergrenze oder ohne QNG
+    Spalte("qng_basis", "Bemessungsgrundlage § 7b", "ne_QNGBasis", FMT_EURO, 16),
+    Spalte("qng_basis_ohne6b", "Bemessungsgrundlage § 7b ohne § 6b", "ne_QNGBasisOhne6b",
+           FMT_EURO, 16),
     # 1 = Quelle-Rücklage angegeben; das Objekt entfällt in Szenario B
     Spalte("mit_quelle", "mit Rücklage", "ne_MitQuelle", FMT_ZAHL, 8),
     # Finanzierung (Projektplan Abschnitt 26)
@@ -899,6 +926,7 @@ class Neuobjekt:
     afa_satz: Optional[float] = None
     name: Optional[str] = None
     afa_methode: Optional[str] = None    # "linear" (leer) oder "degressiv"
+    qng: Optional[str] = None            # "ja": Sonder-AfA § 7b (QNG); leer = nein
     nebenkosten: Optional[float] = None
     ak_gub_eingabe: Optional[float] = None  # None = vorbelegt aus dem Anteil G+B
     ak_geb_eingabe: Optional[float] = None  # None = Kaufpreis + Nebenkosten − AK G+B
