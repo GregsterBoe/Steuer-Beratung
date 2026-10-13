@@ -508,6 +508,7 @@ def faelle():
         ("Verkauf OBJ-001 Ende 2030: Plan verliert den Wert, Baseline hält",
          Modell(objekte=[obj, obj2], verkaeufe=[Verkauf("OBJ-001", 2030, preis=1_500_000)]), [
             ("vk_Status", 0, "OK"),
+            ("vk_Bez", 0, obj.name),          # ohne Kostenstellenblatt der Objektname
             ("prg_Aktiv", prg(1, 2030), 1),  # Miete und AfA laufen im Verkaufsjahr noch
             ("prg_Miete", prg(1, 2030), 64_945.93),
             ("prg_Aktiv", prg(1, 2031), 0),
@@ -1379,6 +1380,15 @@ def faelle():
             ("prg_Miete", prg(1, 2027), 67_320),
             ("pr_Anzahl", pr("kst_abweichung"), 0),
         ]),
+        # Bezeichnung im Blatt Verkäufe aus C2 des Kostenstellenblatts, folgt einer Änderung
+        ("Verkäufe: Bezeichnung kurz aus dem Kostenstellenblatt",
+         Getippt(dataclasses.replace(vorlage_eingelesen(), verkaeufe=[
+             Verkauf("KSt 1", 2030), Verkauf("KSt 2", 2031)]),
+             {("KSt 2", "C2"): "Beispielweg 7a"}), [
+            ("vk_Bez", 0, "Musterstraße 1"),
+            ("vk_Bez", 1, "Beispielweg 7a"),
+            ("vk_Bez", 2, None),
+        ]),
         # im Blatt Objekte überschrieben: nur die Prognose rechnet damit, das
         # Kostenstellenblatt und Alle Objekte nicht; orange und Warnung
         ("Objekte: Basiswert überschrieben, weicht vom Kostenstellenblatt ab",
@@ -2020,7 +2030,10 @@ def faelle():
             ("obj_AKGuB", 1, 266_666.67),
             ("obj_Restbuchwert", 1, 544_000),
             ("obj_Status", 0, "OK"),
-            ("obj_Annahmen", 0, 11),   # 8 Stammdaten, Baujahr, Großmaßnahme Jahr und Betrag
+            ("obj_Annahmen", 0, 10),   # 8 Stammdaten, Großmaßnahme Jahr und Betrag
+            # ohne Anlagen kein Baujahr: leer, ohne Alterung und Großmaßnahme
+            ("obj_Baujahr", 0, None),
+            ("obj_SanJahr", 0, 0),
             ("obj_Kritisch", 1, 0),
             ("prg_AfA", prg(2, 2027), 16_000),
             ("ueb_MitAnnahmen", 0, 2),
@@ -2324,7 +2337,7 @@ def faelle():
             ("obj_Kaufjahr", 1, 2011),                # Annahme
             ("obj_AnlBau", 1, None),                  # Gruppen ohne AHK-Datum
             ("obj_AnlBauOffen", 1, 0),
-            ("obj_Annahmen", 1, 9),                   # Restbuchwert kommt aus den Gruppen
+            ("obj_Annahmen", 1, 8),                   # Restbuchwert kommt aus den Gruppen
             ("prg_AfA", prg(2, 2027), 30_000),
             ("prg_AfA", prg(2, 2028), 27_000),
             ("prg_AfA", prg(2, 2029), 24_000),

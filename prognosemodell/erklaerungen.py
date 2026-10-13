@@ -76,8 +76,6 @@ PARAMETER_WIRKUNG = {
     "par_AnnHaltedauer": "Nur ohne Kaufjahr: Kaufjahr = Basisjahr − Jahre. Wirkt auf die "
                          "§ 6b-Vorbesitzzeit und die abgezinsten AK.",
     "par_AnnErhQuote": "Nur ohne Erhaltung aus der Buchhaltung: Erhaltung = Miete × Quote.",
-    "par_AnnGebaeudealter": "Nur ohne Baujahr: Baujahr = Basisjahr − Alter. Steuert Alterung "
-                            "der Erhaltung und Jahr der Großmaßnahme.",
     "par_AnnReinvestJahre": "Verkäufe mit „reinvestieren = ja“: Kaufjahr des Neuobjekts = "
                             "Verkaufsjahr + Jahre.",
     "par_AnnReinvestQuote": "Verkäufe mit „reinvestieren = ja“: Kaufpreis + Nebenkosten = "
@@ -95,12 +93,13 @@ PARAMETER_WIRKUNG = {
     "par_QmVerwQuote": "Neuobjekte mit Fläche und Mietpreis je m²: weitere Ausgaben (BWA 1260, "
                        "Verwaltung) = Miete des Jahres × Quote. Füllt leere Jahre der gewählten "
                        "Kostenstelle Neukauf; eingetragene Werte gehen vor.",
-    "par_ErhAlterungAb": "Erhaltung aller Objekte: ab diesem Gebäudealter kommt je Jahr die "
-                         "zusätzliche Steigerung dazu.",
+    "par_ErhAlterungAb": "Erhaltung aller Objekte mit Baujahr: ab diesem Gebäudealter kommt je "
+                         "Jahr die zusätzliche Steigerung dazu.",
     "par_ErhAlterung": "Zusätzliche Steigerung der Erhaltung je Jahr über dem Alter.",
     "par_NeuErhAnlaufJahre": "Neuobjekte: so viele Jahre nach dem Kauf gilt der Anlauffaktor.",
     "par_NeuErhAnlaufFaktor": "Neuobjekte: Erhaltung in den Anlaufjahren = Erhaltung × Faktor.",
-    "par_SanAlter": "Nur ohne Eingabe im Blatt Objekte: Jahr der Großmaßnahme = Baujahr + Alter.",
+    "par_SanAlter": "Nur ohne Eingabe im Blatt Objekte: Jahr der Großmaßnahme = Baujahr + Alter; "
+                    "ohne Baujahr keine.",
     "par_SanVorlauf": "Großmaßnahme frühestens im ersten Prognosejahr + Vorlauf.",
     "par_SanQuote": "Nur ohne Eingabe: Großmaßnahme = Verkehrswert × Gebäudeanteil × Quote, "
                     "als Erhaltung sofort abziehbar. 0 % schaltet die Annahme ab.",
@@ -224,7 +223,7 @@ SPALTEN = {
                  "Neukauf-Kostenstelle, sonst Fläche × Mietpreis je m² × 12 bzw. Kaufpreis × "
                  "Mietrendite, ab dem Kauf mit der Mietsteigerung.",
     "prg_Erhaltung": "Erhaltung Basisjahr, fortgeschrieben mit Erhaltungssteigerung, Alterung "
-                     "über dem Gebäudealter, plus Großmaßnahme im Jahr der Maßnahme.",
+                     "über dem Gebäudealter (nur mit Baujahr), plus Großmaßnahme im Jahr der Maßnahme.",
     "prg_AfA": "AfA laut Blatt Anlagen bzw. AfA-Plan, sonst AfA je Jahr bis der Restbuchwert "
                "verbraucht ist. Neuobjekt: AfA-Basis × Satz (bzw. degressiv).",
     "prg_Verkehrswert": "Verkehrswert aktuell × (1 + Wertsteigerung)^Jahre, unabhängig vom "

@@ -1034,8 +1034,8 @@ Anlass: Halten lag im Abnahmefall vorn, unter anderem weil das Neuobjekt mehr Er
 | Baustein | Rechnung | Parameter (Standard) |
 | --- | --- | --- |
 | Alterung Bestand | Erhaltung × (1 + Alterung)^(Jahre über dem Schwellenalter seit dem Basisjahr), zusätzlich zur Erhaltungssteigerung | par\_ErhAlterungAb (30), par\_ErhAlterung (1,5 %) |
-| Baujahr | Eingabe; leer: frühestes AHK-Datum der Gebäude im Blatt Anlagen (orange, prüfen), sonst Basisjahr − Gebäudealter | par\_AnnGebaeudealter (40) |
-| Großmaßnahme Jahr | Eingabe (0 = keine); leer: Baujahr + Alter, bei schon älteren Gebäuden erstes Prognosejahr + Vorlauf; jenseits des Rasters 0 | par\_SanAlter (50), par\_SanVorlauf (2) |
+| Baujahr | Eingabe; leer: frühestes AHK-Datum der Gebäude im Blatt Anlagen (orange, prüfen), sonst leer (keine Annahme): keine Alterung, keine Großmaßnahme aus dem Alter | – |
+| Großmaßnahme Jahr | Eingabe (0 = keine); leer: Baujahr + Alter, bei schon älteren Gebäuden erstes Prognosejahr + Vorlauf; ohne Baujahr oder jenseits des Rasters 0 | par\_SanAlter (50), par\_SanVorlauf (2) |
 | Großmaßnahme Betrag | Eingabe in heutigen Preisen; leer: Verkehrswert × Gebäudeanteil × Quote; wächst mit der Erhaltungssteigerung | par\_SanQuote (15 %, 0 % schaltet die Annahme ab) |
 | Neuobjekt Anlauf | Erhaltung in den ersten Jahren nach dem Kauf × Faktor | par\_NeuErhAnlaufJahre (10), par\_NeuErhAnlaufFaktor (50 %) |
 | Erhaltung Neuobjekt | Standard der Annahme gesenkt | par\_AnnNeuErhQuote 0,5 % statt 1 % |

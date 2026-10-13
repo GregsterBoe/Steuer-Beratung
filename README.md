@@ -88,7 +88,7 @@ Das Blatt **Übersicht** öffnet als erstes. Es zeigt von 2026 bis 2046 den Wert
 
 Der Wert ist der Verkehrswert aus dem Objektblatt, fortgeschrieben mit der Wertsteigerung vom Parameterblatt. Fehlt der Verkehrswert, gilt die Annahme Jahresmiete × Vervielfältiger; die Übersicht zählt die Objekte mit Annahmen. Ein Verkauf gilt zum Jahresende. Miete und AfA laufen im Verkaufsjahr noch, ab dem Folgejahr ist das Objekt inaktiv. Der Plan enthält auch die Neuobjekte. Das Gesamtvermögen ist der Verkehrswert plus die kumulierte Liquidität nach Steuern, abzüglich der Restschuld der Kredite und der latenten Steuer auf stille Reserven und Rücklage. So stehen Halten und Verkaufen vergleichbar nebeneinander.
 
-Im Blatt **Verkäufe** stehen je Verkauf ObjektID, Jahr, Preis, Kosten, optional der Anteil G+B laut Kaufvertrag und § 6b ja/nein. Daraus rechnet das Blatt:
+Im Blatt **Verkäufe** stehen je Verkauf ObjektID (daneben grau die Bezeichnung kurz aus Zelle C2 des Kostenstellenblatts, ohne Kostenstellenblatt der Objektname), Jahr, Preis, Kosten, optional der Anteil G+B laut Kaufvertrag und § 6b ja/nein. Daraus rechnet das Blatt:
 - den Gebäudebuchwert am Ende des Verkaufsjahrs aus der Prognose
 - die Aufteilung des Nettoerlöses auf Gebäude und G+B
 - den Gewinn je Teil
@@ -189,7 +189,7 @@ Fehlende Daten füllt eine **Auffülllogik**: Die Annahme steht als Formel in de
 | Kaufjahr | Blatt Anlagen (frühester Zugang G+B oder Gebäude), sonst vor 15 Jahren |
 | AK Gebäude | Blatt Anlagen (AHK der abnutzbaren Anlagen), sonst AfA lt. Buchhaltung / Satz |
 | AK G+B | Blatt Anlagen (Buchwert G+B), sonst aus AK Gebäude und Gebäudeanteil |
-| Baujahr | Blatt Anlagen (frühestes AHK-Datum der Gebäude, gilt bei Neubau; orange und Warnung, bis das Jahr eingetippt ist), sonst Basisjahr − 40 |
+| Baujahr | Blatt Anlagen (frühestes AHK-Datum der Gebäude, gilt bei Neubau; orange und Warnung, bis das Jahr eingetippt ist), sonst leer: keine Alterung und keine Großmaßnahme |
 | Restbuchwert | Blatt Anlagen (Buchwert Ende Basisjahr), sonst aus AK und Kaufjahr; 0, wenn die Buchhaltung keine AfA mehr zeigt |
 | AfA je Jahr (Prognose) | Blatt Anlagen (je Anlage bis zu ihrem Buchwert), sonst AfA lt. Buchhaltung (auch 0), läuft bis der Restbuchwert verbraucht ist |
 | Erhaltung | 10 % der Miete |

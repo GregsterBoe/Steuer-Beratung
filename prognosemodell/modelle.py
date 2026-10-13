@@ -88,8 +88,6 @@ PARAMETER = [
               "Kaufjahr = Basisjahr − Jahre seit Kauf"),
     Parameter("par_AnnErhQuote", "Erhaltung in % der Miete", 0.10, FMT_PROZENT,
               "nur ohne Erhaltung aus der Buchhaltung"),
-    Parameter("par_AnnGebaeudealter", "Gebäudealter im Basisjahr (Jahre)", 40, FMT_ZAHL,
-              "Baujahr = Basisjahr − Gebäudealter, solange kein Baujahr erfasst ist"),
     Parameter("par_AnnReinvestJahre", "Kauf nach Verkauf (Jahre)", 1, FMT_ZAHL,
               "Kaufjahr = Verkaufsjahr + Jahre; innerhalb der § 6b-Frist halten",
               abschnitt="Annahmen Reinvestition (Verkauf mit „reinvestieren = ja“)"),
@@ -176,6 +174,10 @@ class Feld:
     hinweis: str = ""       # Eingabehilfe beim Anklicken der Zelle
     # Formel leitet nur aus anderen Feldern ab: blau, zählt aber nicht als eigene Annahme
     abgeleitet: bool = False
+    # die Formel darf leer ergeben (kein Rückfallwert): leer ist weder rot noch Annahme
+    leer_erlaubt: bool = False
+    # nur Anzeige: Formel ohne Eingabe, grau wie berechnete Spalten
+    berechnet: bool = False
 
 
 OBJEKT_FELDER = [
@@ -229,14 +231,15 @@ OBJEKT_FELDER = [
                  "× AfA-Satz; läuft bis der Restbuchwert verbraucht ist"),
     # Erhaltung nach Alter; die Großmaßnahme zählt als sofort abziehbarer Erhaltungsaufwand
     Feld("baujahr", "Baujahr", "obj_Baujahr", FMT_JAHR, False, 10, minimum=1800, maximum=2100,
-         ganzzahl=True, annahme=True,
+         ganzzahl=True, annahme=True, leer_erlaubt=True,
          hinweis="leer: frühestes AHK-Datum der Gebäude im Blatt Anlagen (orange: stimmt nur "
-                 "bei Neubau, bei gekauftem Bestandsgebäude echtes Baujahr eintippen), sonst "
-                 "Basisjahr − Gebäudealter (Parameter); steuert Alterung und Großmaßnahme"),
+                 "bei Neubau, bei gekauftem Bestandsgebäude echtes Baujahr eintippen), ohne "
+                 "Anlagen leer. Steuert Alterung und Großmaßnahme; leer: keine Alterung, "
+                 "keine Großmaßnahme aus dem Alter"),
     Feld("san_jahr", "Großmaßnahme Jahr", "obj_SanJahr", FMT_JAHR, False, 11, minimum=0,
          maximum=2100, ganzzahl=True, annahme=True,
          hinweis="0 = keine; leer: Baujahr + Alter für Großmaßnahme (Parameter), "
-                 "frühestens erstes Prognosejahr + Vorlauf"),
+                 "frühestens erstes Prognosejahr + Vorlauf; ohne Baujahr keine"),
     Feld("san_betrag", "Großmaßnahme Betrag (heutige Preise)", "obj_SanBetrag", FMT_EURO, False,
          minimum=0, annahme=True,
          hinweis="leer: Verkehrswert × Gebäudeanteil × Quote (Parameter); "
@@ -417,6 +420,9 @@ MAX_VERKAEUFE = 50
 VERKAUF_FELDER = [
     Feld("objekt_id", "ObjektID", "vk_ID", FMT_TEXT, True, 14,
          hinweis="Objekt aus dem Blatt Objekte (Auswahlliste); je Objekt ein aktiver Verkauf"),
+    Feld("bezeichnung", "Bezeichnung", "vk_Bez", FMT_TEXT, False, 22, berechnet=True,
+         hinweis="aus dem Kostenstellenblatt der ObjektID (Bezeichnung kurz, Zelle C2), ohne "
+                 "Kostenstellenblatt der Objektname aus dem Blatt Objekte"),
     # nein = Verkauf rechnet nicht mit (wie nicht erfasst), bleibt aber stehen; leer = ja
     Feld("aktiv", "Verkauf aktiv", "vk_Aktiv", FMT_TEXT, False, 9, auswahl=("ja", "nein"),
          hinweis="nein: der Verkauf rechnet nicht mit, das Objekt wird weiter gehalten; keine "
