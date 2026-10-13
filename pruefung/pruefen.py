@@ -173,8 +173,12 @@ def wert(wb, name: str, zeile_im_bereich: int = 0):
     return wb[blatt].cell(row=zelle.row + zeile_im_bereich, column=zelle.column).value
 
 
-def bruecke_wert(ws, beschriftung: str, jahr: int):
-    """Ergebnisbrücke: Zeile mit der Beschriftung in Spalte A, Spalte des Jahres (Kopf Zeile 5)."""
+PAKET = "Paket (Zeile Verkauf)"   # Spalte der Paketnummer in der Ergebnisbrücke
+
+
+def bruecke_wert(ws, beschriftung: str, jahr):
+    """Ergebnisbrücke: Zeile mit der Beschriftung in Spalte A, Spalte des Jahres oder mit
+    dieser Überschrift (Kopf Zeile 5)."""
     zeile = next((z for z in range(6, ws.max_row + 1)
                   if ws.cell(row=z, column=1).value == beschriftung), None)
     spalte = next((c.column for c in ws[5] if c.value == jahr), None)
@@ -1001,9 +1005,20 @@ def faelle():
             ("BRK:Verkauf OBJ-002 2031", 2031, Wie("vk_Gewinn", 1)),
             ("BRK:Verkauf OBJ-002 2031", 2032, -42_292.20),
             ("BRK:davon Gewinn und Rücklage", 2031, Wie("vk_Gewinn", 1)),
-            ("BRK:Kauf NEU-001 2030", 2030, Wie("prg_Wirkung", prg_neu(1, 2030))),
+            ("BRK:Kauf NEU-001 2030 → Paket OBJ-001", 2030, Wie("prg_Wirkung", prg_neu(1, 2030))),
+            ("BRK:Kauf NEU-001 2030 → Paket OBJ-001", PAKET, 1),
             ("BRK:Kauf NEU-002 2032", 2032, 0),
             ("BRK:Kauf NEU-002 2032", 2033, Wie("prg_Ergebnis", prg_neu(2, 2033))),
+            ("BRK:Kauf NEU-002 2032", PAKET, 0),
+            # Paket OBJ-001: Verkauf 2030 −40.115,43, Kauf NEU-001 2030 Sonder-AfA § 7b im
+            # Kaufjahr 5 % × 732.000 (1.200.000 AK Gebäude − Rücklage Gebäude 468.000)
+            ("BRK:Paket OBJ-001 2029", 2029, 0),
+            ("BRK:Paket OBJ-001 2029", 2030, -76_715.43),
+            ("BRK:Käufe aus Verkauf OBJ-001 (1)", 2030, -36_600),
+            ("BRK:Käufe aus Verkauf OBJ-002 (0)", 2032, 0),
+            ("BRK:Paket OBJ-002 2031", 2031, Wie("vk_Gewinn", 1)),
+            ("BRK:Käufe ohne Verkauf", 2033, Wie("prg_Ergebnis", prg_neu(2, 2033))),
+            ("BRK:Summe Pakete und Käufe ohne Verkauf", 2029, 0),
             ("BRK:Zinseffekt Liquidität (Plan − Halten)", 2029, 0),
             *[("brk_Kontrolle", j - 2027, 0) for j in (2027, 2029, 2030, 2031, 2035, 2046)],
             ("prg_VerkaufNr", prg(1, 2046), 1),
@@ -1020,7 +1035,18 @@ def faelle():
          Modell(objekte=[obj, dataclasses.replace(obj, objekt_id="OBJ-002"), firma],
                 verkaeufe=[Verkauf("OBJ-001", 2029, preis=2_800_000, nutzung_6b="nein",
                                    weitere_ids="OBJ-002"),
-                           Verkauf("KSt 90", 2030, preis=10_000, nutzung_6b="nein")]), [
+                           Verkauf("KSt 90", 2030, preis=10_000, nutzung_6b="nein")],
+                neuobjekte=[Neuobjekt("NEU-001", 2031, kaufpreis=500_000, anteil_gub=0.2,
+                                      afa_satz=0.03, mietrendite=0.05, quelle="RL-KSt 90"),
+                            Neuobjekt("NEU-002", 2030, kaufpreis=500_000, anteil_gub=0.2,
+                                      afa_satz=0.03, mietrendite=0.05,
+                                      quelle2="RL-OBJ-001")]), [
+            # Paket auch ohne Rücklage (§ 6b nein) über „RL-“ & ObjektID, auch aus Quelle 2
+            ("BRK:Kauf NEU-001 2031 → Paket KSt 90", PAKET, 2),
+            ("BRK:Kauf NEU-002 2030 → Paket OBJ-001", PAKET, 1),
+            ("BRK:Käufe aus Verkauf OBJ-001 (1)", 2031,
+             Wie("BRK:Kauf NEU-002 2030 → Paket OBJ-001", 2031)),
+            ("BRK:Käufe ohne Verkauf", 2031, 0),
             ("BRK:Verkauf OBJ-001 + OBJ-002 2029", 2030, -80_230.86),
             ("BRK:Verkauf KSt 90 2030", 2031, 34_122.42),
             ("BRK:Verkauf KSt 90 2030", 2030, Wie("vk_Gewinn", 1)),

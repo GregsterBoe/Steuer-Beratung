@@ -386,6 +386,12 @@ BRUECKE = {
                           "ändern sich durch die Entscheidungen nicht, solange sie nicht "
                           "verkauft werden.",
     "halten_zins": "Zinsertrag auf die Liquidität bei Halten (Rendite Alternativanlage).",
+    "paket": "Zeile im Blatt Verkäufe, aus deren Rücklage oder Erlös der Kauf finanziert ist "
+             "(erste Quelle im Blatt Neuobjekte, die einen Verkauf nennt); 0 = Kauf ohne "
+             "Verkauf. Darüber ordnet die Brücke den Kauf seinem Paket zu.",
+    "entscheidungen": "Summe der Pakete und der Käufe ohne Verkauf: die Wirkung aller "
+                      "Entscheidungen vor Steuern, ohne den Zinseffekt der Liquidität.",
+    "ohne": "Käufe, die keine Rücklage und keinen Erlös eines Verkaufs nutzen.",
     "verkaeufe": "Je Verkauf: steuerwirksamer Gewinn im Verkaufsjahr, bei § 6b minus "
                  "Einstellung in die Rücklage, im Fristjahr plus Auflösung und Zuschlag; "
                  "dazu ab dem Folgejahr das entfallende laufende Ergebnis (Miete − Kosten − "
@@ -393,12 +399,12 @@ BRUECKE = {
     "vk_veraeusserung": "Gewinn und Rücklage aller Verkäufe, gleich der Spalte steuerwirksam "
                         "im Rücklagenspiegel.",
     "vk_laufend": "Entfallendes laufendes Ergebnis aller verkauften Kostenstellen.",
-    "neuobjekte": "Je Kauf: Miete − Kosten − AfA − Kreditzinsen. Die AfA rechnet von den um "
+    "neuobjekte": "Alle Käufe, mit oder ohne Paket. Je Kauf: Miete − Kosten − AfA − Kreditzinsen. Die AfA rechnet von den um "
                   "die übertragene Rücklage geminderten AK, mit Sonder-AfA § 7b.",
     "zins": "Zinsertrag Plan minus Halten: Verkaufserlöse, Kaufpreise und Steuer verändern die "
             "Liquidität und damit deren Verzinsung.",
     "plan": "Gesamt-GuV vor Steuern des Plans A (Blatt Auswertung).",
-    "kontrolle": "Halten + Summe Verkäufe + Summe Käufe + Zinseffekt − Plan; muss 0 sein, "
+    "kontrolle": "Halten + Summe Pakete und Käufe ohne Verkauf + Zinseffekt − Plan; muss 0 sein, "
                  "sonst meldet das Prüfungsblatt einen Fehler.",
     "nach_wirkung": "Ergebnis nach Steuern Plan A minus Halten: Wirkung aller Entscheidungen "
                     "zusammen, nach Steuer mit Verlustvortrag.",

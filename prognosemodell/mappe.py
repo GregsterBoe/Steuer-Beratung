@@ -1191,30 +1191,51 @@ def _blatt_bruecke(wb, modell: Modell) -> None:
              name="brk_HaltenZins")
     zeile += 1
 
-    abschnitt("Verkäufe")
-    vk_erste = zeile
-    for nr in range(1, modell.kapazitaet.verkaeufe + 1):
+    # Pakete: je Verkauf Zwischensumme aus dem Verkauf und den Käufen aus seiner Rücklage
+    # oder seinem Erlös; darunter die Käufe einzeln mit ihrer Paketnummer (Spalte hinter
+    # den Jahren), über die SUMIFS sie den Paketen zuordnet
+    n_vk, n_ne = modell.kapazitaet.verkaeufe, modell.kapazitaet.neuobjekte
+    paket_start = zeile + 1
+    ohne = paket_start + 3 * n_vk
+    ne_erste = ohne + 12
+    ne_letzte = ne_erste + n_ne - 1
+    sp_paket = get_column_letter(letzte_sp + 1)
+    pakete = f"${sp_paket}${ne_erste}:${sp_paket}${ne_letzte}"
+
+    def spalte(j):
+        return j.split("$")[0]
+
+    def kaeufe(bedingung):
+        return lambda j: (f"SUMIFS({spalte(j)}${ne_erste}:{spalte(j)}${ne_letzte},"
+                          f"{pakete},{bedingung})")
+
+    abschnitt("Pakete: Verkauf mit den Käufen aus seiner Rücklage oder seinem Erlös")
+    koepfe = []
+    for nr in range(1, n_vk + 1):
+        kopfzeile = zeile
+        koepfe.append(kopfzeile)
+        position(f"paket{nr}", formeln.bruecke_paket_text(nr),
+                 lambda j, z=kopfzeile: (f'=IF($A{z}="","",'
+                                         f"{spalte(j)}{z + 1}+{spalte(j)}{z + 2})"),
+                 fett=True)
         position(f"vk{nr}", formeln.bruecke_verkauf_text(nr),
                  lambda j, nr=nr: formeln.bruecke_verkauf(nr, j), einzug=True)
-    vk_letzte = zeile - 1
+        position(f"vk_kaeufe{nr}", formeln.bruecke_kaeufe_text(nr, pakete),
+                 lambda j, nr=nr: f'=IF(INDEX(vk_ID,{nr})="","",{kaeufe(nr)(j)})',
+                 einzug=True)
+    assert zeile == ohne
+    position("ohne", "Käufe ohne Verkauf", lambda j: f"={kaeufe(0)(j)}", fett=True)
+    zeile += 1
 
-    def summe_von(a, b):
-        return lambda j: f"=SUM({j.split('$')[0]}{a}:{j.split('$')[0]}{b})"
-
-    position("verkaeufe", "Summe Verkäufe", summe_von(vk_erste, vk_letzte), fett=True,
-             name="brk_Verkaeufe")
+    position("entscheidungen", "Summe Pakete und Käufe ohne Verkauf",
+             lambda j: "=SUM(" + ",".join(f"{spalte(j)}{z}" for z in koepfe + [ohne]) + ")",
+             fett=True, name="brk_Entscheidungen")
     position("vk_veraeusserung", "davon Gewinn und Rücklage", fest("vk_veraeusserung"),
              einzug=True, name="brk_Veraeusserung")
     position("vk_laufend", "davon entfallendes laufendes Ergebnis", fest("vk_laufend"),
              einzug=True, name="brk_Laufend")
-    zeile += 1
-
-    abschnitt("Käufe (Neuobjekte)")
-    ne_erste = zeile
-    for nr in range(1, modell.kapazitaet.neuobjekte + 1):
-        position(f"ne{nr}", formeln.bruecke_neu_text(nr),
-                 lambda j, nr=nr: formeln.bruecke_neu(nr, j), einzug=True)
-    position("neuobjekte", "Summe Käufe", summe_von(ne_erste, zeile - 1), fett=True,
+    position("neuobjekte", "davon Käufe",
+             lambda j: f"=SUM({spalte(j)}{ne_erste}:{spalte(j)}{ne_letzte})", einzug=True,
              name="brk_Neuobjekte")
     zeile += 1
 
@@ -1222,9 +1243,23 @@ def _blatt_bruecke(wb, modell: Modell) -> None:
              name="brk_Zins")
     position("plan", "Ergebnis vor Steuern Plan A", fest("plan"), fett=True, name="brk_Plan")
     position("kontrolle", "Kontrolle: Halten + Wirkungen − Plan (muss 0 sein)",
-             lambda j: (f"=ROUND({ref('halten')(j)}+{ref('verkaeufe')(j)}"
-                        f"+{ref('neuobjekte')(j)}+{ref('zins')(j)}-{ref('plan')(j)},2)"),
+             lambda j: (f"=ROUND({ref('halten')(j)}+{ref('entscheidungen')(j)}"
+                        f"+{ref('zins')(j)}-{ref('plan')(j)},2)"),
              name="brk_Kontrolle")
+    zeile += 1
+
+    abschnitt("Käufe einzeln")
+    assert zeile == ne_erste
+    c = ws.cell(row=kopf, column=letzte_sp + 1, value="Paket (Zeile Verkauf)")
+    c.font, c.fill = FONT_KOPF, FILL_KOPF
+    c.alignment = Alignment(wrap_text=True, vertical="center")
+    _tooltip(c, texte["paket"])
+    for nr in range(1, n_ne + 1):
+        c = ws.cell(row=zeile, column=letzte_sp + 1, value=formeln.bruecke_paket_nr(nr))
+        c.number_format, c.fill = FMT_ZAHL, FILL_BERECHNET
+        position(f"ne{nr}", formeln.bruecke_neu_text(nr, f"${sp_paket}{zeile}"),
+                 lambda j, nr=nr: formeln.bruecke_neu(nr, j), einzug=True)
+    ws.column_dimensions[sp_paket].width = 11
     zeile += 1
 
     abschnitt("nachrichtlich: Steuer und Ergebnis nach Steuern")

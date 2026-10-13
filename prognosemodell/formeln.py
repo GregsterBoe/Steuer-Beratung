@@ -1457,10 +1457,42 @@ def bruecke_neu(nr: int, jahr: str) -> str:
     return f'=IF({id_}="","",SUMIFS(prg_Wirkung,prg_Jahr,{jahr},prg_Neu,1,prg_ID,{id_}))'
 
 
-def bruecke_neu_text(nr: int) -> str:
+def bruecke_neu_text(nr: int, paket: str) -> str:
+    """Beschriftung der Zeile des Neuobjekts nr; paket = Zelle mit seiner Paketnummer."""
     id_ = f"INDEX(ne_ID,{nr})"
     return (f'=IF({id_}="","","Kauf "&{id_}&" "&INDEX(ne_Kaufjahr,{nr})'
-            f'&IF(INDEX(ne_Aktiv,{nr})="nein"," (ausgeschaltet)",""))')
+            f'&IF(INDEX(ne_Aktiv,{nr})="nein"," (ausgeschaltet)","")'
+            f'&IF(N({paket})>0," → Paket "&INDEX(vk_ID,{paket}),""))')
+
+
+def bruecke_paket_nr(nr: int) -> str:
+    """Paket des Neuobjekts nr: Zeile im Blatt Verkäufe, aus deren Rücklage oder Erlös es
+    gekauft ist (erste Quelle, die einen Verkauf nennt); 0 = Kauf ohne Verkauf. Auch ein
+    Verkauf ohne Rücklage (§ 6b nein, ausgeschaltet) zählt über „RL-“ & ObjektID."""
+    def zeile(feld):
+        q = f"INDEX({feld},{nr})"
+        id_ = f"MID({q},4,500)"
+        return (f'IF({q}="",0,IF(COUNTIF(rl_ID,{q})>0,MATCH({q},rl_ID,0),'
+                f'IF(AND(LEFT({q},3)="RL-",COUNTIF(vk_ID,{id_})>0),'
+                f"MATCH({id_},vk_ID,0),0)))")
+
+    z = [zeile(name) for _, name, _ in QUELLEN]
+    return (f'=IF(INDEX(ne_ID,{nr})="","",'
+            f"IF({z[0]}>0,{z[0]},IF({z[1]}>0,{z[1]},{z[2]})))")
+
+
+def bruecke_paket_text(nr: int) -> str:
+    def i(name):
+        return f"INDEX({name},{nr})"
+    return (f'=IF({i("vk_ID")}="","","Paket "&{i("vk_ID")}'
+            f'&IF({i("vk_Weitere")}<>""," + "&{i("vk_Weitere")},"")&" "&{i("vk_Jahr")})')
+
+
+def bruecke_kaeufe_text(nr: int, pakete: str) -> str:
+    """Beschriftung der Käufe eines Pakets mit deren Anzahl; pakete = Spalte der
+    Paketnummern der Kaufzeilen."""
+    vk = f"INDEX(vk_ID,{nr})"
+    return (f'=IF({vk}="","","Käufe aus Verkauf "&{vk}&" ("&COUNTIF({pakete},{nr})&")")')
 
 
 def bruecke_summen(jahr: str) -> dict:

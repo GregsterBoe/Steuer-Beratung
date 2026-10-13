@@ -369,10 +369,11 @@ def _blatt_jahresrechnung(ex, wb) -> None:
 # --- Blatt Ergebnisbrücke ---
 
 def _blatt_bruecke(ex, wb) -> bool:
-    """Werte des Blatts Ergebnisbrücke ohne leere Vorgänge und ohne Kontrollzeile; ohne
+    """Werte des Blatts Ergebnisbrücke ohne leere Pakete und Vorgänge, ohne Paketspalte und
+    Kontrollzeile; ohne
     Verkauf und Kauf kein Blatt (False)."""
-    if not (_ungleich_null(_bereich(wb, "brk_Verkaeufe"))
-            or _ungleich_null(_bereich(wb, "brk_Neuobjekte"))):
+    if not any(_ungleich_null(_bereich(wb, f"brk_{name}"))
+               for name in ("Veraeusserung", "Laufend", "Neuobjekte")):
         return False
     quelle = wb[BRUECKE]
     blatt, ref = next(iter(wb.defined_names["brk_Halten"].destinations))
@@ -404,7 +405,9 @@ def _blatt_bruecke(ex, wb) -> bool:
             _abschnitt(ws, zeile, text, n + 2)
             zeile += 1
             continue
-        if einzug and text.startswith(("Verkauf ", "Kauf ")) and not _ungleich_null(werte):
+        # leere Pakete und Vorgänge entfallen, feste Summenzeilen bleiben
+        if not _ungleich_null(werte) and not text.startswith(
+                ("Ergebnis", "Summe", "Zinseffekt", "Wirkung")):
             continue
         fett = bool(quelle.cell(row=q, column=1).font.bold)
         c = ws.cell(row=zeile, column=1, value=text)

@@ -147,10 +147,14 @@ Das Blatt **Vergleich** stellt die Kennzahlen am Ende des Rasters nebeneinander,
 
 Das Blatt **Ergebnisbrücke** zeigt, wie die Entscheidungen auf das Ergebnis wirken. Die Spalten sind die Planjahre und eine Summe. Die Zeilen führen vom Ergebnis vor Steuern bei Halten (Baseline) zum Ergebnis vor Steuern im Plan A:
 - **Ergebnis bei Halten**, aufgeteilt in Immobilien, Kostenstellen der Art Unternehmen und Zinsertrag der Liquidität.
-- **Je Verkauf eine Zeile:** im Verkaufsjahr der steuerwirksame Gewinn, bei § 6b minus die Einstellung in die Rücklage; im Fristjahr Auflösung und Zuschlag; ab dem Folgejahr minus das laufende Ergebnis, das mit den verkauften Kostenstellen entfällt (Miete − Kosten − AfA − Darlehenszinsen). Ein Verkaufspaket steht in einer Zeile.
-- **Je Kauf eine Zeile:** Miete − Kosten − AfA − Kreditzinsen des Neuobjekts. Die AfA rechnet von den um die Rücklage geminderten AK, mit Sonder-AfA § 7b.
+- **Je Verkauf ein Paket mit Zwischensumme**, darunter zwei Zeilen:
+  - **Verkauf:** im Verkaufsjahr der steuerwirksame Gewinn, bei § 6b minus die Einstellung in die Rücklage; im Fristjahr Auflösung und Zuschlag; ab dem Folgejahr minus das laufende Ergebnis, das mit den verkauften Kostenstellen entfällt (Miete − Kosten − AfA − Darlehenszinsen). Ein Verkaufspaket steht in einer Zeile.
+  - **Käufe aus dem Verkauf:** alle Neuobjekte, deren erste Quelle mit einem Verkauf (Quelle 1, sonst 2, sonst 3) die Rücklage oder den Erlös dieses Verkaufs nennt. Auch ein Verkauf ohne § 6b zählt, über „RL-“ & ObjektID.
+- **Käufe ohne Verkauf:** Neuobjekte ohne Quelle.
+- **Summe Pakete und Käufe ohne Verkauf**, davon Gewinn und Rücklage, entfallendes laufendes Ergebnis und Käufe.
+- **Käufe einzeln** (unten): je Kauf Miete − Kosten − AfA − Kreditzinsen, mit dem Paket, zu dem er zählt. Die AfA rechnet von den um die Rücklage geminderten AK, mit Sonder-AfA § 7b.
 - **Zinseffekt der Liquidität:** Verkaufserlöse, Kaufpreise und Steuer verändern die Liquidität und damit deren Verzinsung.
-- **Kontrolle:** Halten + alle Wirkungen − Plan, muss 0 sein; sonst meldet das Prüfungsblatt einen Fehler.
+- **Kontrolle:** Halten + Summe Pakete und Käufe ohne Verkauf + Zinseffekt − Plan, muss 0 sein; sonst meldet das Prüfungsblatt einen Fehler.
 
 Die Steuer steht nachrichtlich darunter (Halten, Plan und die Wirkung nach Steuern), denn mit Verlustvortrag lässt sie sich nicht einzelnen Entscheidungen zuordnen.
 
@@ -186,7 +190,7 @@ Die Ergebnisse stehen auch im **DATEV-BWA-Format** (Projektplan, Abschnitt 18):
 **Mandanten-Export:** `python -m prognosemodell.export Prognose.xlsx` schreibt daneben `Prognose_Mandant.xlsx` (anderer Name mit `--ausgabe`), eine schlanke Fassung für den Mandanten, nur mit Werten. Die Mappe muss in Excel gespeichert sein; eine frisch erzeugte, nie geöffnete Mappe rechnet LibreOffice vorher durch. Bis zu sieben Blätter:
 - **Überblick:** Empfehlung, Endvermögen je Option, Datenlage, Verkehrswert und Gesamtvermögen je Jahr mit Diagrammen.
 - **Jahresrechnung:** je Jahr vom Ergebnis über Steuer und Geldfluss zum Vermögen, für Plan und Halten, dazu die Differenz. Jede Spalte rechnet von oben nach unten.
-- **Ergebnisbrücke:** vom Ergebnis bei Halten je Verkauf und Kauf zum Ergebnis im Plan, ohne leere Vorgänge und ohne Kontrollzeile. Ohne Verkauf und Kauf entfällt das Blatt.
+- **Ergebnisbrücke:** vom Ergebnis bei Halten über die Pakete (Verkauf mit seinen Käufen) zum Ergebnis im Plan, ohne leere Pakete und Vorgänge und ohne Kontrollzeile. Ohne Verkauf und Kauf entfällt das Blatt.
 - **BWA gesamt:** Summen-BWA mit Ist-Jahren und Planjahren und der Herleitung der Sonderposten; bei „Vergleich mit Halten = ja“ auch Halten und Differenz.
 - **BWA je Objekt:** alle Kostenstellenblätter untereinander, mit Inhaltsverzeichnis.
 - **Verkauf und Kauf:** Verkäufe, Neuobjekte, Ergebnis- und Detailsicht je Vorgang. Ohne Verkauf und Kauf entfällt das Blatt.

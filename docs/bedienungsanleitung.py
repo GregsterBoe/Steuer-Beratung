@@ -211,10 +211,11 @@ punkte([
     "**Übersicht:** Wert der Immobilien und Gesamtvermögen je Jahr, als Tabelle und Diagramm, "
     "mit und ohne die geplanten Verkäufe.",
     "**Vergleich:** Kennzahlen der Szenarien am Ende des Prognosezeitraums nebeneinander.",
-    "**Ergebnisbrücke:** je Jahr vom Ergebnis vor Steuern bei Halten über die Wirkung jedes "
-    "Verkaufs (Gewinn und Rücklage minus das entfallende laufende Ergebnis) und jedes Kaufs "
-    "(Miete − Kosten − AfA − Kreditzinsen) und den Zinseffekt der Liquidität zum Ergebnis vor "
-    "Steuern im Plan. Die Kontrollzeile muss 0 sein. Kostenstellen der Art „Unternehmen“ "
+    "**Ergebnisbrücke:** je Jahr vom Ergebnis vor Steuern bei Halten über die Pakete und den "
+    "Zinseffekt der Liquidität zum Ergebnis vor Steuern im Plan. Ein Paket ist ein Verkauf "
+    "(Gewinn und Rücklage minus das entfallende laufende Ergebnis) mit den Käufen aus seiner "
+    "Rücklage oder seinem Erlös (Miete − Kosten − AfA − Kreditzinsen), mit Zwischensumme; "
+    "Käufe ohne Quelle stehen getrennt, darunter alle Käufe einzeln mit ihrem Paket. Die Kontrollzeile muss 0 sein. Kostenstellen der Art „Unternehmen“ "
     "(Blatt Objekte, keine Immobilie) stehen getrennt im Ergebnis bei Halten.",
     "**Varianten:** mit „Variante festhalten“ gesicherte Stände, etwa verschiedene Verkaufsjahre.",
     "**Alle Objekte halten:** die Summen-BWA, als würden alle Objekte gehalten und nichts "

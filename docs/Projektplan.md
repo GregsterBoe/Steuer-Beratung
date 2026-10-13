@@ -1477,9 +1477,12 @@ Neue Prognosespalten: prg\_ErgebnisHalten (Bestand: Miete + Einnahmen − Erhalt
 
 **Prüfung im Prüfskript:** „Ergebnisbrücke: Halten, Verkäufe, Käufe, Plan“ (OBJ-001 Ende 2029 mit § 6b, OBJ-002 Ende 2031 ohne, zwei Neuobjekte, eines mit Kredit und Sonder-AfA, Kostenstelle Unternehmen KSt 90): Halten und Plan gleich asb\_GuV und aus\_GuV, Verkauf OBJ-001 2029 0 und 2030 −40.115,43, OBJ-002 2031 Gewinn und 2032 −42.292,20, Unternehmen 2027 −31.600, Verkehrswert 0, Kontrolle 0. „Ergebnisbrücke: Verkaufspaket und Verkauf einer Kostenstelle Unternehmen“: Paket in einer Zeile (2030 −80.230,86), Verkauf KSt 90 ab 2031 +34.122,42, Warnung. Export: Blatt, Werte, entfallene Zeilen.
 
+**Pakete (Ausbau 1):** Statt Verkäufe und Käufe getrennt zu summieren, steht je Zeile des Blatts Verkäufe ein Paket: Zwischensumme (fett), darunter der Verkauf und „Käufe aus Verkauf <ID> (Anzahl)“. Danach „Käufe ohne Verkauf“, die Summe aller Pakete und Käufe ohne Verkauf (brk\_Entscheidungen) mit davon Gewinn und Rücklage, entfallendes laufendes Ergebnis und Käufe; die Kontrolle rechnet mit dieser Summe. Unten „Käufe einzeln“ mit der Paketnummer in einer Spalte hinter den Jahren: Zeile des Verkaufs der ersten Quelle (1, 2, 3), die einen Verkauf nennt, über rl\_ID oder, ohne Rücklage, über „RL-“ & vk\_ID; 0 ohne. Die Käufe eines Pakets summiert SUMIFS über diese Spalte. Ein Kauf mit mehreren Quellen zählt ganz zum Paket der ersten. Export: leere Pakete entfallen, die Paketspalte nicht.
+
+Prüfung: Paket OBJ-001 2030 = −40.115,43 − 36.600 (Sonder-AfA im Kaufjahr 5 % × 732.000), Käufe ohne Verkauf, Paket über Quelle 2 und über einen Verkauf ohne § 6b.
+
 **Ausbau danach:**
-1. Pakete: Verkauf mit dem Neuobjekt, das seine Rücklage aufnimmt, als Zwischensumme.
-2. Wasserfall-Diagramm für ein Jahr oder die Summe.
-3. Brücke des Endvermögens nach latenter Steuer.
-4. Brücke gegen Szenario C (Wert von § 6b je Vorgang).
-5. Kostenstellen Unternehmen: Planwerte je Jahr (wie Neukauf-KSt) oder eigene Steigerungssätze statt Fortschreibung; neutrale Zeilen (1312, 1322, 1323) einlesen.
+1. Wasserfall-Diagramm für ein Jahr oder die Summe.
+2. Brücke des Endvermögens nach latenter Steuer.
+3. Brücke gegen Szenario C (Wert von § 6b je Vorgang).
+4. Kostenstellen Unternehmen: Planwerte je Jahr (wie Neukauf-KSt) oder eigene Steigerungssätze statt Fortschreibung; neutrale Zeilen (1312, 1322, 1323) einlesen.
