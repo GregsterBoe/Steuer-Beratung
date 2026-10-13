@@ -167,7 +167,7 @@ CODENAMEN = {
     "Prognose": "wsPrognose", "Rücklagen": "wsRuecklagen", "Liquidität": "wsLiquiditaet",
     "Auswertung": "wsAuswertung", "Prüfung": "wsPruefung", "Varianten": "wsVarianten",
     "BWA-Zuordnung": "wsBWAZuordnung", "Anlagen": "wsAnlagen", "AfA-Plan": "wsAfAPlan",
-    "Neukauf-KSt": "wsNeukaufKSt", "Darlehen": "wsDarlehen",
+    "Neukauf-KSt": "wsNeukaufKSt", "Darlehen": "wsDarlehen", "Ergebnisbrücke": "wsBruecke",
 }
 
 
@@ -195,11 +195,21 @@ class Feld:
     berechnet: bool = False
 
 
+# Art der Kostenstelle im Blatt Objekte; leer = Immobilie
+ART_IMMOBILIE = "Immobilie"
+ART_UNTERNEHMEN = "Unternehmen"
+
 OBJEKT_FELDER = [
     # laufende Werte, meist aus der Buchhaltung (BWA)
     Feld("objekt_id", "ObjektID", "obj_ID", FMT_TEXT, True, 12,
          hinweis="Kostenstelle bzw. eindeutige Kennung, z. B. KSt 1"),
     Feld("name", "Objektname", "obj_Name", FMT_TEXT, False, 28),
+    Feld("art", "Art der Kostenstelle", "obj_Art", FMT_TEXT, False, 14,
+         auswahl=(ART_IMMOBILIE, ART_UNTERNEHMEN),
+         hinweis="leer = Immobilie. Unternehmen: Kostenstelle ohne Immobilie (gesonderte "
+                 "Unternehmenseinnahmen und -ausgaben). Sie wird wie ein Objekt aus dem "
+                 "Basisjahr fortgeschrieben, hat aber keinen Verkehrswert; die Ergebnisbrücke "
+                 "weist sie getrennt aus"),
     Feld("miete", "Miete Basisjahr", "obj_MieteBasis", FMT_EURO, True, minimum=0,
          hinweis="Pflicht: Jahresmiete laut Buchhaltung (BWA 1020)"),
     Feld("erhaltung", "Erhaltung Basisjahr", "obj_ErhBasis", FMT_EURO, False, minimum=0,
@@ -429,6 +439,15 @@ PROGNOSE_SPALTEN = [
     Spalte("zins_halten", "Zinsen bei Halten", "prg_ZinsHalten", FMT_EURO),
     Spalte("tilgung_halten", "Tilgung bei Halten", "prg_TilgungHalten", FMT_EURO),
     Spalte("restschuld_halten", "Restschuld bei Halten", "prg_RestschuldHalten", FMT_EURO, 16),
+    # Ergebnisbrücke: Wirkung der Entscheidungen gegenüber Halten, je Zeile
+    Spalte("ergebnis_halten", "Ergebnis vor Finanzierung bei Halten", "prg_ErgebnisHalten",
+           FMT_EURO, 16),
+    Spalte("wirkung", "Wirkung auf das Ergebnis (nach Zinsen, gegen Halten)", "prg_Wirkung",
+           FMT_EURO, 16),
+    # Zeile im Blatt Verkäufe, die das Bestandsobjekt verkauft; 0 = kein Verkauf
+    Spalte("verkauf_nr", "Verkauf (Zeile)", "prg_VerkaufNr", FMT_ZAHL, 9),
+    # 1 = Kostenstelle der Art Unternehmen (keine Immobilie)
+    Spalte("unternehmen", "Kostenstelle Unternehmen", "prg_Unternehmen", FMT_ZAHL, 11),
 ]
 # dieselben Spalten nur über die Zeilen der Bestandsobjekte (Buchwert beim Verkauf)
 PRG_NUR_BESTAND = {"id": "prg_IDObj", "jahr": "prg_JahrObj", "buchwert": "prg_BuchwertObj"}
@@ -887,6 +906,7 @@ class Objekt:
     restschuld: Optional[float] = None   # Darlehen Ende Basisjahr; leer = Zins fortschreiben
     zinssatz: Optional[float] = None
     rate: Optional[float] = None         # Zins + Tilgung p. a.
+    art: Optional[str] = None            # Art der Kostenstelle, leer = Immobilie
 
 
 @dataclass
@@ -1032,6 +1052,12 @@ PRUEFUNGEN = [
              "nach § 6b Abs. 1 Satz 1 im Verkaufsjahr; der Verkaufserlös steht beim Kauf noch "
              "nicht bereit und mindert den Finanzierungsbedarf nicht", HINWEIS,
              "Blatt Neuobjekte, Spalte davon Abzug im Verkaufsjahr"),
+    Pruefung("verkauf_unternehmen", "Verkäufe von Kostenstellen der Art Unternehmen (keine "
+             "Immobilie): ohne Verkehrswert, Preis und Gewinn prüfen", WARNUNG,
+             "Blatt Verkäufe und Blatt Objekte, Spalte Art der Kostenstelle"),
+    Pruefung("bruecke", "Ergebnisbrücke geht nicht auf: Ergebnis bei Halten plus Wirkung der "
+             "Entscheidungen weicht vom Ergebnis Plan A ab", FEHLER,
+             "Blatt Ergebnisbrücke, Zeile Kontrolle"),
     Pruefung("afa_plan", "Objekte mit AfA-Plan (Blatt AfA-Plan, meist aus BWA 1240 der "
              "Kostenstellen-Datei): in den Jahren mit Wert ersetzt er die AfA-Fortschreibung",
              HINWEIS, "Blatt AfA-Plan, Spalte Jahre mit Wert"),

@@ -156,6 +156,8 @@ def wert(wb, name: str, zeile_im_bereich: int = 0):
     if name.startswith("BWA:"):
         _, blatt, nr = name.split(":")
         return bwa_wert(wb[blatt], int(nr), zeile_im_bereich)
+    if name.startswith("BRK:"):
+        return bruecke_wert(wb["Ergebnisbrücke"], name[4:], zeile_im_bereich)
     if name.startswith("DIFF:"):
         return bwa_wert(wb["Alle Objekte"], int(name[5:]),
                         zeile_im_bereich + prognosejahre() + 1)
@@ -169,6 +171,16 @@ def wert(wb, name: str, zeile_im_bereich: int = 0):
     if len(teile) == 2 and wb[blatt][teile[1]].row == zelle.row:
         return wb[blatt].cell(row=zelle.row, column=zelle.column + zeile_im_bereich).value
     return wb[blatt].cell(row=zelle.row + zeile_im_bereich, column=zelle.column).value
+
+
+def bruecke_wert(ws, beschriftung: str, jahr: int):
+    """Ergebnisbrücke: Zeile mit der Beschriftung in Spalte A, Spalte des Jahres (Kopf Zeile 5)."""
+    zeile = next((z for z in range(6, ws.max_row + 1)
+                  if ws.cell(row=z, column=1).value == beschriftung), None)
+    spalte = next((c.column for c in ws[5] if c.value == jahr), None)
+    if zeile is None or spalte is None:
+        return "fehlt"
+    return ws.cell(row=zeile, column=spalte).value
 
 
 def bwa_wert(ws, nr: int, jahr: int):
@@ -424,6 +436,10 @@ def faelle():
     # "" = Annahme in der Zelle gelöscht, None = Annahme greift
     ohne_quote = dataclasses.replace(obj, objekt_id="OBJ-005", vk_quote_gebaeude="")
     jung = dataclasses.replace(obj, objekt_id="OBJ-004", kaufjahr=2024)
+    # Kostenstelle ohne Immobilie: Einnahmen, Ausgaben, AfA bis Restbuchwert 5.000
+    firma = Objekt("KSt 90", name="Verwaltung", art="Unternehmen", miete=0,
+                   weitere_einnahmen=20_000, weitere_ausgaben=50_000, afa_bwa=1_000,
+                   restbuchwert=5_000)
     # Mandanten-Export: Kostenstellen mit Ist-Vorjahren, Verkauf KSt 1 Ende 2028 mit § 6b,
     # Neuobjekt mit Kredit, Bestandsdarlehen KSt 2 (Zinssatz als Annahme), Verkauf KSt 2
     # ausgeschaltet
@@ -959,6 +975,59 @@ def faelle():
             ("prg_AfA", prg_neu(1, 2029), 0),
             ("prg_Buchwert", prg_neu(1, 2029), 0),
         ]),
+        # Ergebnisbrücke: Halten + Wirkung je Verkauf und Kauf + Zinseffekt = Plan A, je Jahr.
+        # OBJ-001 Ende 2029 mit § 6b verkauft: 2029 Gewinn − Einstellung = 0, ab 2030 entfällt
+        # sein Ergebnis, 2030: 60.000 × 1,02^4 − 8.000 × 1,025^4 − 16.000 = 40.115,43.
+        # OBJ-002 Ende 2031 ohne § 6b: 2031 der Gewinn, 2032 entfallen 60.000 × 1,02^6 −
+        # 8.000 × 1,025^6 − 16.000 = 42.292,20. KSt 90 (Unternehmen): 2027
+        # 20.000 × 1,02 − 50.000 × 1,02 − AfA 1.000 = −31.600, kein Verkehrswert.
+        ("Ergebnisbrücke: Halten, Verkäufe, Käufe, Plan",
+         Modell(objekte=[obj, dataclasses.replace(obj, objekt_id="OBJ-002"), firma],
+                verkaeufe=[Verkauf("OBJ-001", 2029, preis=1_400_000, nutzung_6b="ja"),
+                           Verkauf("OBJ-002", 2031, preis=1_000_000, nutzung_6b="nein")],
+                neuobjekte=[
+                    Neuobjekt("NEU-001", 2030, kaufpreis=1_500_000, anteil_gub=0.2,
+                              afa_satz=0.03, mietrendite=0.05, quelle="RL-OBJ-001", qng="ja",
+                              fin_art="Kredit", kredit_zins=0.04, tilgung=0.02),
+                    Neuobjekt("NEU-002", 2032, kaufpreis=500_000, anteil_gub=0.2,
+                              afa_satz=0.03, mietrendite=0.05)]), [
+            ("obj_Verkehrswert", 2, 0),
+            ("obj_Status", 2, "OK"),
+            ("BRK:davon Kostenstellen Unternehmen (keine Immobilie)", 2027, -31_600),
+            ("BRK:Ergebnis vor Steuern bei Halten", 2030, Wie("asb_GuV", lj(2030))),
+            ("BRK:Ergebnis vor Steuern Plan A", 2030, Wie("aus_GuV", lj(2030))),
+            ("BRK:Verkauf OBJ-001 2029", 2029, 0),
+            ("BRK:Verkauf OBJ-001 2029", 2030, -40_115.43),
+            ("BRK:Verkauf OBJ-002 2031", 2031, Wie("vk_Gewinn", 1)),
+            ("BRK:Verkauf OBJ-002 2031", 2032, -42_292.20),
+            ("BRK:davon Gewinn und Rücklage", 2031, Wie("vk_Gewinn", 1)),
+            ("BRK:Kauf NEU-001 2030", 2030, Wie("prg_Wirkung", prg_neu(1, 2030))),
+            ("BRK:Kauf NEU-002 2032", 2032, 0),
+            ("BRK:Kauf NEU-002 2032", 2033, Wie("prg_Ergebnis", prg_neu(2, 2033))),
+            ("BRK:Zinseffekt Liquidität (Plan − Halten)", 2029, 0),
+            *[("brk_Kontrolle", j - 2027, 0) for j in (2027, 2029, 2030, 2031, 2035, 2046)],
+            ("prg_VerkaufNr", prg(1, 2046), 1),
+            ("prg_VerkaufNr", prg(2, 2027), 2),
+            ("prg_VerkaufNr", prg(3, 2027), 0),
+            ("prg_Unternehmen", prg(3, 2030), 1),
+            ("pr_Anzahl", pr("bruecke"), 0),
+            ("pr_Anzahl", pr("verkauf_unternehmen"), 0),
+        ]),
+        # Verkaufspaket: OBJ-001 und OBJ-002 in einer Zeile, beide fallen in dieser Zeile weg
+        # (2030: 2 × 40.115,43). Verkauf der Kostenstelle Unternehmen KSt 90 Ende 2030: ab
+        # 2031 entfällt ihr Verlust, 22.081,62 − 55.204,04 − 1.000 = −34.122,42; Warnung.
+        ("Ergebnisbrücke: Verkaufspaket und Verkauf einer Kostenstelle Unternehmen",
+         Modell(objekte=[obj, dataclasses.replace(obj, objekt_id="OBJ-002"), firma],
+                verkaeufe=[Verkauf("OBJ-001", 2029, preis=2_800_000, nutzung_6b="nein",
+                                   weitere_ids="OBJ-002"),
+                           Verkauf("KSt 90", 2030, preis=10_000, nutzung_6b="nein")]), [
+            ("BRK:Verkauf OBJ-001 + OBJ-002 2029", 2030, -80_230.86),
+            ("BRK:Verkauf KSt 90 2030", 2031, 34_122.42),
+            ("BRK:Verkauf KSt 90 2030", 2030, Wie("vk_Gewinn", 1)),
+            *[("brk_Kontrolle", j - 2027, 0) for j in (2029, 2030, 2031, 2046)],
+            ("pr_Anzahl", pr("verkauf_unternehmen"), 1),
+            ("pr_Ergebnis", pr("verkauf_unternehmen"), WARNUNG),
+        ]),
         # Standard ohne Wechsel (par_AfAWechsel = nein): stets 5 % vom Restbuchwert, auch wenn
         # linear höher wäre. AfA-Basis 800.000, Kauf Ende 2027: 2028 40.000, 2029 38.000,
         # Jahr n: 800.000 × 0,95^(n − 2028) × 5 %; Buchwert 2046 = 800.000 × 0,95^19.
@@ -1432,8 +1501,14 @@ def faelle():
         # Jahresrechnung rechnet von oben nach unten, Herkunft der Objektdaten als Farbe
         ("Export: Mandanten-Export mit Verkauf, Kauf und Darlehen",
          Getippt(exp, {("Alle Objekte", "D3"): "ja"}), [
-            (EXPORT_BLAETTER, 0, ["Überblick", "Jahresrechnung", "BWA gesamt", "BWA je Objekt",
-                                  "Verkauf und Kauf", "Annahmen"]),
+            (EXPORT_BLAETTER, 0, ["Überblick", "Jahresrechnung", "Ergebnisbrücke", "BWA gesamt",
+                                  "BWA je Objekt", "Verkauf und Kauf", "Annahmen"]),
+            ("Export:Ergebnisbrücke:Ergebnis vor Steuern Plan A", 2030, Wie("aus_GuV", lj(2030))),
+            ("Export:Ergebnisbrücke:Verkauf KSt 1 2028", 2029,
+             Wie("BRK:Verkauf KSt 1 2028", 2029)),
+            ("Export:Ergebnisbrücke:Verkauf KSt 2 2030 (ausgeschaltet)", 2030, "fehlt"),
+            ("Export:Ergebnisbrücke:Kontrolle: Halten + Wirkungen − Plan (muss 0 sein)", 2030,
+             "fehlt"),
             ("Export:Überblick:Ergebnis/Halten (nichts verkaufen)", 2, Wie("vg_Baseline")),
             ("Export:Überblick:Ergebnis/Verkaufen, sofort versteuern, Erlös anlegen", 2,
              Wie("vg_B")),

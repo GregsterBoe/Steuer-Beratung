@@ -277,6 +277,15 @@ SPALTEN = {
     "prg_TilgungHalten": "Tilgung, als würde das Bestandsobjekt nie verkauft (Baseline).",
     "prg_RestschuldHalten": "Restschuld, als würde das Bestandsobjekt nie verkauft; im "
                             "Verkaufsjahr der Betrag, der abgelöst wird.",
+    "prg_ErgebnisHalten": "Bestandsobjekt: Miete + weitere Einnahmen − Erhaltung − weitere "
+                          "Ausgaben − AfA, als würde es nie verkauft (Baseline); Neuobjekt 0.",
+    "prg_Wirkung": "Ergebnis − Zinsen Darlehen im Plan minus dasselbe bei Halten. Nicht "
+                   "verkauftes Bestandsobjekt 0, verkauftes ab dem Folgejahr das entfallende "
+                   "Ergebnis (negativ), Neuobjekt sein Ergebnis nach Kreditzinsen. Grundlage "
+                   "der Ergebnisbrücke.",
+    "prg_VerkaufNr": "Zeile im Blatt Verkäufe, deren aktiver Verkauf das Objekt enthält (auch "
+                     "als weitere Kostenstelle eines Pakets); 0 ohne Verkauf.",
+    "prg_Unternehmen": "1 = Kostenstelle der Art Unternehmen (Blatt Objekte), keine Immobilie.",
     # Darlehen
     "dl_Betrag": "Kredit aus dem Blatt Neuobjekte; 0 = keine Finanzierung per Kredit.",
     "dl_Rate": "Annuität: Kredit × (Zinssatz + anfängliche Tilgung), gleich bleibend. Linear: "
@@ -366,3 +375,31 @@ for _n in (1, 2, 3):
                            "und was Zeilen darüber nicht eingesetzt haben; 0 ohne "
                            "Verkaufserlös zur Finanzierung = ja.",
     })
+
+# Ergebnisbrücke: Tooltips der Zeilen
+BRUECKE = {
+    "halten": "Gesamt-GuV vor Steuern der Baseline (Blatt Auswertung): alle Kostenstellen "
+              "werden gehalten, keine Verkäufe, keine Käufe.",
+    "halten_immobilien": "Laufendes Ergebnis der Immobilien nach Darlehenszinsen bei Halten.",
+    "halten_unternehmen": "Kostenstellen der Art Unternehmen (Blatt Objekte): Einnahmen − "
+                          "Ausgaben − AfA − Zinsen, aus dem Basisjahr fortgeschrieben. Sie "
+                          "ändern sich durch die Entscheidungen nicht, solange sie nicht "
+                          "verkauft werden.",
+    "halten_zins": "Zinsertrag auf die Liquidität bei Halten (Rendite Alternativanlage).",
+    "verkaeufe": "Je Verkauf: steuerwirksamer Gewinn im Verkaufsjahr, bei § 6b minus "
+                 "Einstellung in die Rücklage, im Fristjahr plus Auflösung und Zuschlag; "
+                 "dazu ab dem Folgejahr das entfallende laufende Ergebnis (Miete − Kosten − "
+                 "AfA − Darlehenszinsen) der verkauften Kostenstellen.",
+    "vk_veraeusserung": "Gewinn und Rücklage aller Verkäufe, gleich der Spalte steuerwirksam "
+                        "im Rücklagenspiegel.",
+    "vk_laufend": "Entfallendes laufendes Ergebnis aller verkauften Kostenstellen.",
+    "neuobjekte": "Je Kauf: Miete − Kosten − AfA − Kreditzinsen. Die AfA rechnet von den um "
+                  "die übertragene Rücklage geminderten AK, mit Sonder-AfA § 7b.",
+    "zins": "Zinsertrag Plan minus Halten: Verkaufserlöse, Kaufpreise und Steuer verändern die "
+            "Liquidität und damit deren Verzinsung.",
+    "plan": "Gesamt-GuV vor Steuern des Plans A (Blatt Auswertung).",
+    "kontrolle": "Halten + Summe Verkäufe + Summe Käufe + Zinseffekt − Plan; muss 0 sein, "
+                 "sonst meldet das Prüfungsblatt einen Fehler.",
+    "nach_wirkung": "Ergebnis nach Steuern Plan A minus Halten: Wirkung aller Entscheidungen "
+                    "zusammen, nach Steuer mit Verlustvortrag.",
+}

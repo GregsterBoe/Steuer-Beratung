@@ -7,7 +7,7 @@ Excel zeigt sie in der deutschen Oberfläche automatisch als WENN, ZÄHLENWENN u
 from openpyxl.utils import get_column_letter
 
 from .modelle import (AFA_DEGRESSIV, ANL_NICHT_IM_MODELL, ANLAGE_FELDER, ANLAGE_SPALTEN,
-                      ARTEN_ABNUTZBAR, ART_GEBAEUDE, ART_GUB, GRUPPE_ABNUTZBAR, METHODE_KEINE,
+                      ARTEN_ABNUTZBAR, ART_GEBAEUDE, ART_GUB, ART_UNTERNEHMEN, GRUPPE_ABNUTZBAR, METHODE_KEINE,
                       DARLEHEN_ANNAHMEN, KST_VERKNUEPFT, OBJEKT_EINGELESEN,
                       ANL_OBJEKT_FEHLT, ANL_OHNE_OBJEKT, OBJEKT_ANLAGEN_SPALTEN,
                       OBJEKT_ERSTE_ANLAGEN_SPALTE,
@@ -175,7 +175,9 @@ def annahme_objekt(key: str, zeile: int):
 
     ausdruck = {
         "erhaltung": f"{n('miete')}*par_AnnErhQuote",
-        "verkehrswert": f"({n('miete')}+{n('weitere_einnahmen')})*par_AnnVervielfaeltiger",
+        # Kostenstelle ohne Immobilie: kein Verkehrswert
+        "verkehrswert": (f'IF({c("art")}="{ART_UNTERNEHMEN}",0,'
+                         f"({n('miete')}+{n('weitere_einnahmen')})*par_AnnVervielfaeltiger)"),
         "vk_quote_gebaeude": "par_AnnGebaeudeanteil",
         "afa_satz": "par_AnnAfASatz",
         "kaufjahr": "par_Basisjahr-par_AnnHaltedauer",
@@ -482,7 +484,36 @@ def prognose_zeile(zeile: int, objekt_nr: int, erstes_jahr: bool) -> dict:
         "erhaltung_halten": _leer_oder(zeile, _erhaltung_bestand(zeile, objekt_nr)),
         "quelle": _leer_oder(zeile, '""'),
         **_darlehen_bestand(zeile, objekt_nr, erstes_jahr),
+        # Ergebnisbrücke: laufendes Ergebnis, als würde das Objekt nie verkauft
+        "ergebnis_halten": _leer_oder(
+            zeile,
+            f"{_indexiert('obj_MieteBasis', 'par_Mietsteig', zeile, objekt_nr, False)}"
+            f"+{_indexiert('obj_EinnBasis', 'par_Mietsteig', zeile, objekt_nr, False)}"
+            f"-{_p('erhaltung_halten', zeile)}"
+            f"-{_indexiert('obj_AusgBasis', 'par_Kostensteig', zeile, objekt_nr, False)}"
+            f"-{_p('afa_halten', zeile)}"),
+        "wirkung": _leer_oder(zeile, _wirkung(zeile)),
+        "verkauf_nr": _leer_oder(zeile, _verkauf_nr(zeile) if erstes_jahr
+                                 else _p("verkauf_nr", zeile - 1)),
+        "unternehmen": _leer_oder(
+            zeile, f'IF({_stamm("obj_Art", objekt_nr)}="{ART_UNTERNEHMEN}",1,0)'),
     }
+
+
+def _wirkung(zeile: int) -> str:
+    """Ergebnis nach Darlehenszinsen im Plan minus dasselbe bei Halten; beim Neuobjekt ist
+    der Halten-Teil 0, beim nicht verkauften Bestandsobjekt die Wirkung 0."""
+    return (f"{_p('ergebnis', zeile)}-{_p('ergebnis_halten', zeile)}"
+            f"-{_p('kredit_zins', zeile)}+{_p('zins_halten', zeile)}")
+
+
+def _verkauf_nr(zeile: int) -> str:
+    """Zeile im Blatt Verkäufe, deren Verkauf das Objekt enthält (auch als weitere
+    Kostenstelle eines Pakets); 0 ohne Verkauf. Gleiche Bedingung wie _verkaufsjahr."""
+    nr = "ROW(vk_Umfang)-ROW(INDEX(vk_Umfang,1))+1"
+    return (f"IF({_verkaufsjahr(zeile)}=9999,0,SUMPRODUCT(MAX("
+            f'ISNUMBER(SEARCH(";"&{_p("id", zeile)}&";",vk_Umfang))*(vk_Aktiv<>"nein")'
+            f"*(vk_Jahr={_verkaufsjahr(zeile)})*({nr}))))")
 
 
 def _darlehen_bestand(zeile: int, objekt_nr: int, erstes_jahr: bool) -> dict:
@@ -653,6 +684,10 @@ def prognose_zeile_neu(zeile: int, neu_nr: int, erstes_jahr: bool) -> dict:
         "zins_halten": _leer_oder(zeile, "0"),
         "tilgung_halten": _leer_oder(zeile, "0"),
         "restschuld_halten": _leer_oder(zeile, "0"),
+        "ergebnis_halten": _leer_oder(zeile, "0"),
+        "wirkung": _leer_oder(zeile, _wirkung(zeile)),
+        "verkauf_nr": _leer_oder(zeile, "0"),
+        "unternehmen": _leer_oder(zeile, "0"),
     }
 
 
@@ -1383,6 +1418,75 @@ def auswertung_zeile(sz: Szenario):
     return zeile_formeln
 
 
+# --- Ergebnisbrücke: Ergebnis vor Steuern bei Halten, je Entscheidung deren Wirkung,
+# Ergebnis vor Steuern Plan A. Die Brücke geht exakt auf: Halten (Baseline) und Plan
+# rechnen mit denselben Prognosezeilen, die Differenz verteilt sich ohne Rest auf
+# Verkäufe (Veräußerung, Rücklage, entfallendes laufendes Ergebnis), Neuobjekte und den
+# Zins auf die Liquidität. Die Steuer bleibt außen vor (Verlustvortrag lässt sich nicht
+# je Entscheidung zuordnen).
+
+
+def bruecke_verkauf(nr: int, jahr: str) -> str:
+    """Wirkung des Verkaufs in Zeile nr des Blatts Verkäufe im Jahr: steuerwirksamer
+    Gewinn, Einstellung, Auflösung und Zuschlag seiner Rücklage (Rücklagen haben dieselben
+    Zeilen) und das entfallende laufende Ergebnis der verkauften Kostenstellen."""
+    def i(name):
+        return f"INDEX({name},{nr})"
+
+    gueltig = f'OR({i("vk_Status")}="{STATUS_OK}",{i("vk_Status")}="{STATUS_6B_UNZULAESSIG}")'
+    gewinn = f"IF(AND({i('vk_Jahr')}={jahr},{gueltig}),N({i('vk_Gewinn')}),0)"
+    ruecklage = (f"IF(N({i('rl_Jahr')})={jahr},-N({i('rl_Betrag')}),0)"
+                 f"+IF(N({i('rl_Fristjahr')})={jahr},"
+                 f"N({i('rl_Aufloesung')})+N({i('rl_Zuschlag')}),0)")
+    laufend = f"SUMIFS(prg_Wirkung,prg_Jahr,{jahr},prg_VerkaufNr,{nr})"
+    return f'=IF({i("vk_ID")}="","",{gewinn}+{ruecklage}+{laufend})'
+
+
+def bruecke_verkauf_text(nr: int) -> str:
+    def i(name):
+        return f"INDEX({name},{nr})"
+    return (f'=IF({i("vk_ID")}="","","Verkauf "&{i("vk_ID")}'
+            f'&IF({i("vk_Weitere")}<>""," + "&{i("vk_Weitere")},"")&" "&{i("vk_Jahr")}'
+            f'&IF({i("vk_Aktiv")}="nein"," (ausgeschaltet)",""))')
+
+
+def bruecke_neu(nr: int, jahr: str) -> str:
+    """Wirkung des Neuobjekts in Zeile nr: Miete − Kosten − AfA (nach § 6b-Abzug, mit
+    Sonder-AfA) − Kreditzinsen."""
+    id_ = f"INDEX(ne_ID,{nr})"
+    return f'=IF({id_}="","",SUMIFS(prg_Wirkung,prg_Jahr,{jahr},prg_Neu,1,prg_ID,{id_}))'
+
+
+def bruecke_neu_text(nr: int) -> str:
+    id_ = f"INDEX(ne_ID,{nr})"
+    return (f'=IF({id_}="","","Kauf "&{id_}&" "&INDEX(ne_Kaufjahr,{nr})'
+            f'&IF(INDEX(ne_Aktiv,{nr})="nein"," (ausgeschaltet)",""))')
+
+
+def bruecke_summen(jahr: str) -> dict:
+    """Formeln der festen Zeilen der Brücke je Jahr (ohne „=“ bei den Teilen)."""
+    def summe(name, *bed):
+        return f"SUMIFS({name},prg_Jahr,{jahr}{''.join(',' + b for b in bed)})"
+
+    def j(bereich, praefix):
+        return f"SUMIFS({praefix}_{bereich},{praefix}_Jahr,{jahr})"
+
+    return {
+        "halten": f"={j('GuV', SZ_BASELINE.aus)}",
+        "halten_unternehmen": (f"={summe('prg_ErgebnisHalten', 'prg_Unternehmen,1')}"
+                               f"-{summe('prg_ZinsHalten', 'prg_Unternehmen,1')}"),
+        "halten_zins": f"={j('Zins', SZ_BASELINE.liq)}",
+        "vk_veraeusserung": f"=SUMIFS(rls_Steuerwirksam,rls_Jahr,{jahr})",
+        "vk_laufend": f'={summe("prg_Wirkung", "prg_VerkaufNr,\">0\"")}',
+        "zins": f"={j('Zins', SZ_A.liq)}-{j('Zins', SZ_BASELINE.liq)}",
+        "plan": f"={j('GuV', SZ_A.aus)}",
+        "steuer_halten": f"={j('Steuer', SZ_BASELINE.aus)}",
+        "steuer_plan": f"={j('Steuer', SZ_A.aus)}",
+        "nach_halten": f"={j('NachSteuer', SZ_BASELINE.aus)}",
+        "nach_plan": f"={j('NachSteuer', SZ_A.aus)}",
+    }
+
+
 def vergleich_zeile(praefix_art: str, name: str, art: str, sz: Szenario) -> str:
     """Kennzahl eines Szenarios im Blatt Vergleich: Endwert oder Summe über alle Jahre."""
     bereich = f"{sz.liq if praefix_art == 'liq' else sz.aus}_{name}"
@@ -1441,6 +1545,8 @@ def pruefung_anzahl() -> dict:
             f'(obk_{k}<>"")*({_feldname(k)}<>obk_{k})' for k in KST_VERKNUEPFT) + ")>0))",
         "neukauf_kst": '=SUMPRODUCT((ne_KSt<>"")*(COUNTIF(nk_ID,ne_KSt)=0))',
         "vorjahr": '=COUNTIF(ne_UeFolge,">0.005")',
+        "verkauf_unternehmen": '=COUNTIFS(prg_Unternehmen,1,prg_VerkaufNr,">0",prg_Jahr,par_Startjahr)',
+        "bruecke": "=SUMPRODUCT(--(ABS(brk_Kontrolle)>0.5))",
         "ak_aufteilung": '=COUNTIF(ne_AKAbweichung,">0.5")+COUNTIF(ne_AKAbweichung,"<-0.5")',
         "afa_plan": '=COUNTIF(afp_Anzahl,">0")',
         "anlagen_afa": '=COUNTIF(obj_AnlDiff,">1")+COUNTIF(obj_AnlDiff,"<-1")',

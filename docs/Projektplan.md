@@ -1456,3 +1456,30 @@ Kontrolle im Blatt BWA-Zuordnung: 1353 der Halten-Ansicht gegen lqb\_ZvE je Jahr
 ## 31. Ganze Euro in den Auswertungen
 
 Beträge erscheinen überall in ganzen Euro, auch in den BWA-Blättern, im Vergleich mit Halten und in der Eingabevorlage für die Kostenstellen. Bisher zeigten diese Blätter zwei Nachkommastellen. Geändert ist nur die Anzeige: Die Zellen behalten den genauen Wert, gerechnet wird weiter mit Cent. Nachkommastellen bleiben nur, wo sie etwas aussagen: Prozentsätze, der Mietpreis je m² und der Vervielfältiger.
+
+
+## 32. Ergebnisbrücke und Kostenstellen ohne Immobilie
+
+**Wunsch des Mandanten:** eine Aufstellung, wie sich die Entscheidungen auf das Gesamtergebnis auswirken, über alle Kostenstellen des Modells. MVP, danach schrittweise ausbauen.
+
+**Blatt Ergebnisbrücke** (Ausgabe, hinter Vergleich): Spalten Summe und Planjahre, Zeilen:
+- Ergebnis vor Steuern bei Halten (asb\_GuV), davon Immobilien, Kostenstellen Unternehmen, Zinsertrag Liquidität (lqb\_Zins)
+- je Zeile des Blatts Verkäufe: steuerwirksamer Gewinn (Status OK oder § 6b unzulässig) − Einstellung + Auflösung + Zuschlag der Rücklage derselben Zeile, dazu SUMIFS(prg\_Wirkung) über die Prognosezeilen mit prg\_VerkaufNr = Zeile; Summe, davon Gewinn und Rücklage (= rls\_Steuerwirksam), davon entfallendes laufendes Ergebnis
+- je Zeile des Blatts Neuobjekte: SUMIFS(prg\_Wirkung) über seine Prognosezeilen; Summe
+- Zinseffekt Liquidität (liq\_Zins − lqb\_Zins), Ergebnis vor Steuern Plan A (aus\_GuV), Kontrolle
+- nachrichtlich Steuer, Ergebnis nach Steuern bei Halten und Plan, Wirkung nach Steuern
+
+Neue Prognosespalten: prg\_ErgebnisHalten (Bestand: Miete + Einnahmen − Erhaltung − Ausgaben − AfA bei Halten; Neuobjekt 0), prg\_Wirkung (Ergebnis − Ergebnis bei Halten − Zinsen + Zinsen bei Halten), prg\_VerkaufNr (Zeile des aktiven Verkaufs, der das Objekt enthält, auch als weitere Kostenstelle; einmal im ersten Jahr je Objekt), prg\_Unternehmen. Die Brücke geht exakt auf, weil Baseline und Plan dieselben Prognosezeilen summieren; die Steuer bleibt außen vor (Verlustvortrag). Prüfung „bruecke“ (Fehler): Kontrolle ≠ 0 in einem Jahr.
+
+**Kostenstellen ohne Immobilie:** Jede Kostenstelle der Kostenstellen-Datei wird ein Objekt, auch Kostenstellen mit gesonderten Unternehmenseinnahmen und -ausgaben; sie liefen schon bisher in Prognose, Liquidität, Steuer und „Alle Objekte“ mit. Neu ist das Feld „Art der Kostenstelle“ im Blatt Objekte (obj\_Art, Immobilie/Unternehmen, leer = Immobilie). Unternehmen: Annahme Verkehrswert 0 statt Miete × Vervielfältiger, getrennter Ausweis in der Brücke, Warnung „verkauf\_unternehmen“ bei einem aktiven Verkauf. Fortschreibung unverändert: Einnahmen (1020, 1090) mit der Mietsteigerung, Ausgaben mit der Kostensteigerung, Erhaltung mit der Erhaltungssteigerung, AfA aus Anlagen oder AfA-Plan, Zinsaufwand mit der Veränderung.
+
+**Mandanten-Export:** Blatt Ergebnisbrücke hinter der Jahresrechnung, nur mit Verkauf oder Kauf; leere und ausgeschaltete Vorgänge und die Kontrollzeile entfallen.
+
+**Prüfung im Prüfskript:** „Ergebnisbrücke: Halten, Verkäufe, Käufe, Plan“ (OBJ-001 Ende 2029 mit § 6b, OBJ-002 Ende 2031 ohne, zwei Neuobjekte, eines mit Kredit und Sonder-AfA, Kostenstelle Unternehmen KSt 90): Halten und Plan gleich asb\_GuV und aus\_GuV, Verkauf OBJ-001 2029 0 und 2030 −40.115,43, OBJ-002 2031 Gewinn und 2032 −42.292,20, Unternehmen 2027 −31.600, Verkehrswert 0, Kontrolle 0. „Ergebnisbrücke: Verkaufspaket und Verkauf einer Kostenstelle Unternehmen“: Paket in einer Zeile (2030 −80.230,86), Verkauf KSt 90 ab 2031 +34.122,42, Warnung. Export: Blatt, Werte, entfallene Zeilen.
+
+**Ausbau danach:**
+1. Pakete: Verkauf mit dem Neuobjekt, das seine Rücklage aufnimmt, als Zwischensumme.
+2. Wasserfall-Diagramm für ein Jahr oder die Summe.
+3. Brücke des Endvermögens nach latenter Steuer.
+4. Brücke gegen Szenario C (Wert von § 6b je Vorgang).
+5. Kostenstellen Unternehmen: Planwerte je Jahr (wie Neukauf-KSt) oder eigene Steigerungssätze statt Fortschreibung; neutrale Zeilen (1312, 1322, 1323) einlesen.
