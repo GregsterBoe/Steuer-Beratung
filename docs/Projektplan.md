@@ -46,7 +46,7 @@ Dreizehn feste Blätter, getrennt nach Eingabe, Rechnung, Ausgabe und Kontrolle.
 | Parameter | Eingabe | Steuerwelt-Schalter, Grenzsteuersatz, Mietsteigerung, Erhaltungssteigerung, Kostensteigerung, Wertsteigerung, GrESt-Satz, degressive AfA und Wechsel zu linear, Alternativrendite, § 6b-Fristen | alle globalen Annahmen und Schalter |
 | Objekte | Eingabe | ObjektID, AK Gebäude, AK G+B, AfA-Satz, Kaufjahr, Restbuchwert 2026, Miete 2026, Erhaltung 2026 | Stammdaten je Bestandsobjekt |
 | Anlagen | Eingabe | Inventar-Nr., ObjektID, Art, AHK, Buchwert Stand, AfA-Methode, AfA-Satz, AfA p. a.; AfA je Prognosejahr | Anlagenverzeichnis, liefert AK, Buchwert, Kaufjahr und AfA je Objekt (Abschnitt 21) |
-| Verkäufe | Eingabe | ObjektID, Verkaufsjahr, Verkaufspreis oder Faktor, Verkaufskosten, 6b-Nutzung (ja/nein), Neubau begonnen (ja/nein) | ein Datensatz je geplantem Verkauf |
+| Verkäufe | Eingabe | ObjektID, Verkaufspaket, Verkaufsjahr, Verkaufspreis oder Faktor, Verkaufskosten, Paketpreis und -kosten, 6b-Nutzung (ja/nein), Neubau begonnen (ja/nein) | ein Datensatz je geplantem Verkauf und Kostenstelle |
 | Neuobjekte | Eingabe | NeuID, Kaufjahr, Kaufpreis, Anteil G+B, Nebenkosten, AfA-Satz, AfA-Methode, Mietrendite, Erhaltungsquote, Quelle-Rücklage | Reinvestitionsobjekte |
 | Prognose | Rechnung | ObjektID × Jahr (2027-2046), Miete, Erhaltung, AfA, Buchwert, Ergebnis, aktiv-Flag | Jahresmatrix je Objekt, Herzstück |
 | Rücklagen | Rechnung | RücklageID, Verkaufsjahr, Betrag G+B, Betrag Gebäude, Fristjahr, übertragen Gebäude und G+B, Auflösung, Zuschlag; Spiegel je Jahr | § 6b-Spiegel je Rücklage und je Jahr |
@@ -316,6 +316,23 @@ Die berechneten Spalten bleiben leer, solange die ObjektID fehlt oder unbekannt 
 - § 6b unzulässig: § 6b ja, aber Vorbesitzzeit < par\_6bVorbesitz
 
 Weil der Verkauf zum 31.12. gilt, reicht Verkaufsjahr − Kaufjahr ≥ 6 für die sechs Jahre Vorbesitz.
+
+**Verkaufspaket (umgesetzt):** Zusammen verkaufte Kostenstellen bleiben je eine Zeile, verbunden über denselben Namen in vk\_Paket. Steuerlich ist jede Kostenstelle ein eigenes Wirtschaftsgut mit eigenem Buchwert, eigenen AK G+B und eigenem Kaufjahr. Deshalb rechnen Gewinn, Vorbesitzzeit für § 6b, Rücklage (RL-ObjektID) und Reinvestition (NEU-ObjektID) weiter je Zeile, und die BWA-Blätter je Kostenstelle zeigen ihren Anteil.
+
+Die erste Zeile eines Pakets ist die Kopfzeile.
+- **Übernahme in die weiteren Zeilen:** Sie übernehmen Verkauf aktiv, Verkaufsjahr, § 6b, Neubau und reinvestieren aus der Kopfzeile. Dafür steht in diesen Eingabezellen eine Formel, die nur die Zeilen darüber liest; das hält die Spalten frei von Zirkelbezügen. Eine Eingabe ersetzt die Formel.
+- **Preis und Kosten:** vk\_PaketPreis und vk\_PaketKosten der Kopfzeile werden nach Verkehrswert auf die aktiven Zeilen des Pakets verteilt: Verkehrswert der Zeile / Summe der Verkehrswerte des Pakets. Das Ergebnis steht grau in Verkaufspreis und Verkaufskosten. Ohne Paketpreis bleibt der fortgeschriebene Verkehrswert je Zeile die Annahme (orange).
+- **Aufteilung G+B:** Preis G+B der Kopfzeile / Summe der Verkaufspreise der Paketzeilen; sonst ihr Anteil G+B, sonst der Verkehrswertanteil der eigenen Zeile.
+
+Statusmeldungen, nach „Objekt mehrfach verkauft“:
+- Paketpreis oder -kosten ohne Verkaufspaket
+- Paket: Paketpreis, -kosten und G+B nur in der ersten Zeile
+- Paket: Verkaufsjahr weicht von der ersten Zeile ab
+- Paket: Preis oder Kosten getippt, obwohl Paketpreis bzw. -kosten gesetzt
+
+Bei der Übernahme aus einer alten Mappe bekommen gewollt leere Felder einer erfassten Zeile diese Paketformeln statt einer Annahme.
+
+Eine Range von Kostenstellen in einer Zeile wurde verworfen. Sie hätte Gewinn und Vorbesitzzeit über mehrere Wirtschaftsgüter vermischt, die BWA je Kostenstelle verloren und an der Nummernfolge der Kennungen gehangen.
 
 **Verknüpfung zur Prognose:** Das aktiv-Flag liest das Verkaufsjahr per MINIFS aus vk\_Jahr, nur aus Verkäufen mit „Verkauf aktiv“ ≠ nein; prg\_Bestand ist schon im Verkaufsjahr 0.
 

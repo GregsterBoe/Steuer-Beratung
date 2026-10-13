@@ -127,9 +127,10 @@ def _spalten(ws_alt, kopfzeile: int, felder, berechnet: list, blatt: str,
 
 
 def _zeilenweise(alt, neu, blatt: str, felder, berechnet: list, kapazitaet: int,
-                 bericht: Bericht, bereich: str) -> None:
+                 bericht: Bericht, bereich: str, ohne_annahme=None) -> None:
     """Verkäufe und Neuobjekte: Zeile n bleibt Zeile n (Rücklage und Reinvestition hängen
-    an der Zeilennummer)."""
+    an der Zeilennummer). ohne_annahme(key, zeile): Formel statt leer für gewollt leere
+    Felder (Verkaufspaket)."""
     if blatt not in alt.sheetnames:
         return
     ws_alt, ws_neu = alt[blatt], neu[blatt]
@@ -149,7 +150,9 @@ def _zeilenweise(alt, neu, blatt: str, felder, berechnet: list, kapazitaet: int,
                     ws_neu.cell(row=zeile, column=neu_sp, value=wert)
                     bericht.zaehle(blatt)
             elif erfasst and wert is None:
-                ws_neu.cell(row=zeile, column=neu_sp).value = None
+                key = felder[neu_sp - 1].key
+                ws_neu.cell(row=zeile, column=neu_sp).value = (
+                    ohne_annahme(key, zeile) if ohne_annahme else None)
 
 
 def _id_zeilen(ws, spalte: int, erste: int, letzte: int) -> tuple:
@@ -405,7 +408,7 @@ def uebernehmen(neu, pfad, geschuetzt=(), kapazitaet=None) -> list:
     _afa_plan(alt, neu, bericht, basis_alt - basis_neu, jahre_alt, kapazitaet.objekte)
     _neukauf(alt, neu, bericht, basis_alt - basis_neu, jahre_alt, kapazitaet.neukauf)
     _zeilenweise(alt, neu, "Verkäufe", VERKAUF_FELDER, VERKAUF_SPALTEN,
-                 kapazitaet.verkaeufe, bericht, "vk_ID")
+                 kapazitaet.verkaeufe, bericht, "vk_ID", formeln.paket_formel)
     _zeilenweise(alt, neu, "Neuobjekte", NEU_FELDER, NEU_SPALTEN,
                  kapazitaet.neuobjekte, bericht, "ne_ID")
     _zuordnung(alt, neu, bericht)

@@ -138,7 +138,9 @@ SPALTEN = {
     "vk_AKGuB": "AK G+B aus dem Blatt Objekte = Buchwert G+B (keine AfA).",
     "vk_Nettoerloes": "Verkaufspreis − Verkaufskosten.",
     "vk_AnteilGuB": "Preis G+B lt. Kaufvertrag / Verkaufspreis, sonst Anteil G+B lt. "
-                    "Kaufvertrag, sonst 1 − Verkehrswertanteil Gebäude aus dem Blatt Objekte.",
+                    "Kaufvertrag, sonst 1 − Verkehrswertanteil Gebäude aus dem Blatt Objekte. "
+                    "Im Verkaufspaket: Preis G+B der ersten Zeile / Summe der Verkaufspreise des "
+                    "Pakets, sonst deren Anteil G+B, sonst der Verkehrswertanteil der Zeile.",
     "vk_ErloesGeb": "Nettoerlös − Erlösanteil G+B.",
     "vk_ErloesGuB": "Nettoerlös × Anteil G+B verwendet.",
     "vk_GewinnGeb": "Erlösanteil Gebäude − Buchwert Gebäude Ende Verkaufsjahr. Positiv: "
@@ -147,7 +149,8 @@ SPALTEN = {
     "vk_Gewinn": "Gewinn Gebäude + Gewinn G+B. Ohne § 6b sofort steuerpflichtig im "
                  "Verkaufsjahr; mit § 6b gehen die positiven Teile in die Rücklage.",
     "vk_Status": "OK oder der erste Fehler (ObjektID unbekannt, doppelt verkauft, Jahr "
-                 "fehlt/außerhalb, Preis fehlt, Aufteilung fehlt). „§ 6b unzulässig“: die Zeile "
+                 "fehlt/außerhalb, Preis fehlt, Aufteilung fehlt, Verkaufspaket "
+                 "widersprüchlich). „§ 6b unzulässig“: die Zeile "
                  "rechnet, der Gewinn wird aber sofort versteuert. Andere Fehler: die Zeile "
                  "rechnet nicht mit. „ausgeschaltet“ (Verkauf aktiv = nein): rechnet nicht mit, "
                  "kein Fehler; zählt bei „mehrfach verkauft“ nicht.",
