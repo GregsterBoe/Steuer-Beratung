@@ -423,6 +423,14 @@ VERKAUF_FELDER = [
     Feld("bezeichnung", "Bezeichnung", "vk_Bez", FMT_TEXT, False, 22, berechnet=True,
          hinweis="aus dem Kostenstellenblatt der ObjektID (Bezeichnung kurz, Zelle C2), ohne "
                  "Kostenstellenblatt der Objektname aus dem Blatt Objekte"),
+    # Zeilen mit demselben Paket werden zusammen verkauft; die erste Zeile ist die Kopfzeile
+    Feld("paket", "Verkaufspaket", "vk_Paket", FMT_TEXT, False, 14,
+         hinweis="Name für Kostenstellen, die zusammen verkauft werden: je Kostenstelle eine "
+                 "Zeile mit demselben Namen. Die weiteren Zeilen übernehmen Verkauf aktiv, "
+                 "Verkaufsjahr, § 6b, Neubau und reinvestieren aus der ersten (grau); Anteil "
+                 "oder Preis G+B, Paketpreis und Paketkosten der ersten Zeile gelten für das "
+                 "ganze Paket. Gewinn, Vorbesitzzeit und Rücklage je Kostenstelle. "
+                 "Leer = Einzelverkauf"),
     # nein = Verkauf rechnet nicht mit (wie nicht erfasst), bleibt aber stehen; leer = ja
     Feld("aktiv", "Verkauf aktiv", "vk_Aktiv", FMT_TEXT, False, 9, auswahl=("ja", "nein"),
          hinweis="nein: der Verkauf rechnet nicht mit, das Objekt wird weiter gehalten; keine "
@@ -437,7 +445,16 @@ VERKAUF_FELDER = [
                                 "fortgeschrieben bis zum Verkaufsjahr (orange: bestimmt den "
                                 "Gewinn, möglichst echten Wert eintragen)"),
     Feld("kosten", "Verkaufskosten", "vk_Kosten", FMT_EURO, False, minimum=0,
-         hinweis="Makler, Notar, Vorfälligkeit u. Ä.; mindern Nettoerlös und Gewinn. Leer = 0"),
+         hinweis="Makler, Notar, Vorfälligkeit u. Ä.; mindern Nettoerlös und Gewinn. Leer = 0. "
+                 "Im Paket mit Paketkosten: Anteil nach Verkehrswert (grau)"),
+    # nur in der ersten Zeile eines Pakets; verteilt nach Verkehrswert auf die Paketzeilen
+    Feld("paket_preis", "Paketpreis gesamt", "vk_PaketPreis", FMT_EURO, False, minimum=0,
+         hinweis="nur in der ersten Zeile eines Verkaufspakets: Gesamtpreis für alle "
+                 "Kostenstellen des Pakets, verteilt nach Verkehrswert auf die Zeilen (Spalte "
+                 "Verkaufspreis, grau). Leer: Verkaufspreis je Zeile wie ohne Paket"),
+    Feld("paket_kosten", "Paketkosten gesamt", "vk_PaketKosten", FMT_EURO, False, minimum=0,
+         hinweis="nur in der ersten Zeile eines Verkaufspakets: Verkaufskosten für das ganze "
+                 "Paket, verteilt nach Verkehrswert auf die Zeilen (Spalte Verkaufskosten)"),
     Feld("anteil_gub", "Anteil G+B lt. Kaufvertrag", "vk_AnteilGuBVertrag", FMT_PROZENT, False,
          minimum=0, maximum=1,
          hinweis="Anteil Grund und Boden am Preis, teilt Erlös und Gewinn auf Gebäude und G+B. "
@@ -875,6 +892,9 @@ class Verkauf:
     neubau_6b: Optional[str] = None      # ja = Frist par_6bFristNeubau statt par_6bFrist
     reinvest: Optional[str] = None       # ja = Neuobjekt aus den Annahmen
     aktiv: Optional[str] = None          # "nein" schaltet den Verkauf aus; leer = ja
+    paket: Optional[str] = None          # gleicher Name = zusammen verkauft
+    paket_preis: Optional[float] = None  # nur erste Paketzeile: Gesamtpreis
+    paket_kosten: Optional[float] = None  # nur erste Paketzeile: Gesamtkosten
 
 
 @dataclass

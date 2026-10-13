@@ -95,6 +95,13 @@ Im Blatt **Verkäufe** stehen je Verkauf ObjektID (daneben grau die Bezeichnung 
 
 Die Aufteilung folgt dem Kaufvertrag, sonst dem Verkehrswertanteil aus dem Objektblatt. Laut Kaufvertrag kann G+B als Anteil oder als fester Betrag („Preis G+B lt. Kaufvertrag“) angegeben werden. Der Betrag geht vor, das Gebäude erhält den Rest des Verkaufspreises, und die Verkaufskosten werden anteilig aufgeteilt. Der Status meldet unter anderem eine fehlende Aufteilung und eine zu kurze Vorbesitzzeit für § 6b.
 
+Kostenstellen, die zusammen verkauft werden, bilden ein **Verkaufspaket**. Dafür steht jede Kostenstelle in einer eigenen Zeile mit demselben Namen in der Spalte „Verkaufspaket“.
+- **Erste Zeile des Pakets:** Hier stehen Verkaufsjahr, § 6b, Neubau und reinvestieren. Optional kommen „Paketpreis gesamt“ und „Paketkosten gesamt“ dazu sowie Anteil oder Preis G+B laut Kaufvertrag für das ganze Paket.
+- **Weitere Zeilen:** Sie übernehmen diese Angaben (grau).
+- **Aufteilung:** Paketpreis und Paketkosten werden nach Verkehrswert auf die Zeilen verteilt. Ohne Paketpreis gilt je Zeile der fortgeschriebene Verkehrswert als Annahme.
+- **Steuer:** Gewinn, Vorbesitzzeit für § 6b, Rücklage und Reinvestition rechnet jede Kostenstelle für sich, wie bei getrennten Verkäufen.
+- **Status:** Er meldet Widersprüche, etwa ein abweichendes Verkaufsjahr in einer weiteren Zeile oder einen Paketpreis außerhalb der ersten Zeile.
+
 Das Blatt **Rücklagen** bildet bei § 6b ja und Status OK eine Rücklage aus den positiven Teilgewinnen, getrennt nach Gebäude und G+B. Die Frist beträgt vier Jahre, mit „§ 6b Neubau begonnen = ja“ sechs Jahre. Was bis zum Fristjahr nicht auf Neuobjekte übertragen ist, wird dort aufgelöst, mit 6 % Zuschlag je Jahr. Der Spiegel je Jahr zeigt Gewinne, Einstellung, Übertragung, Auflösung, Zuschlag, Bestand und den steuerwirksamen Betrag, der in Etappe 7 die Steuer ergibt.
 
 Im Blatt **Neuobjekte** stehen je Reinvestition Kaufjahr, Kaufpreis, Anteil G+B, Nebenkosten, AfA-Satz, AfA-Methode (linear oder degressiv 5 % nach § 7 Abs. 5a EStG; Wechsel zur linearen AfA nur mit Parameter „Wechsel degressiv → linear“ = ja), Mietrendite, Erhaltungsquote und bis zu drei Quell-Rücklagen (Auswahl aus dem Blatt Rücklagen). Gekauft wird zum Jahresende, Miete und AfA laufen ab dem Folgejahr. Die Rücklagen werden in fester Reihenfolge übertragen, über alle Quellen:
