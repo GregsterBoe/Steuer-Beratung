@@ -1096,6 +1096,7 @@ def _kauf(b: _Block, anzahl: int) -> None:
     zeile("ü2 G+B-Gewinn auf G+B", f"-N({ne('ne_Ue2')})")
     zeile("ü3 G+B-Gewinn auf Gebäude", f"-N({ne('ne_Ue3')})")
     zeile("Übertrag § 6b EStG gesamt", f"-N({ne('ne_UeGesamt')})", fett=True)
+    zeile("davon im Verkaufsjahr (Kauf im Vorjahr)", f"-N({ne('ne_UeFolge')})")
     zeile("AfA-Bemessungsgrundlage Gebäude", f"N({ne('ne_AfABasis')})", fett=True)
     zeile("steuerliche AK G+B", f"N({ne('ne_AKGuB')})")
     zeile("AfA-Methode", f'IF({ne("ne_AfAMethode")}="","linear",{ne("ne_AfAMethode")})', "@")

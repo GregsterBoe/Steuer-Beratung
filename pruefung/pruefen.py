@@ -874,6 +874,91 @@ def faelle():
             ("ne_Status", 0, "Kauf vor Bildung der Rücklage, keine Übertragung"),
             ("ne_UeGesamt", 0, 0),
         ]),
+        # § 6b Abs. 1 Satz 1: Kauf Ende 2028, Verkauf 2029. Rücklage Gebäude 268.000, G+B
+        # 500.000; Abzug erst im Verkaufsjahr: ü1 268.000, ü2 200.000, ü3 300.000. 2028 Buchwert
+        # Gebäude 800.000 und G+B 200.000, ab 2029 AfA von den geminderten AK: 232.000 × 3 %
+        # = 6.960, Buchwert 2029 225.040, G+B 0. Spiegel: Einstellung und Übertragung 2029,
+        # kein Bestand. Der Erlös kommt erst nach dem Kauf, mindert den Bedarf nicht.
+        # NEU-002 Kauf zwei Jahre vor dem Verkauf: keine Übertragung.
+        ("§ 6b: Kauf im Vorjahr der Veräußerung",
+         Modell(objekte=[obj],
+                verkaeufe=[Verkauf("OBJ-001", 2029, preis=1_400_000, nutzung_6b="ja")],
+                neuobjekte=[
+                    Neuobjekt("NEU-001", 2028, kaufpreis=1_000_000, anteil_gub=0.2,
+                              afa_satz=0.03, quelle="RL-OBJ-001", erloes_fin="ja"),
+                    Neuobjekt("NEU-002", 2027, kaufpreis=1_000_000, anteil_gub=0.2,
+                              afa_satz=0.03, quelle="RL-OBJ-001")]), [
+            ("rl_Geb", 0, 268_000),
+            ("rl_GuB", 0, 500_000),
+            ("ne_Status", 0, "OK"),
+            ("ne_Ue1", 0, 268_000),
+            ("ne_Ue2", 0, 200_000),
+            ("ne_Ue3", 0, 300_000),
+            ("ne_UeFolge", 0, 768_000),
+            ("ne_UeFolgeGeb", 0, 568_000),
+            ("ne_AfABasis", 0, 232_000),
+            ("ne_Erloes", 0, 0),
+            ("ne_Bedarf", 0, 1_000_000),
+            ("prg_Buchwert", prg_neu(1, 2028), 800_000),
+            ("prg_BuchwertGuB", prg_neu(1, 2028), 200_000),
+            ("prg_AfA", prg_neu(1, 2029), 6_960),
+            ("prg_Buchwert", prg_neu(1, 2029), 225_040),
+            ("prg_BuchwertGuB", prg_neu(1, 2029), 0),
+            ("prg_AfAOhne6b", prg_neu(1, 2029), 24_000),
+            ("rls_Uebertragung", rls(2028), 0),
+            ("rls_Bildung", rls(2029), 768_000),
+            ("rls_Uebertragung", rls(2029), 768_000),
+            ("rls_Bestand", rls(2029), 0),
+            ("rls_Steuerwirksam", rls(2029), 0),
+            ("rl_Aufloesung", 0, 0),
+            ("ne_Status", 1, "Kauf vor Bildung der Rücklage, keine Übertragung"),
+            ("pr_Anzahl", pr("vorjahr"), 1),
+            ("pr_Ergebnis", pr("vorjahr"), HINWEIS),
+        ]),
+        ("§ 6b: Kauf im Vorjahr ausgeschaltet",
+         Modell(objekte=[obj], parameter={"par_6bVorjahr": "nein"},
+                verkaeufe=[Verkauf("OBJ-001", 2029, preis=1_400_000, nutzung_6b="ja")],
+                neuobjekte=[Neuobjekt("NEU-001", 2028, kaufpreis=1_000_000, anteil_gub=0.2,
+                                      afa_satz=0.03, quelle="RL-OBJ-001")]), [
+            ("ne_Status", 0, "Kauf vor Bildung der Rücklage, keine Übertragung"),
+            ("ne_UeGesamt", 0, 0),
+            ("prg_AfA", prg_neu(1, 2029), 24_000),
+        ]),
+        # Kauf im Vorjahr mit Sonder-AfA § 7b. NEU-001: 2028 QNG 40.000 von 800.000, Buchwert
+        # 760.000. 2029 Abzug 568.000 → 192.000; QNG 232.000 × 5 % = 11.600 + 6.960 = 18.560
+        # bis 2031, Buchwert 2031 136.320, ab 2032 136.320 × 3 % = 4.089,60.
+        ("§ 6b: Kauf im Vorjahr mit Sonder-AfA § 7b",
+         Modell(objekte=[obj],
+                verkaeufe=[Verkauf("OBJ-001", 2029, preis=1_400_000, nutzung_6b="ja")],
+                neuobjekte=[Neuobjekt("NEU-001", 2028, kaufpreis=1_000_000, anteil_gub=0.2,
+                                      afa_satz=0.03, quelle="RL-OBJ-001", qng="ja")]), [
+            ("ne_QNGBasisKauf", 0, 800_000),
+            ("ne_QNGBasis", 0, 232_000),
+            ("prg_AfAQNG", prg_neu(1, 2028), 40_000),
+            ("prg_Buchwert", prg_neu(1, 2028), 760_000),
+            ("prg_AfAQNG", prg_neu(1, 2029), 11_600),
+            ("prg_AfA", prg_neu(1, 2029), 18_560),
+            ("prg_Buchwert", prg_neu(1, 2029), 173_440),
+            ("prg_Buchwert", prg_neu(1, 2031), 136_320),
+            ("prg_AfA", prg_neu(1, 2032), 4_089.60),
+        ]),
+        # Grenze Buchwert Ende Kaufjahr (§ 6b Abs. 5): AK Gebäude 560.000 − QNG 28.000 =
+        # 532.000 für ü1 + ü3: ü1 268.000, ü2 140.000, ü3 264.000; Rest G+B 96.000 wird im
+        # Fristjahr 2033 aufgelöst. Buchwert 2029 = 0, keine AfA mehr.
+        ("§ 6b: Kauf im Vorjahr, Grenze Buchwert Ende Kaufjahr",
+         Modell(objekte=[obj],
+                verkaeufe=[Verkauf("OBJ-001", 2029, preis=1_400_000, nutzung_6b="ja")],
+                neuobjekte=[Neuobjekt("NEU-001", 2028, kaufpreis=700_000, anteil_gub=0.2,
+                                      afa_satz=0.03, quelle="RL-OBJ-001", qng="ja")]), [
+            ("ne_Ue1", 0, 268_000),
+            ("ne_Ue2", 0, 140_000),
+            ("ne_Ue3", 0, 264_000),
+            ("ne_UeFolgeGeb", 0, 532_000),
+            ("rl_Aufloesung", 0, 96_000),
+            ("prg_Buchwert", prg_neu(1, 2028), 532_000),
+            ("prg_AfA", prg_neu(1, 2029), 0),
+            ("prg_Buchwert", prg_neu(1, 2029), 0),
+        ]),
         # Standard ohne Wechsel (par_AfAWechsel = nein): stets 5 % vom Restbuchwert, auch wenn
         # linear höher wäre. AfA-Basis 800.000, Kauf Ende 2027: 2028 40.000, 2029 38.000,
         # Jahr n: 800.000 × 0,95^(n − 2028) × 5 %; Buchwert 2046 = 800.000 × 0,95^19.
@@ -1973,9 +2058,9 @@ def faelle():
             (f"{ZEILE_EINGEKLAPPT}Parameter", 22, (0, False)),
             (f"{ZEILE_EINGEKLAPPT}Parameter", 23, (1, True)),
             (f"{ZEILE_EINGEKLAPPT}Parameter", 28, (1, True)),
-            (f"{ZEILE_EINGEKLAPPT}Parameter", 31, (1, True)),
-            (f"{ZEILE_EINGEKLAPPT}Parameter", 37, (1, False)),
-            (f"{ZEILE_EINGEKLAPPT}Parameter", 45, (1, True)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 32, (1, True)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 38, (1, False)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 46, (1, True)),
             ("par_6bFrist", 0, 4),
             ("par_6bFristNeubau", 0, 6),
             # Auswahllisten: je Zelle genau eine Überprüfung, sonst verwirft Excel sie

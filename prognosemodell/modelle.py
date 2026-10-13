@@ -70,6 +70,9 @@ PARAMETER = [
     Parameter("par_6bFrist", "§ 6b Reinvestitionsfrist (Jahre)", 4, FMT_ZAHL, ""),
     Parameter("par_6bFristNeubau", "§ 6b Frist bei Neubau (Jahre)", 6, FMT_ZAHL,
               "wenn mit dem Neubau vor Ende der Regelfrist begonnen wurde (§ 6b Abs. 3)"),
+    Parameter("par_6bVorjahr", "§ 6b Abzug bei Kauf im Vorjahr", "ja", FMT_TEXT,
+              "ja: Gewinn darf auch von einem im Vorjahr der Veräußerung gekauften Objekt "
+              "abgezogen werden (§ 6b Abs. 1 Satz 1), Abzug im Verkaufsjahr", ("ja", "nein")),
     Parameter("par_6bZuschlag", "§ 6b Gewinnzuschlag je Jahr", 0.06, FMT_PROZENT,
               "bei Auflösung ohne Reinvestition"),
     Parameter("par_DOGrenze", "Drei-Objekt-Grenze (Verkäufe)", 3, FMT_ZAHL,
@@ -685,11 +688,18 @@ NEU_SPALTEN = [
     Spalte("ue2", "ü2 G+B-Gewinn auf G+B", "ne_Ue2", FMT_EURO),
     Spalte("ue3", "ü3 G+B-Gewinn auf Gebäude", "ne_Ue3", FMT_EURO),
     Spalte("ue_gesamt", "übertragen gesamt", "ne_UeGesamt", FMT_EURO),
+    # Kauf im Vorjahr der Veräußerung (§ 6b Abs. 1 Satz 1, Abs. 5): Abzug erst im
+    # Verkaufsjahr, beim Gebäude höchstens vom Buchwert am Ende des Kaufjahrs
+    Spalte("ue_folge", "davon Abzug im Verkaufsjahr (Kauf im Vorjahr)", "ne_UeFolge", FMT_EURO, 16),
+    Spalte("ue_folge_geb", "davon auf Gebäude", "ne_UeFolgeGeb", FMT_EURO),
     Spalte("afa_basis", "AfA-Basis Gebäude", "ne_AfABasis", FMT_EURO, 16),
     Spalte("ak_gub", "steuerliche AK G+B", "ne_AKGuB", FMT_EURO),
     # Sonder-AfA § 7b: AfA-Basis bzw. volle AK Gebäude (Szenarien B und C), mit Fläche
     # höchstens par_QNGHoechstQm je m², 0 über der Baukostenobergrenze oder ohne QNG
     Spalte("qng_basis", "Bemessungsgrundlage § 7b", "ne_QNGBasis", FMT_EURO, 16),
+    # im Kaufjahr ohne den erst im Verkaufsjahr abgezogenen Gewinn (§ 7a Abs. 1 Satz 3)
+    Spalte("qng_basis_kauf", "Bemessungsgrundlage § 7b im Kaufjahr", "ne_QNGBasisKauf",
+           FMT_EURO, 16),
     Spalte("qng_basis_ohne6b", "Bemessungsgrundlage § 7b ohne § 6b", "ne_QNGBasisOhne6b",
            FMT_EURO, 16),
     # 1 = Quelle-Rücklage angegeben; das Objekt entfällt in Szenario B
@@ -1018,6 +1028,10 @@ PRUEFUNGEN = [
              "Nebenkosten abweichen (beide Beträge von Hand eingetragen): AfA-Basis und "
              "Übertragung rechnen mit den eingetragenen Beträgen", WARNUNG,
              "Blatt Neuobjekte, Spalte Abweichung Aufteilung"),
+    Pruefung("vorjahr", "Neuobjekte, gekauft im Jahr vor dem Verkauf ihrer Quelle: Abzug "
+             "nach § 6b Abs. 1 Satz 1 im Verkaufsjahr; der Verkaufserlös steht beim Kauf noch "
+             "nicht bereit und mindert den Finanzierungsbedarf nicht", HINWEIS,
+             "Blatt Neuobjekte, Spalte davon Abzug im Verkaufsjahr"),
     Pruefung("afa_plan", "Objekte mit AfA-Plan (Blatt AfA-Plan, meist aus BWA 1240 der "
              "Kostenstellen-Datei): in den Jahren mit Wert ersetzt er die AfA-Fortschreibung",
              HINWEIS, "Blatt AfA-Plan, Spalte Jahre mit Wert"),

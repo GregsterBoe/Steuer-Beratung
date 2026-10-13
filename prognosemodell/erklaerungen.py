@@ -70,6 +70,10 @@ PARAMETER_WIRKUNG = {
     "par_6bFrist": "Fristjahr der Rücklage = Verkaufsjahr + Frist. Kauf danach überträgt "
                    "nichts; der Rest wird im Fristjahr aufgelöst.",
     "par_6bFristNeubau": "Ersetzt die Frist, wenn im Blatt Verkäufe „§ 6b Neubau begonnen = ja“.",
+    "par_6bVorjahr": "ja: Ein Neuobjekt darf ein Jahr vor dem Verkauf seiner Quelle gekauft "
+                     "sein; der Gewinn wird im Verkaufsjahr abgezogen, beim Gebäude höchstens "
+                     "vom Buchwert Ende Kaufjahr, und die AfA rechnet schon in diesem Jahr von "
+                     "den geminderten AK. nein: nur Kauf ab dem Verkaufsjahr.",
     "par_6bZuschlag": "Gewinnzuschlag = aufgelöster Betrag × Satz × Jahre zwischen Bildung und "
                       "Auflösung; steuerwirksam im Fristjahr (Szenario A).",
     "par_DOGrenze": "Warnung in der Prüfung, wenn mehr Verkäufe im Zeitraum liegen.",
@@ -209,6 +213,13 @@ SPALTEN = {
     "ne_Ue3": "Rest des G+B-Gewinns auf das Gebäude: höchstens AK Gebäude neu − ü1.",
     "ne_UeGesamt": "ü1 + ü2 + ü3: mindert die AK und geht als Übertragung in den "
                    "Rücklagenspiegel.",
+    "ne_UeFolge": "Teil der Übertragung aus Quellen, die erst im Jahr nach dem Kauf verkauft "
+                  "werden (§ 6b Abs. 1 Satz 1): wird im Verkaufsjahr abgezogen, bis dahin "
+                  "laufen Buchwert und Sonder-AfA ohne ihn.",
+    "ne_UeFolgeGeb": "davon ü1 + ü3 auf das Gebäude; höchstens Buchwert Ende Kaufjahr "
+                     "(AK Gebäude − Sonder-AfA § 7b des Kaufjahrs, § 6b Abs. 5).",
+    "ne_QNGBasisKauf": "Bemessungsgrundlage § 7b im Kaufjahr: ohne den erst im Verkaufsjahr "
+                       "abgezogenen Gewinn; ab dann gilt die geminderte (§ 7a Abs. 1 Satz 3).",
     "ne_AfABasis": "AK Gebäude neu − ü1 − ü3: Basis für AfA und Buchwert Gebäude.",
     "ne_AKGuB": "AK G+B neu − ü2: Buchwert G+B.",
     "ne_QNGBasis": "Nur mit Sonder-AfA § 7b (QNG) = ja: AfA-Basis Gebäude, mit Fläche höchstens "

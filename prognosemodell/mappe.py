@@ -823,7 +823,9 @@ def _blatt_neuobjekte(wb, modell: Modell) -> None:
     ws[f"{hinweis}2"] = ("Übertragung: ü1 Gebäudegewinn auf Gebäude, ü2 G+B-Gewinn auf G+B, "
                          "ü3 Rest des G+B-Gewinns auf Gebäude. AfA-Basis = AK Gebäude − ü1 − ü3.")
     ws[f"{hinweis}3"] = ("Nutzen mehrere Neuobjekte dieselbe Rücklage, gilt die Zeilenreihenfolge: "
-                         "jede Zeile erhält, was die Zeilen darüber übrig lassen.")
+                         "jede Zeile erhält, was die Zeilen darüber übrig lassen. Kauf im Jahr "
+                         "vor dem Verkauf der Quelle: Abzug erst im Verkaufsjahr (§ 6b Abs. 1 "
+                         "Satz 1), Spalte „davon Abzug im Verkaufsjahr“.")
     ws[f"{hinweis}4"] = ("Kaufnebenkosten werden im Verhältnis G+B zu Gebäude aktiviert; leer = 0. "
                          "AK G+B und AK Gebäude sind aus dem Anteil G+B vorbelegt (blau); ein "
                          "eingetippter Betrag ersetzt die Vorbelegung, z. B. G+B fest und "
