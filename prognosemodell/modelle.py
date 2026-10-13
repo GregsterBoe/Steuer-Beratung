@@ -54,6 +54,9 @@ PARAMETER = [
               "abhängig vom Bundesland; Platzhalter"),
     Parameter("par_AfADegressiv", "AfA degressiv (Neuobjekte)", 0.05, FMT_PROZENT,
               "§ 7 Abs. 5a EStG, Wohngebäude mit Baubeginn 10/2023 bis 9/2029; vom Restbuchwert"),
+    Parameter("par_AfAWechsel", "Wechsel degressiv → linear (Neuobjekte)", "nein", FMT_TEXT,
+              "nein: stets degressiv; ja: linear, sobald höher (§ 7 Abs. 5a Satz 4 EStG, "
+              "zulässig, nicht Pflicht)", ("nein", "ja")),
     Parameter("par_Alternativrendite", "Rendite Alternativanlage p. a.", 0.03, FMT_PROZENT,
               "Zins auf die Liquidität des Vorjahresendes in allen Szenarien, voll steuerpflichtig; "
               "negative Liquidität kostet denselben Satz. Platzhalter"),
@@ -544,12 +547,13 @@ NEU_FELDER = [
     Feld("afa_satz", "AfA-Satz", "ne_AfASatz", FMT_PROZENT, True, 10, minimum=0, maximum=0.2,
          hinweis="AfA p. a. auf die AfA-Basis (AK Gebäude − übertragene Rücklage); "
                  "Nutzungsdauer = 1 / Satz"),
-    # leer = linear; degressiv: par_AfADegressiv vom Restbuchwert, Wechsel zur linearen AfA,
-    # sobald Restbuchwert / Restnutzungsdauer höher ist; Nutzungsdauer = 1 / AfA-Satz
+    # leer = linear; degressiv: par_AfADegressiv vom Restbuchwert; mit par_AfAWechsel = ja
+    # Wechsel zur linearen AfA, sobald Restbuchwert / Restnutzungsdauer höher ist;
+    # Nutzungsdauer = 1 / AfA-Satz
     Feld("afa_methode", "AfA-Methode", "ne_AfAMethode", FMT_TEXT, False, 11,
          auswahl=(AFA_LINEAR, AFA_DEGRESSIV),
-         hinweis="leer = linear. Degressiv: Satz „AfA degressiv“ (Parameter) vom Restbuchwert, "
-                 "Wechsel zur linearen AfA, sobald diese höher ist"),
+         hinweis="leer = linear. Degressiv: Satz „AfA degressiv“ (Parameter) vom Restbuchwert; "
+                 "Wechsel zur linearen AfA nur mit „Wechsel degressiv → linear“ = ja"),
     Feld("mietrendite", "Mietrendite auf Kaufpreis", "ne_Mietrendite", FMT_PROZENT, False, 11,
          minimum=0, maximum=1,
          hinweis="Jahresmiete = Kaufpreis × Rendite ab dem Folgejahr, dann mit der "

@@ -43,7 +43,7 @@ Dreizehn feste Blätter, getrennt nach Eingabe, Rechnung, Ausgabe und Kontrolle.
 | Blatt | Typ | Schlüsselfelder | Zweck |
 | --- | --- | --- | --- |
 | Start | Ausgabe | Handlungsempfehlung, Endvermögen je Option, Datenlage, Anleitung, Farblegende, zentrale Annahmen | erstes Blatt, Einstieg und Ergebnis auf einen Blick (Abschnitt 20) |
-| Parameter | Eingabe | Steuerwelt-Schalter, Grenzsteuersatz, Mietsteigerung, Erhaltungssteigerung, Kostensteigerung, Wertsteigerung, GrESt-Satz, degressive AfA, Alternativrendite, § 6b-Fristen | alle globalen Annahmen und Schalter |
+| Parameter | Eingabe | Steuerwelt-Schalter, Grenzsteuersatz, Mietsteigerung, Erhaltungssteigerung, Kostensteigerung, Wertsteigerung, GrESt-Satz, degressive AfA und Wechsel zu linear, Alternativrendite, § 6b-Fristen | alle globalen Annahmen und Schalter |
 | Objekte | Eingabe | ObjektID, AK Gebäude, AK G+B, AfA-Satz, Kaufjahr, Restbuchwert 2026, Miete 2026, Erhaltung 2026 | Stammdaten je Bestandsobjekt |
 | Anlagen | Eingabe | Inventar-Nr., ObjektID, Art, AHK, Buchwert Stand, AfA-Methode, AfA-Satz, AfA p. a.; AfA je Prognosejahr | Anlagenverzeichnis, liefert AK, Buchwert, Kaufjahr und AfA je Objekt (Abschnitt 21) |
 | Verkäufe | Eingabe | ObjektID, Verkaufsjahr, Verkaufspreis oder Faktor, Verkaufskosten, 6b-Nutzung (ja/nein), Neubau begonnen (ja/nein) | ein Datensatz je geplantem Verkauf |
@@ -458,7 +458,7 @@ Die ersten vier nehmen das Objekt aus dem Modell (ne\_Gueltig = 0). Bei den letz
 - im Kaufjahr: Buchwert = AfA-Basis, im Bestand, noch keine Miete, Erhaltung und AfA
 - ab dem Folgejahr: AfA = MIN(AfA-Basis × Satz; Vorjahresbuchwert); Miete = Kaufpreis × Mietrendite × (1 + Mietsteigerung)^(Jahr − Kaufjahr), Erhaltung entsprechend
 - Verkehrswert = Kaufpreis, ab dem Kaufjahr mit der Wertsteigerung fortgeschrieben
-- degressive AfA (Methode „degressiv“): AfA = MIN(MAX(Vorjahresbuchwert × par\_AfADegressiv; Vorjahresbuchwert / Restnutzungsdauer); Vorjahresbuchwert). Die Restnutzungsdauer zu Jahresbeginn ist 1 / AfA-Satz − (Jahr − Kaufjahr − 1), mindestens 1. Das bildet den Wechsel zur linearen AfA nach § 7 Abs. 5a Satz 4 EStG ab, sobald dieser günstiger ist; danach bleibt die AfA gleich. Die AfA-Basis nach Übertragung der Rücklage ist dieselbe wie bei linearer AfA.
+- degressive AfA (Methode „degressiv“): standardmäßig AfA = Vorjahresbuchwert × par\_AfADegressiv, jedes Jahr, auch wenn linear höher wäre. Mit par\_AfAWechsel = ja gilt AfA = MIN(MAX(Vorjahresbuchwert × par\_AfADegressiv; Vorjahresbuchwert / Restnutzungsdauer); Vorjahresbuchwert). Die Restnutzungsdauer zu Jahresbeginn ist 1 / AfA-Satz − (Jahr − Kaufjahr − 1), mindestens 1. Das bildet den Wechsel zur linearen AfA nach § 7 Abs. 5a Satz 4 EStG ab, sobald dieser günstiger ist; danach bleibt die AfA gleich. Der Wechsel ist ein Wahlrecht, daher der Schalter. Die AfA-Basis nach Übertragung der Rücklage ist dieselbe wie bei linearer AfA.
 
 Ein Neuobjekt gehört nur in die Plan-Linie der Übersicht, nicht in die Baseline. Die Baseline summiert deshalb nur Zeilen mit prg\_Neu = 0.
 
@@ -475,7 +475,8 @@ Weitere geprüfte Fälle in `pruefung/pruefen.py`:
 - zwei Neuobjekte teilen sich die Rücklage: das erste nimmt 500.000, das zweite (Nebenkosten 40.000, G+B 260.000) den Rest 220.000 als ü2; AfA-Basis 780.000, AK G+B 40.000
 - Teilübertragung 300.000: Rest 420.000 wird 2031 mit Zuschlag 100.800 aufgelöst
 - Statusfälle, darunter Kauf nach Fristjahr und vor Bildung der Rücklage
-- degressive AfA 5 %, AfA-Basis 800.000, Nutzungsdauer 33⅓ Jahre: 2028 40.000, 2029 38.000, 2041 20.533,68; ab 2042 linear 20.179,65 (Restnutzungsdauer 19⅓ < 20), Buchwert 2046 289.241,71. Linear 3 % zum Vergleich 24.000, Buchwert 2046 344.000. Bei Nutzungsdauer 20 Jahre ist linear ab dem zweiten Jahr höher, die AfA bleibt 40.000.
+- degressive AfA 5 % ohne Wechsel, AfA-Basis 800.000: 2028 40.000, 2029 38.000, 2042 19.507,00, 2046 15.888,57, Buchwert 2046 301.882,88, unabhängig vom AfA-Satz (auch bei 5 %).
+- degressive AfA 5 % mit Wechsel (par\_AfAWechsel = ja), AfA-Basis 800.000, Nutzungsdauer 33⅓ Jahre: 2028 40.000, 2029 38.000, 2041 20.533,68; ab 2042 linear 20.179,65 (Restnutzungsdauer 19⅓ < 20), Buchwert 2046 289.241,71. Linear 3 % zum Vergleich 24.000, Buchwert 2046 344.000. Bei Nutzungsdauer 20 Jahre ist linear ab dem zweiten Jahr höher, die AfA bleibt 40.000.
 
 **Offen:**
 - Verkauf eines Neuobjekts innerhalb des Rasters

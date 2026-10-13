@@ -823,8 +823,9 @@ def _blatt_neuobjekte(wb, modell: Modell) -> None:
     ws[f"{hinweis}6"] = ("Blau: Neuobjekt aus „reinvestieren = ja“ in derselben Zeile des Blatts "
                          "Verkäufe, Werte aus den Annahmen des Parameterblatts. Eintippen ersetzt "
                          "die Annahme.")
-    ws[f"{hinweis}5"] = ("AfA-Methode degressiv: par_AfADegressiv vom Restbuchwert, Wechsel zur "
-                         "linearen AfA über die Restnutzungsdauer (1 / AfA-Satz), sobald höher.")
+    ws[f"{hinweis}5"] = ("AfA-Methode degressiv: par_AfADegressiv vom Restbuchwert; mit "
+                         "par_AfAWechsel = ja Wechsel zur linearen AfA über die "
+                         "Restnutzungsdauer (1 / AfA-Satz), sobald höher.")
     ws[f"{hinweis}7"] = ("Bis zu drei Quell-Rücklagen: erst alle Gebäudegewinne auf das Gebäude "
                          "(ü1), dann die G+B-Gewinne auf G+B (ü2), der Rest auf das Gebäude (ü3). "
                          "Die Werte je Quelle stehen in den eingeklappten Spalten (+ über Status).")

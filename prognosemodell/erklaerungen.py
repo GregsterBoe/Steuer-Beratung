@@ -42,8 +42,12 @@ PARAMETER_WIRKUNG = {
                      "Endvermögen. Neuobjekte: ab dem Kaufpreis im Kaufjahr.",
     "par_GrESt": "Zur Information; die Nebenkosten der Neuobjekte kommen aus der Eingabe bzw. "
                  "der Annahme „Kaufnebenkosten in % des Kaufpreises“.",
-    "par_AfADegressiv": "Neuobjekte mit AfA-Methode degressiv: AfA = Satz × Restbuchwert, "
-                        "Wechsel zur linearen AfA, sobald diese höher ist.",
+    "par_AfADegressiv": "Neuobjekte mit AfA-Methode degressiv: AfA = Satz × Restbuchwert; "
+                        "mit „Wechsel degressiv → linear“ = ja linear, sobald diese höher ist.",
+    "par_AfAWechsel": "Neuobjekte mit AfA-Methode degressiv. nein: jedes Jahr Satz × "
+                      "Restbuchwert. ja: Wechsel zur linearen AfA (Restbuchwert / "
+                      "Restnutzungsdauer, Nutzungsdauer = 1 / AfA-Satz), sobald diese höher ist; "
+                      "bei AfA-Satz ≥ degressivem Satz ist das von Anfang an so.",
     "par_Alternativrendite": "Zinsertrag je Jahr = Liquidität am Vorjahresende × Satz, voll "
                              "steuerpflichtig; negative Liquidität kostet denselben Satz. "
                              "Entscheidet den Vergleich A gegen B (Immobilie oder Geldanlage).",
