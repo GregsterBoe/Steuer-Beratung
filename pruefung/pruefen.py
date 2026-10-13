@@ -873,13 +873,40 @@ def faelle():
             ("ne_Status", 0, "Kauf vor Bildung der Rücklage, keine Übertragung"),
             ("ne_UeGesamt", 0, 0),
         ]),
+        # Standard ohne Wechsel (par_AfAWechsel = nein): stets 5 % vom Restbuchwert, auch wenn
+        # linear höher wäre. AfA-Basis 800.000, Kauf Ende 2027: 2028 40.000, 2029 38.000,
+        # Jahr n: 800.000 × 0,95^(n − 2028) × 5 %; Buchwert 2046 = 800.000 × 0,95^19.
+        # NEU-003 mit AfA-Satz 5 % rechnet jetzt ebenso degressiv, NEU-002 linear 24.000.
+        ("Etappe 6: degressive AfA ohne Wechsel zur linearen AfA",
+         Modell(objekte=[obj], neuobjekte=[
+             Neuobjekt("NEU-001", 2027, kaufpreis=1_000_000, anteil_gub=0.2, afa_satz=0.03,
+                       afa_methode="degressiv"),
+             Neuobjekt("NEU-002", 2027, kaufpreis=1_000_000, anteil_gub=0.2, afa_satz=0.03),
+             Neuobjekt("NEU-003", 2027, kaufpreis=1_000_000, anteil_gub=0.2, afa_satz=0.05,
+                       afa_methode="degressiv")]), [
+            ("prg_AfA", prg_neu(1, 2027), 0),
+            ("prg_Buchwert", prg_neu(1, 2027), 800_000),
+            ("prg_AfA", prg_neu(1, 2028), 40_000),
+            ("prg_AfA", prg_neu(1, 2029), 38_000),
+            ("prg_AfA", prg_neu(1, 2041), 20_533.68),
+            ("prg_AfA", prg_neu(1, 2042), 19_507.00),
+            ("prg_AfA", prg_neu(1, 2046), 15_888.57),
+            ("prg_Buchwert", prg_neu(1, 2046), 301_882.88),
+            ("prg_AfA", prg_neu(2, 2028), 24_000),
+            ("prg_Buchwert", prg_neu(2, 2046), 344_000),
+            ("prg_AfA", prg_neu(3, 2028), 40_000),
+            ("prg_AfA", prg_neu(3, 2029), 38_000),
+            ("prg_Buchwert", prg_neu(3, 2046), 301_882.88),
+            ("ne_Status", 0, "OK"),
+        ]),
+        # Wechsel zur linearen AfA eingeschaltet (par_AfAWechsel = ja).
         # AfA-Basis je 800.000 (Kaufpreis 1 Mio, G+B 20 %), Kauf Ende 2027, AfA ab 2028.
         # NEU-001 degressiv 5 % bei Nutzungsdauer 33⅓ Jahre (3 %): 2028 40.000, dann × 0,95;
         # 2042 Restnutzungsdauer 19⅓ < 20, Wechsel zu linear: 800.000 × 0,95^14 / 19⅓ = 20.179,65
         # und gleich bleibend. NEU-002 linear 3 % = 24.000. NEU-003 degressiv bei
         # Nutzungsdauer 20 Jahre (5 %): ab dem 2. Jahr ist linear höher, also stets 40.000.
         ("Etappe 6: degressive AfA mit Wechsel zur linearen AfA",
-         Modell(objekte=[obj], neuobjekte=[
+         Modell(objekte=[obj], parameter={"par_AfAWechsel": "ja"}, neuobjekte=[
              Neuobjekt("NEU-001", 2027, kaufpreis=1_000_000, anteil_gub=0.2, afa_satz=0.03,
                        afa_methode="degressiv"),
              Neuobjekt("NEU-002", 2027, kaufpreis=1_000_000, anteil_gub=0.2, afa_satz=0.03),
@@ -1885,11 +1912,11 @@ def faelle():
             (f"{KOPF}Parameter:5", 1, "★ Basisjahr (Ist) [Tooltip]"),
             (f"{KOPF}Parameter:13", 1, "Steigerung weitere Ausgaben p. a. [Tooltip]"),
             # § 6b-Abschnitt eingeklappt, Annahmen bei fehlenden Daten (mit Kernparametern) offen
-            (f"{ZEILE_EINGEKLAPPT}Parameter", 21, (0, False)),
-            (f"{ZEILE_EINGEKLAPPT}Parameter", 22, (1, True)),
-            (f"{ZEILE_EINGEKLAPPT}Parameter", 27, (1, True)),
-            (f"{ZEILE_EINGEKLAPPT}Parameter", 30, (1, False)),
-            (f"{ZEILE_EINGEKLAPPT}Parameter", 38, (1, True)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 22, (0, False)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 23, (1, True)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 28, (1, True)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 31, (1, False)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 39, (1, True)),
             ("par_6bFrist", 0, 4),
             ("par_6bFristNeubau", 0, 6),
             # Auswahllisten: je Zelle genau eine Überprüfung, sonst verwirft Excel sie

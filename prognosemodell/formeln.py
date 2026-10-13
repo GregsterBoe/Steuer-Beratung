@@ -519,10 +519,12 @@ def prognose_zeile_neu(zeile: int, neu_nr: int, erstes_jahr: bool) -> dict:
     def afa(basis, bw_key, afa_key):
         """AfA und Buchwert ab der AfA-Basis basis, Vorjahresbuchwert aus Spalte bw_key."""
         bw_vor = "0" if erstes_jahr else _p(bw_key, zeile - 1)
-        # Degressiv vom Restbuchwert; linear über die Restnutzungsdauer, sobald das mehr ist
-        # (§ 7 Abs. 5a Satz 4 EStG). Restnutzungsdauer zu Jahresbeginn, mindestens 1 Jahr.
+        # Degressiv vom Restbuchwert; mit par_AfAWechsel = ja linear über die
+        # Restnutzungsdauer, sobald das mehr ist (§ 7 Abs. 5a Satz 4 EStG, ein Wahlrecht).
+        # Restnutzungsdauer zu Jahresbeginn, mindestens 1 Jahr.
         rnd = f'MAX(1/{ne("ne_AfASatz")}-({t}-{kj}-1),1)'
-        degressiv = f"MIN(MAX({bw_vor}*par_AfADegressiv,{bw_vor}/{rnd}),{bw_vor})"
+        degressiv = (f'MIN(IF(par_AfAWechsel="ja",MAX({bw_vor}*par_AfADegressiv,'
+                     f"{bw_vor}/{rnd}),{bw_vor}*par_AfADegressiv),{bw_vor})")
         linear = f'MIN({basis}*{ne("ne_AfASatz")},{bw_vor})'
         return (
             _leer_oder(zeile, f'IF({aktiv},IF({ne("ne_AfAMethode")}="{AFA_DEGRESSIV}",'
