@@ -95,12 +95,12 @@ Im Blatt **Verkäufe** stehen je Verkauf ObjektID (daneben grau die Bezeichnung 
 
 Die Aufteilung folgt dem Kaufvertrag, sonst dem Verkehrswertanteil aus dem Objektblatt. Laut Kaufvertrag kann G+B als Anteil oder als fester Betrag („Preis G+B lt. Kaufvertrag“) angegeben werden. Der Betrag geht vor, das Gebäude erhält den Rest des Verkaufspreises, und die Verkaufskosten werden anteilig aufgeteilt. Der Status meldet unter anderem eine fehlende Aufteilung und eine zu kurze Vorbesitzzeit für § 6b.
 
-Kostenstellen, die zusammen verkauft werden, bilden ein **Verkaufspaket**. Dafür steht jede Kostenstelle in einer eigenen Zeile mit demselben Namen in der Spalte „Verkaufspaket“.
-- **Erste Zeile des Pakets:** Hier stehen Verkaufsjahr, § 6b, Neubau und reinvestieren. Optional kommen „Paketpreis gesamt“ und „Paketkosten gesamt“ dazu sowie Anteil oder Preis G+B laut Kaufvertrag für das ganze Paket.
-- **Weitere Zeilen:** Sie übernehmen diese Angaben (grau).
-- **Aufteilung:** Paketpreis und Paketkosten werden nach Verkehrswert auf die Zeilen verteilt. Ohne Paketpreis gilt je Zeile der fortgeschriebene Verkehrswert als Annahme.
-- **Steuer:** Gewinn, Vorbesitzzeit für § 6b, Rücklage und Reinvestition rechnet jede Kostenstelle für sich, wie bei getrennten Verkäufen.
-- **Status:** Er meldet Widersprüche, etwa ein abweichendes Verkaufsjahr in einer weiteren Zeile oder einen Paketpreis außerhalb der ersten Zeile.
+Kostenstellen, die zusammen zu einem Gesamtpreis verkauft werden, stehen als **Verkaufspaket** in einer Zeile. Die ObjektID ist die erste Kostenstelle, die übrigen kommen in die Spalte „weitere Kostenstellen“, getrennt durch Semikolon oder Komma (z. B. „KSt 4; KSt 5“).
+- **Was für das Paket gilt:** Verkaufspreis, Kosten und Preis bzw. Anteil G+B laut Kaufvertrag gelten für das ganze Paket.
+- **Was summiert wird:** Buchwert Gebäude, AK G+B und, für die Preis-Annahme, die Verkehrswerte aller Kostenstellen.
+- **Vorbesitzzeit:** Sie zählt ab dem spätesten Kaufjahr im Paket, also streng für § 6b.
+- **Prognose:** Alle Kostenstellen des Pakets enden mit dem Verkauf.
+- **Rücklage, Neuobjekt und Verkaufsergebnis:** Rücklage und Neuobjekt entstehen einmal für das Paket. Das Verkaufsergebnis erscheint im BWA-Blatt der ersten Kostenstelle.
 
 Das Blatt **Rücklagen** bildet bei § 6b ja und Status OK eine Rücklage aus den positiven Teilgewinnen, getrennt nach Gebäude und G+B. Die Frist beträgt vier Jahre, mit „§ 6b Neubau begonnen = ja“ sechs Jahre. Was bis zum Fristjahr nicht auf Neuobjekte übertragen ist, wird dort aufgelöst, mit 6 % Zuschlag je Jahr. Der Spiegel je Jahr zeigt Gewinne, Einstellung, Übertragung, Auflösung, Zuschlag, Bestand und den steuerwirksamen Betrag, der in Etappe 7 die Steuer ergibt.
 

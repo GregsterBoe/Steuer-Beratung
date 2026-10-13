@@ -170,10 +170,9 @@ def _validierung(ws, f, bereich: str, liste: str = None) -> None:
 
 def _farblogik(ws, spalte: str, erste: int, letzte: int, f, id_spalte: str = "A",
                verkauft: str = None, eingelesen: str = None, anlagen: str = None,
-               anlagen_fill=FILL_EINGELESEN, kst: str = None, grau: str = None) -> None:
+               anlagen_fill=FILL_EINGELESEN, kst: str = None) -> None:
     """Bedingte Formate einer Eingabespalte, in dieser Reihenfolge (erste Regel gewinnt):
-    rot Pflicht/Annahme fehlt, grau berechnet (Formel und Bedingung grau erfüllt),
-    grün aus dem Blatt Anlagen (anlagen_fill, orange = prüfen),
+    rot Pflicht/Annahme fehlt, grün aus dem Blatt Anlagen (anlagen_fill, orange = prüfen),
     grün verknüpft mit dem Kostenstellenblatt (kst = Zelle mit der Verknüpfung), orange davon
     abweichend, orange kritische Annahme, blau Annahme, grün eingelesen."""
     bereich = f"{spalte}{erste}:{spalte}{letzte}"
@@ -181,8 +180,6 @@ def _farblogik(ws, spalte: str, erste: int, letzte: int, f, id_spalte: str = "A"
     regeln = []
     if f.pflicht or (f.annahme and not f.leer_erlaubt):
         regeln.append((f'AND({id_}<>"",{z}="")', FILL_PFLICHT))
-    if grau:
-        regeln.append((f'AND({id_}<>"",{ISF}({z}),{grau})', FILL_BERECHNET))
     if anlagen:
         regeln.append((f'AND({id_}<>"",{ISF}({z}),{anlagen})', anlagen_fill))
     if kst:
@@ -199,12 +196,6 @@ def _farblogik(ws, spalte: str, erste: int, letzte: int, f, id_spalte: str = "A"
     for formel, fill in regeln:
         ws.conditional_formatting.add(
             bereich, FormulaRule(formula=[formel], fill=fill, stopIfTrue=True))
-
-
-def _grau(ws, spalte: str, erste: int, letzte: int, bedingung: str) -> None:
-    """Eingabespalte grau, solange die Bedingung gilt (berechnet statt eingegeben)."""
-    ws.conditional_formatting.add(f"{spalte}{erste}:{spalte}{letzte}", FormulaRule(
-        formula=[bedingung], fill=FILL_BERECHNET, stopIfTrue=True))
 
 
 def _ausgeschaltet_grau(ws, felder, erste: int, letzte: int, bis: str) -> None:
@@ -331,7 +322,7 @@ def _blatt_objekte(wb, modell: Modell) -> None:
         ws.column_dimensions[bst].width = f.breite
         _name(wb, f.name, f"Objekte!${bst}${erste}:${bst}${letzte}")
         _validierung(ws, f, f"{bst}{erste}:{bst}{letzte}")
-        _farblogik(ws, bst, erste, letzte, f, verkauft=f'COUNTIFS(vk_ID,$A{erste},vk_Aktiv,"<>nein")>0',
+        _farblogik(ws, bst, erste, letzte, f, verkauft=f"{formeln.verkauft(f'$A{erste}')}>0",
                    eingelesen=f"${import_spalte[f.key]}{erste}" if f.key in import_spalte
                    else None, anlagen=formeln.deckung_anlagen(f.key, erste),
                    anlagen_fill=FILL_KRITISCH if f.key in ANLAGEN_PRUEFEN else FILL_EINGELESEN,
@@ -699,7 +690,6 @@ def _blatt_verkaeufe(wb, modell: Modell) -> None:
     erste, letzte = 2, modell.kapazitaet.verkaeufe + 1
     spalten = VERKAUF_FELDER + VERKAUF_SPALTEN
     status_spalte = len(spalten) + 1
-    paket = formeln.vspalte("paket")
     st = get_column_letter(status_spalte)
     _kopf(ws, 1, [s.ueberschrift for s in spalten] + [STATUS_UEBERSCHRIFT])
     _kopf_felder(ws, 1, VERKAUF_FELDER)
@@ -718,19 +708,9 @@ def _blatt_verkaeufe(wb, modell: Modell) -> None:
         # Eingabehilfe: zwei Überprüfungen auf einer Zelle verwirft Excel beim Öffnen
         _validierung(ws, f, f"{bst}{erste}:{bst}{letzte}",
                      liste="obj_ID" if f.key == "objekt_id" else None)
-        # aus dem Paket übernommen oder anteilig verteilt: grau, vor den übrigen Regeln
-        z = f"{bst}{erste}"
-        if f.key in formeln.PAKET_ERBE:
-            _grau(ws, bst, erste, letzte,
-                  f'AND({ISF}({z}),{z}<>"",${paket}{erste}<>"",'
-                  f'COUNTIF(${paket}${erste - 1}:${paket}{erste - 1},${paket}{erste})>0)')
-        elif f.key == "kosten":
-            _grau(ws, bst, erste, letzte, f'AND({ISF}({z}),{z}<>"")')
         # Verkaufspreis als Annahme ist immer kritisch; § 6b und Reinvestition nur blau
         if f.annahme:
-            _farblogik(ws, bst, erste, letzte, f, grau=(
-                f'${paket}{erste}<>"",INDEX(vk_PaketPreis,MATCH(${paket}{erste},vk_Paket,0))<>""'
-                if f.key == "preis" else None))
+            _farblogik(ws, bst, erste, letzte, f)
         elif modell.schnellcheck and f.key in ("nutzung_6b", "reinvest"):
             _farblogik(ws, bst, erste, letzte, dataclasses.replace(f, annahme=True))
 
@@ -775,10 +755,9 @@ def _blatt_verkaeufe(wb, modell: Modell) -> None:
     ws[f"{hinweis}5"] = ("Verkauf aktiv = nein: Verkauf rechnet nicht mit (Zeile grau), das Objekt "
                          "wird weiter gehalten, die § 6b-Rücklage entfällt. Neuobjekte, die sie "
                          "als Quelle nennen, melden es im Status und übertragen nichts.")
-    ws[f"{hinweis}6"] = ("Verkaufspaket: zusammen verkaufte Kostenstellen je in einer Zeile mit "
-                         "demselben Paketnamen. Die erste Zeile trägt Jahr, Paketpreis und "
-                         "-kosten, die weiteren übernehmen sie (grau); Preis und Kosten werden "
-                         "nach Verkehrswert verteilt, Gewinn und § 6b je Kostenstelle.")
+    ws[f"{hinweis}6"] = ("Verkaufspaket: weitere Kostenstellen (z. B. KSt 4; KSt 5) werden mit der "
+                         "ObjektID zu Preis, Kosten und G+B der Zeile verkauft; Buchwert, AK G+B "
+                         "und Verkehrswert summiert, Vorbesitzzeit ab dem spätesten Kaufjahr.")
     ws.freeze_panes = "B2"
 
 

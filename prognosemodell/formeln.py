@@ -79,6 +79,12 @@ MINIFS = "_xlfn.MINIFS"        # Excel 2019+, LibreOffice ab 5.2
 VK_AKTIV = 'vk_Aktiv,"<>nein"'
 
 
+def verkauft(objekt_id: str) -> str:
+    """Anzahl aktiver Verkaufszeilen, die das Objekt verkaufen (ObjektID oder weitere
+    Kostenstellen); vk_Umfang ist die Liste ;ID;weitere; der Zeile."""
+    return f'COUNTIFS(vk_Umfang,"*;"&{objekt_id}&";*",{VK_AKTIV})'
+
+
 def _gefuellt(zellen: list) -> str:
     """Anzahl nicht leerer Zellen; zählt Formeln mit Ergebnis "" anders als COUNTA nicht mit."""
     return "+".join(f'({z}<>"")' for z in zellen)
@@ -263,7 +269,7 @@ def annahmen_objekt(zeile: int, nur_kritisch: bool = False) -> str:
 
     summe = "+".join(zaehlt(f) for f in felder)
     if nur_kritisch:
-        summe = f"IF(COUNTIFS(vk_ID,{id_},{VK_AKTIV})>0,{summe},0)"
+        summe = f"IF({verkauft(id_)}>0,{summe},0)"
     return f'=IF({id_}="","",{summe})'
 
 
@@ -410,7 +416,7 @@ def _erhaltung_bestand(zeile: int, objekt_nr: int) -> str:
 
 def _verkaufsjahr(zeile: int) -> str:
     """Verkaufsjahr laut Blatt Verkäufe (nur aktive Verkäufe); ohne Verkauf 9999, also nie."""
-    bedingung = f'vk_ID,{_p("id", zeile)},{VK_AKTIV},vk_Jahr,">0"'
+    bedingung = f'vk_Umfang,"*;"&{_p("id", zeile)}&";*",{VK_AKTIV},vk_Jahr,"<>"'
     return f"IF(COUNTIFS({bedingung})=0,9999,{MINIFS}(vk_Jahr,{bedingung}))"
 
 
@@ -634,64 +640,38 @@ def _v(key: str, zeile: int) -> str:
     return f"${vspalte(key)}{zeile}"
 
 
-VK_ERSTE = 2   # erste Datenzeile im Blatt Verkäufe
-# übernehmen in den weiteren Zeilen eines Verkaufspakets den Wert der ersten Zeile
-PAKET_ERBE = ("aktiv", "jahr", "nutzung_6b", "neubau_6b", "reinvest")
+def _umfang(zeile: int) -> str:
+    """;ObjektID;weitere; der Zeile: Komma wie Semikolon, Leerzeichen um die Trenner weg."""
+    id_, weitere = _v("objekt_id", zeile), _v("weitere_ids", zeile)
+    liste = f'SUBSTITUTE(TRIM({weitere}),",",";")'
+    for alt in ("; ", " ;", ";;"):
+        liste = f'SUBSTITUTE({liste},"{alt}",";")'
+    return f'=IF({id_}="","",";"&{id_}&";"&IF(TRIM({weitere})="","",{liste}&";"))'
 
 
-def _paket_folgezeile(zeile: int) -> str:
-    """Wahr, wenn die Zeile zu einem Paket gehört, das weiter oben beginnt."""
-    p, sp = _v("paket", zeile), vspalte("paket")
-    if zeile <= VK_ERSTE:
-        return "FALSE"
-    return f'AND({p}<>"",COUNTIF(${sp}${VK_ERSTE}:${sp}{zeile - 1},{p})>0)'
+def _im_paket(bereich: str, zeile: int) -> str:
+    """Wahrheitswerte je Zelle von bereich (ObjektIDs): gehört zum Verkauf der Zeile."""
+    return f'ISNUMBER(SEARCH(";"&{bereich}&";",{_v("umfang", zeile)}))'
 
 
-def _paket_kopf(name: str, zeile: int) -> str:
-    """Wert der ersten Zeile des Pakets (Spalte ohne Formeln, ganzer Bereich)."""
-    return f"INDEX({name},MATCH({_v('paket', zeile)},vk_Paket,0))"
+def _paket_summe(name: str, zeile: int) -> str:
+    """Summe einer Objektspalte über ObjektID und weitere Kostenstellen der Zeile."""
+    return f"SUMPRODUCT(SUMIFS({name},obj_ID,obj_ID)*{_im_paket('obj_ID', zeile)})"
 
 
-def _paket_anteil(zeile: int) -> str:
-    """Verkehrswertanteil der Zeile an den aktiven Zeilen ihres Pakets."""
-    vw = "SUMIFS(obj_Verkehrswert,obj_ID,{})"
-    summe = (f'SUMPRODUCT({vw.format("vk_ID")}*(vk_Paket={_v("paket", zeile)})'
-             f'*(vk_Aktiv<>"nein"))')
-    return f"{vw.format(_v('objekt_id', zeile))}/{summe}"
-
-
-def _paket_mit(name: str, zeile: int) -> str:
-    """Wahr, wenn die Zeile in einem Paket steht, dessen erste Zeile name gesetzt hat."""
-    return f'AND({_v("paket", zeile)}<>"",IFERROR({_paket_kopf(name, zeile)}<>"",FALSE))'
-
-
-def paket_formel(key: str, zeile: int, sonst: str = '""'):
-    """Formel einer Verkaufseingabe nur aus dem Paket (ohne Annahme); sonst außerhalb.
-
-    Die weiteren Zeilen lesen die erste nur aus den Zeilen darüber, so bleibt die
-    Spalte frei von Zirkelbezügen.
-    """
-    id_ = _v("objekt_id", zeile)
-    if key in PAKET_ERBE:
-        if zeile <= VK_ERSTE:
-            return None if sonst == '""' else f'=IF({id_}="","",{sonst})'
-        sp, pp = vspalte(key), vspalte("paket")
-        oben = (f"INDEX(${sp}${VK_ERSTE}:${sp}{zeile - 1},"
-                f"MATCH({_v('paket', zeile)},${pp}${VK_ERSTE}:${pp}{zeile - 1},0))")
-        return f'=IF({id_}="","",IF({_paket_folgezeile(zeile)},IF({oben}="","",{oben}),{sonst}))'
-    if key == "preis":
-        return (f'=IF(OR({id_}="",{_v("jahr", zeile)}=""),"",IFERROR(IF('
-                f'{_paket_mit("vk_PaketPreis", zeile)},'
-                f'{_paket_kopf("vk_PaketPreis", zeile)}*{_paket_anteil(zeile)},""),""))')
-    if key == "kosten":
-        return (f'=IF({id_}="","",IFERROR(IF({_paket_mit("vk_PaketKosten", zeile)},'
-                f'{_paket_kopf("vk_PaketKosten", zeile)}*{_paket_anteil(zeile)},""),""))')
-    return None
+def _mit_weiteren(zeile: int, einzeln: str, paket: str) -> str:
+    """Ohne weitere Kostenstellen die Formel für ein Objekt, sonst die Paketformel."""
+    return f'IF(TRIM({_v("weitere_ids", zeile)})="",{einzeln},{paket})'
 
 
 def verkauf_zeile(zeile: int) -> dict:
-    """Formeln der berechneten Verkaufsspalten; leer ohne ObjektID oder bei unbekannter ID."""
+    """Formeln der berechneten Verkaufsspalten; leer ohne ObjektID oder bei unbekannter ID.
+
+    Mit weiteren Kostenstellen rechnet die Zeile das Paket als ein Verkauf: Buchwert, AK G+B
+    und Verkehrswert summiert, Vorbesitzzeit ab dem spätesten Kaufjahr (strengste Kostenstelle).
+    """
     id_ = _v("objekt_id", zeile)
+    im = _im_paket("obj_ID", zeile)
 
     def obj(name):
         return f"INDEX({name},MATCH({id_},obj_ID,0))"
@@ -700,27 +680,27 @@ def verkauf_zeile(zeile: int) -> dict:
         return f'=IF(OR({id_}="",COUNTIF(obj_ID,{id_})=0),"",{ausdruck})'
 
     quote_vertrag, betrag_gub = _v("anteil_gub", zeile), _v("gub_betrag", zeile)
-    quote_vw = f'IF({obj("obj_VKQuoteGeb")}="","",1-{obj("obj_VKQuoteGeb")})'
-    paket = _v("paket", zeile)
-    paket_preis = f'SUMIFS(vk_Preis,vk_Paket,{paket},{VK_AKTIV})'
-
-    def kopf(name):
-        return _paket_kopf(name, zeile)
-
+    jahr = _v("jahr", zeile)
+    quote_geb = _mit_weiteren(
+        zeile, obj("obj_VKQuoteGeb"),
+        # Gebäudeanteil nach Verkehrswert gewichtet; fehlt er bei einer Kostenstelle, leer
+        f'IFERROR(IF(SUMPRODUCT({im}*(obj_VKQuoteGeb=""))>0,"",'
+        f'SUMPRODUCT(SUMIFS(obj_Verkehrswert,obj_ID,obj_ID)*SUMIFS(obj_VKQuoteGeb,obj_ID,obj_ID)'
+        f'*{im})/{_paket_summe("obj_Verkehrswert", zeile)}),"")')
     return {
-        "vorbesitz": wenn(f"{_v('jahr', zeile)}-{obj('obj_Kaufjahr')}"),
-        "buchwert_geb": wenn(f"SUMIFS(prg_BuchwertObj,prg_IDObj,{id_},prg_JahrObj,{_v('jahr', zeile)})"),
-        "ak_gub": wenn(obj("obj_AKGuB")),
+        "umfang": _umfang(zeile),
+        "vorbesitz": wenn(f"{jahr}-" + _mit_weiteren(
+            zeile, obj("obj_Kaufjahr"), f'SUMPRODUCT(MAX({im}*("0"&obj_Kaufjahr)))')),
+        "buchwert_geb": wenn(_mit_weiteren(
+            zeile, f"SUMIFS(prg_BuchwertObj,prg_IDObj,{id_},prg_JahrObj,{jahr})",
+            f"SUMPRODUCT(SUMIFS(prg_BuchwertObj,prg_IDObj,obj_ID,prg_JahrObj,{jahr})*{im})")),
+        "ak_gub": wenn(_mit_weiteren(zeile, obj("obj_AKGuB"), _paket_summe("obj_AKGuB", zeile))),
         "nettoerloes": wenn(f"N({_v('preis', zeile)})-N({_v('kosten', zeile)})"),
-        # Kaufvertrag vor Verkehrswert; ohne beides leer, der Status meldet es. Im Paket
-        # gelten Anteil und Preis G+B der ersten Zeile, der Preis für das ganze Paket
-        "quote_gub": wenn(f'IF({paket}="",IF({betrag_gub}<>"",IF(N({_v("preis", zeile)})>0,'
+        # Kaufvertrag vor Verkehrswert; ohne beides leer, der Status meldet es
+        "quote_gub": wenn(f'IF({betrag_gub}<>"",IF(N({_v("preis", zeile)})>0,'
                           f'{betrag_gub}/{_v("preis", zeile)},""),'
-                          f'IF({quote_vertrag}<>"",{quote_vertrag},{quote_vw})),'
-                          f'IF({kopf("vk_GuBBetrag")}<>"",IF({paket_preis}>0,'
-                          f'{kopf("vk_GuBBetrag")}/{paket_preis},""),'
-                          f'IF({kopf("vk_AnteilGuBVertrag")}<>"",{kopf("vk_AnteilGuBVertrag")},'
-                          f'{quote_vw})))'),
+                          f'IF({quote_vertrag}<>"",{quote_vertrag},'
+                          f'IF({quote_geb}="","",1-{quote_geb})))'),
         "erloes_gub": wenn(f'IF({_v("quote_gub", zeile)}="","",'
                            f'{_v("nettoerloes", zeile)}*{_v("quote_gub", zeile)})'),
         "erloes_geb": wenn(f'IF({_v("quote_gub", zeile)}="","",'
@@ -738,22 +718,16 @@ def verkauf_zeile(zeile: int) -> dict:
 def status_verkauf(zeile: int) -> str:
     """Plausibilitätsstatus je Verkaufszeile; leer, solange keine ObjektID steht."""
     id_, jahr = _v("objekt_id", zeile), _v("jahr", zeile)
-    paket, folge = _v("paket", zeile), _paket_folgezeile(zeile)
-    pp, pk = _v("paket_preis", zeile), _v("paket_kosten", zeile)
+    im, umfang = _im_paket("obj_ID", zeile), _v("umfang", zeile)
+    # Einträge in ;ID;weitere; gegen die gefundenen Objekte
+    eintraege = f'(LEN({umfang})-LEN(SUBSTITUTE({umfang},";",""))-1)'
+    gefunden = f"SUMPRODUCT(--{im})"
     return (
         f'=IF({id_}="","",'
         f'IF({_v("aktiv", zeile)}="nein","{STATUS_AUS}",'
         f'IF(COUNTIF(obj_ID,{id_})=0,"ObjektID unbekannt",'
-        f'IF(COUNTIFS(vk_ID,{id_},{VK_AKTIV})>1,"Objekt mehrfach verkauft",'
-        f'IF(AND({paket}="",OR({pp}<>"",{pk}<>"")),"Paketpreis oder -kosten ohne Verkaufspaket",'
-        f'IF(AND({folge},OR({pp}<>"",{pk}<>"",{_v("anteil_gub", zeile)}<>"",'
-        f'{_v("gub_betrag", zeile)}<>"")),'
-        f'"Paket: Paketpreis, -kosten und G+B nur in der ersten Zeile",'
-        f'IF(AND({folge},IFERROR({jahr}<>{_paket_kopf("vk_Jahr", zeile)},FALSE)),'
-        f'"Paket: Verkaufsjahr weicht von der ersten Zeile ab",'
-        f'IF(OR(AND({_paket_mit("vk_PaketPreis", zeile)},NOT({ISFORMEL}({_v("preis", zeile)}))),'
-        f'AND({_paket_mit("vk_PaketKosten", zeile)},NOT({ISFORMEL}({_v("kosten", zeile)})))),'
-        f'"Paket: Preis oder Kosten getippt, obwohl Paketpreis bzw. -kosten gesetzt",'
+        f'IF({eintraege}>{gefunden},"Kostenstelle unbekannt: weitere Kostenstellen prüfen",'
+        f'IF(SUMPRODUCT({im}*({verkauft("obj_ID")}>1))>0,"Objekt mehrfach verkauft",'
         f'IF({jahr}="","Verkaufsjahr fehlt",'
         f'IF(OR({jahr}<par_Startjahr,{jahr}>par_Endjahr),"Verkaufsjahr außerhalb Raster",'
         f'IF({_v("preis", zeile)}="","Verkaufspreis fehlt",'
@@ -761,7 +735,7 @@ def status_verkauf(zeile: int) -> str:
         f'IF({_v("quote_gub", zeile)}>1,"Preis G+B über Verkaufspreis",'
         f'IF(AND({_v("nutzung_6b", zeile)}="ja",{_v("vorbesitz", zeile)}<par_6bVorbesitz),'
         f'"{STATUS_6B_UNZULAESSIG}",'
-        f'"{STATUS_OK}"))))))))))))))'
+        f'"{STATUS_OK}")))))))))))'
     )
 
 
@@ -1348,10 +1322,8 @@ def pruefung_anzahl() -> dict:
     # Restbetrag über einen halben Cent, damit Rundung nicht anschlägt
     rest = '(rl_ID<>"")*(rl_Aufloesung>0.005)'
     gueltig = f'((vk_Status="{STATUS_OK}")+(vk_Status="{STATUS_6B_UNZULAESSIG}"))'
-    # "0"&: leere Paketformeln ("") rechnen als 0 statt #WERT!
     im_fenster = "+".join(
-        f'COUNTIFS(vk_Jahr,">"&(("0"&vk_Jahr)-par_DOJahre),vk_Jahr,"<="&vk_Jahr,'
-        f'vk_Status,"{st}")'
+        f'COUNTIFS(vk_Jahr,">"&(vk_Jahr-par_DOJahre),vk_Jahr,"<="&vk_Jahr,vk_Status,"{st}")'
         for st in (STATUS_OK, STATUS_6B_UNZULAESSIG))
     return {
         "objekte": _nicht_ok("obj_Status"),
@@ -1384,7 +1356,7 @@ def pruefung_anzahl() -> dict:
         "anlagen_afa": '=COUNTIF(obj_AnlDiff,">1")+COUNTIF(obj_AnlDiff,"<-1")',
         "restschuld": '=COUNTIF(dl_Getilgt,"nach*")',
         "zins_verkauf": ('=SUMPRODUCT((obj_ID<>"")*(obj_ZinsBasis>0)*NOT(obj_Restschuld>0)'
-                         f'*(COUNTIFS(vk_ID,obj_ID,{VK_AKTIV})>0))'),
+                         f'*({verkauft("obj_ID")}>0))'),
         "zins_grob": '=SUMPRODUCT((obj_ID<>"")*(obj_ZinsBasis>0)*NOT(obj_Restschuld>0))',
     }
 
@@ -1414,23 +1386,20 @@ def annahme_verkauf(key: str, zeile: int, schnellcheck: bool):
         return (f'=IF({id_}="","",IFERROR(IF({blatt}<>"",{kst},'
                 f'INDEX(obj_Name,{nr})&""),""))')
     if key == "preis":
-        wert = f"INDEX(obj_Verkehrswert,MATCH({id_},obj_ID,0))*(1+par_Wertsteig)^({jahr}-par_Basisjahr)"
-        # im Paket mit Paketpreis dessen Anteil nach Verkehrswert
-        anteil = f'{_paket_kopf("vk_PaketPreis", zeile)}*{_paket_anteil(zeile)}'
-        return (f'=IF(OR({id_}="",{jahr}=""),"",IFERROR(IF({_paket_mit("vk_PaketPreis", zeile)},'
-                f'{anteil},{wert}),""))')
-    if key in PAKET_ERBE:
-        annahme = schnellcheck and key in ("nutzung_6b", "reinvest")
-        return paket_formel(key, zeile, '"ja"' if annahme else '""')
-    return paket_formel(key, zeile)
+        wert = (_mit_weiteren(zeile, f"INDEX(obj_Verkehrswert,MATCH({id_},obj_ID,0))",
+                              _paket_summe("obj_Verkehrswert", zeile))
+                + f"*(1+par_Wertsteig)^({jahr}-par_Basisjahr)")
+        return f'=IF(OR({id_}="",{jahr}=""),"",IFERROR({wert},""))'
+    if schnellcheck and key in ("nutzung_6b", "reinvest"):
+        return f'=IF({id_}="","","ja")'
+    return None
 
 
 def preis_annahme(zeile: int) -> str:
     """1, solange der Verkaufspreis eine Annahme ist (Formel statt Eingabe)."""
     id_ = _v("objekt_id", zeile)
-    preis = _v("preis", zeile)
-    return (f'=IF({id_}="","",IF(AND({_v("aktiv", zeile)}<>"nein",{ISFORMEL}({preis}),'
-            f'{preis}<>"",NOT({_paket_mit("vk_PaketPreis", zeile)})),1,0))')
+    return (f'=IF({id_}="","",IF(AND({_v("aktiv", zeile)}<>"nein",'
+            f'{ISFORMEL}({_v("preis", zeile)})),1,0))')
 
 
 def annahme_neu(key: str, zeile: int):

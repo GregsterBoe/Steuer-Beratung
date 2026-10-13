@@ -516,7 +516,7 @@ def _blatt_bwa_objekte(ex, wb, spalten: list) -> None:
 
 # --- Blatt Verkauf und Kauf ---
 
-VERKAUF_SPALTEN = [("ObjektID", "vk_ID", None), ("Verkaufspaket", "vk_Paket", None),
+VERKAUF_SPALTEN = [("ObjektID", "vk_ID", None), ("weitere Kostenstellen", "vk_Weitere", None),
                    ("Verkauf aktiv", "vk_Aktiv", None),
                    ("Verkaufsjahr", "vk_Jahr", "0"), ("Verkaufspreis", "vk_Preis", FMT_BETRAG),
                    ("Verkaufskosten", "vk_Kosten", FMT_BETRAG),
