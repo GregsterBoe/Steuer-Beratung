@@ -131,16 +131,20 @@ SPALTEN = {
     "obj_AnlAfA": "Summe AfA Basisjahr der abnutzbaren Anlagen dieses Objekts.",
     "obj_AnlDiff": "AfA lt. Anlagen − AfA lt. Buchhaltung; über 1 € meldet die Prüfung.",
     # Verkäufe
-    "vk_Vorbesitz": "Verkaufsjahr − Kaufjahr (Blatt Objekte). Unter der Mindest-Vorbesitzzeit "
+    "vk_Umfang": "ObjektID und weitere Kostenstellen der Zeile als ;KSt 1;KSt 4; – alle "
+                 "Kostenstellen, die mit diesem Verkauf enden (Prognose, Prüfungen).",
+    "vk_Vorbesitz": "Verkaufsjahr − Kaufjahr (Blatt Objekte); mit weiteren Kostenstellen ab "
+                    "dem spätesten Kaufjahr. Unter der Mindest-Vorbesitzzeit "
                     "(Parameter) ist § 6b nicht möglich.",
     "vk_BuchwertGeb": "Buchwert Gebäude am Ende des Verkaufsjahrs aus dem Blatt Prognose (nach "
-                      "der AfA des Verkaufsjahrs).",
-    "vk_AKGuB": "AK G+B aus dem Blatt Objekte = Buchwert G+B (keine AfA).",
+                      "der AfA des Verkaufsjahrs); mit weiteren Kostenstellen deren Summe.",
+    "vk_AKGuB": "AK G+B aus dem Blatt Objekte = Buchwert G+B (keine AfA); mit weiteren "
+                "Kostenstellen deren Summe.",
     "vk_Nettoerloes": "Verkaufspreis − Verkaufskosten.",
     "vk_AnteilGuB": "Preis G+B lt. Kaufvertrag / Verkaufspreis, sonst Anteil G+B lt. "
                     "Kaufvertrag, sonst 1 − Verkehrswertanteil Gebäude aus dem Blatt Objekte. "
-                    "Im Verkaufspaket: Preis G+B der ersten Zeile / Summe der Verkaufspreise des "
-                    "Pakets, sonst deren Anteil G+B, sonst der Verkehrswertanteil der Zeile.",
+                    "Mit weiteren Kostenstellen ist der Verkehrswertanteil Gebäude nach "
+                    "Verkehrswert gewichtet.",
     "vk_ErloesGeb": "Nettoerlös − Erlösanteil G+B.",
     "vk_ErloesGuB": "Nettoerlös × Anteil G+B verwendet.",
     "vk_GewinnGeb": "Erlösanteil Gebäude − Buchwert Gebäude Ende Verkaufsjahr. Positiv: "
@@ -149,8 +153,7 @@ SPALTEN = {
     "vk_Gewinn": "Gewinn Gebäude + Gewinn G+B. Ohne § 6b sofort steuerpflichtig im "
                  "Verkaufsjahr; mit § 6b gehen die positiven Teile in die Rücklage.",
     "vk_Status": "OK oder der erste Fehler (ObjektID unbekannt, doppelt verkauft, Jahr "
-                 "fehlt/außerhalb, Preis fehlt, Aufteilung fehlt, Verkaufspaket "
-                 "widersprüchlich). „§ 6b unzulässig“: die Zeile "
+                 "fehlt/außerhalb, Preis fehlt, Aufteilung fehlt). „§ 6b unzulässig“: die Zeile "
                  "rechnet, der Gewinn wird aber sofort versteuert. Andere Fehler: die Zeile "
                  "rechnet nicht mit. „ausgeschaltet“ (Verkauf aktiv = nein): rechnet nicht mit, "
                  "kein Fehler; zählt bei „mehrfach verkauft“ nicht.",

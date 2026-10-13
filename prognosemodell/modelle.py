@@ -423,14 +423,13 @@ VERKAUF_FELDER = [
     Feld("bezeichnung", "Bezeichnung", "vk_Bez", FMT_TEXT, False, 22, berechnet=True,
          hinweis="aus dem Kostenstellenblatt der ObjektID (Bezeichnung kurz, Zelle C2), ohne "
                  "Kostenstellenblatt der Objektname aus dem Blatt Objekte"),
-    # Zeilen mit demselben Paket werden zusammen verkauft; die erste Zeile ist die Kopfzeile
-    Feld("paket", "Verkaufspaket", "vk_Paket", FMT_TEXT, False, 14,
-         hinweis="Name für Kostenstellen, die zusammen verkauft werden: je Kostenstelle eine "
-                 "Zeile mit demselben Namen. Die weiteren Zeilen übernehmen Verkauf aktiv, "
-                 "Verkaufsjahr, § 6b, Neubau und reinvestieren aus der ersten (grau); Anteil "
-                 "oder Preis G+B, Paketpreis und Paketkosten der ersten Zeile gelten für das "
-                 "ganze Paket. Gewinn, Vorbesitzzeit und Rücklage je Kostenstelle. "
-                 "Leer = Einzelverkauf"),
+    # Verkaufspaket in einer Zeile: Preis, Kosten und G+B gelten für alle Kostenstellen
+    Feld("weitere_ids", "weitere Kostenstellen", "vk_Weitere", FMT_TEXT, False, 20,
+         hinweis="Kostenstellen, die mit der ObjektID zusammen verkauft werden, getrennt durch "
+                 "Semikolon oder Komma, z. B. KSt 4; KSt 5. Verkaufspreis, Kosten und Preis G+B "
+                 "gelten dann für das ganze Paket; Buchwert, AK G+B und Verkehrswert werden "
+                 "summiert, die Vorbesitzzeit zählt ab dem spätesten Kaufjahr. Leer = nur die "
+                 "ObjektID"),
     # nein = Verkauf rechnet nicht mit (wie nicht erfasst), bleibt aber stehen; leer = ja
     Feld("aktiv", "Verkauf aktiv", "vk_Aktiv", FMT_TEXT, False, 9, auswahl=("ja", "nein"),
          hinweis="nein: der Verkauf rechnet nicht mit, das Objekt wird weiter gehalten; keine "
@@ -443,18 +442,11 @@ VERKAUF_FELDER = [
     Feld("preis", "Verkaufspreis", "vk_Preis", FMT_EURO, True, minimum=0, annahme=True,
          kritisch=True, hinweis="Bruttopreis ohne Abzug der Kosten. Leer: Verkehrswert, "
                                 "fortgeschrieben bis zum Verkaufsjahr (orange: bestimmt den "
-                                "Gewinn, möglichst echten Wert eintragen)"),
+                                "Gewinn, möglichst echten Wert eintragen). Mit weiteren "
+                                "Kostenstellen: Gesamtpreis, die Annahme summiert deren "
+                                "Verkehrswerte"),
     Feld("kosten", "Verkaufskosten", "vk_Kosten", FMT_EURO, False, minimum=0,
-         hinweis="Makler, Notar, Vorfälligkeit u. Ä.; mindern Nettoerlös und Gewinn. Leer = 0. "
-                 "Im Paket mit Paketkosten: Anteil nach Verkehrswert (grau)"),
-    # nur in der ersten Zeile eines Pakets; verteilt nach Verkehrswert auf die Paketzeilen
-    Feld("paket_preis", "Paketpreis gesamt", "vk_PaketPreis", FMT_EURO, False, minimum=0,
-         hinweis="nur in der ersten Zeile eines Verkaufspakets: Gesamtpreis für alle "
-                 "Kostenstellen des Pakets, verteilt nach Verkehrswert auf die Zeilen (Spalte "
-                 "Verkaufspreis, grau). Leer: Verkaufspreis je Zeile wie ohne Paket"),
-    Feld("paket_kosten", "Paketkosten gesamt", "vk_PaketKosten", FMT_EURO, False, minimum=0,
-         hinweis="nur in der ersten Zeile eines Verkaufspakets: Verkaufskosten für das ganze "
-                 "Paket, verteilt nach Verkehrswert auf die Zeilen (Spalte Verkaufskosten)"),
+         hinweis="Makler, Notar, Vorfälligkeit u. Ä.; mindern Nettoerlös und Gewinn. Leer = 0"),
     Feld("anteil_gub", "Anteil G+B lt. Kaufvertrag", "vk_AnteilGuBVertrag", FMT_PROZENT, False,
          minimum=0, maximum=1,
          hinweis="Anteil Grund und Boden am Preis, teilt Erlös und Gewinn auf Gebäude und G+B. "
@@ -479,6 +471,7 @@ VERKAUF_FELDER = [
                  "derselben Zeile des Blatts Neuobjekte (blau, überschreibbar). Leer = nein"),
 ]
 VERKAUF_SPALTEN = [
+    Spalte("umfang", "Kostenstellen im Verkauf", "vk_Umfang", FMT_TEXT, 18),
     Spalte("vorbesitz", "Vorbesitzzeit Jahre", "vk_Vorbesitz", FMT_ZAHL, 11),
     Spalte("buchwert_geb", "Buchwert Gebäude Ende Verkaufsjahr", "vk_BuchwertGeb", FMT_EURO, 16),
     Spalte("ak_gub", "AK G+B", "vk_AKGuB", FMT_EURO),
@@ -892,9 +885,7 @@ class Verkauf:
     neubau_6b: Optional[str] = None      # ja = Frist par_6bFristNeubau statt par_6bFrist
     reinvest: Optional[str] = None       # ja = Neuobjekt aus den Annahmen
     aktiv: Optional[str] = None          # "nein" schaltet den Verkauf aus; leer = ja
-    paket: Optional[str] = None          # gleicher Name = zusammen verkauft
-    paket_preis: Optional[float] = None  # nur erste Paketzeile: Gesamtpreis
-    paket_kosten: Optional[float] = None  # nur erste Paketzeile: Gesamtkosten
+    weitere_ids: Optional[str] = None    # mitverkaufte Kostenstellen, z. B. "KSt 4; KSt 5"
 
 
 @dataclass
