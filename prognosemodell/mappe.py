@@ -114,6 +114,10 @@ def _kopf_felder(ws, zeile: int, felder, start: int = 1) -> None:
     """Kopf der Eingabefelder: Pflichtfelder rot mit *, Tooltip je Feld."""
     for i, f in enumerate(felder, start=start):
         c = ws.cell(row=zeile, column=i)
+        if f.berechnet:
+            c.fill = FILL_KOPF_BERECHNET
+            _tooltip(c, "Berechnet: " + f.hinweis)
+            continue
         if f.pflicht:
             c.value = f"{f.ueberschrift} *"
             c.fill = FILL_KOPF_PFLICHT
@@ -174,7 +178,7 @@ def _farblogik(ws, spalte: str, erste: int, letzte: int, f, id_spalte: str = "A"
     bereich = f"{spalte}{erste}:{spalte}{letzte}"
     z, id_ = f"{spalte}{erste}", f"${id_spalte}{erste}"
     regeln = []
-    if f.pflicht or f.annahme:
+    if f.pflicht or (f.annahme and not f.leer_erlaubt):
         regeln.append((f'AND({id_}<>"",{z}="")', FILL_PFLICHT))
     if anlagen:
         regeln.append((f'AND({id_}<>"",{ISF}({z}),{anlagen})', anlagen_fill))
@@ -185,7 +189,8 @@ def _farblogik(ws, spalte: str, erste: int, letzte: int, f, id_spalte: str = "A"
         bedingung = f",{verkauft}" if verkauft else ""
         regeln.append((f'AND({id_}<>"",{ISF}({z}){bedingung})', FILL_KRITISCH))
     if f.annahme:
-        regeln.append((f'AND({id_}<>"",{ISF}({z}))', FILL_ANNAHME))
+        leer = f',{z}<>""' if f.leer_erlaubt else ""
+        regeln.append((f'AND({id_}<>"",{ISF}({z}){leer})', FILL_ANNAHME))
     if eingelesen:
         regeln.append((f'AND({id_}<>"",{z}<>"",{z}={eingelesen})', FILL_EINGELESEN))
     for formel, fill in regeln:
@@ -719,7 +724,7 @@ def _blatt_verkaeufe(wb, modell: Modell) -> None:
             c = ws.cell(row=zeile, column=i,
                         value=formeln.annahme_verkauf(f.key, zeile, modell.schnellcheck))
             c.number_format = f.format
-            c.fill = FILL_EINGABE
+            c.fill = FILL_BERECHNET if f.berechnet else FILL_EINGABE
         c = ws.cell(row=zeile, column=status_spalte + 1, value=formeln.preis_annahme(zeile))
         c.fill = FILL_BERECHNET
         rechnung = formeln.verkauf_zeile(zeile)
@@ -734,7 +739,7 @@ def _blatt_verkaeufe(wb, modell: Modell) -> None:
 
     for zeile, vk in enumerate(modell.verkaeufe, start=erste):
         for i, f in enumerate(VERKAUF_FELDER, start=1):
-            wert = getattr(vk, f.key)
+            wert = getattr(vk, f.key, None)
             if wert is not None:
                 ws.cell(row=zeile, column=i, value=wert)
 

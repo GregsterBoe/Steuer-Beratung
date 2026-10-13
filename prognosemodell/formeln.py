@@ -188,10 +188,11 @@ def annahme_objekt(key: str, zeile: int):
         # die AfA der Buchhaltung läuft weiter, auch 0; ohne sie AK Gebäude × AfA-Satz
         "afa_jahr": (f"IF({c('afa_bwa')}<>\"\",{n('afa_bwa')},"
                      f"{n('ak_gebaeude')}*{n('afa_satz')})"),
-        "baujahr": "par_Basisjahr-par_AnnGebaeudealter",
+        # keine Annahme: nur aus dem Blatt Anlagen, sonst leer
+        "baujahr": '""',
         # fällig bei Erreichen des Alters, bei schon älteren Gebäuden nach dem Vorlauf;
-        # jenseits des Rasters keine (0)
-        "san_jahr": (f"IF(par_SanQuote=0,0,IF(MAX(par_Startjahr+par_SanVorlauf,{n('baujahr')}"
+        # ohne Baujahr oder jenseits des Rasters keine (0)
+        "san_jahr": (f"IF(OR(par_SanQuote=0,{n('baujahr')}=0),0,IF(MAX(par_Startjahr+par_SanVorlauf,{n('baujahr')}"
                      f"+par_SanAlter)>par_Endjahr,0,MAX(par_Startjahr+par_SanVorlauf,"
                      f"{n('baujahr')}+par_SanAlter)))"),
         "san_betrag": (f"IF({n('san_jahr')}=0,0,{n('verkehrswert')}*{n('vk_quote_gebaeude')}"
@@ -229,7 +230,8 @@ def status_objekt(zeile: int) -> str:
     """Plausibilitätsstatus je Objektzeile; leer, solange keine ObjektID steht."""
     id_ = f"${spalte('objekt_id')}{zeile}"
     pflicht = [f"${spalte(f.key)}{zeile}" for f in OBJEKT_FELDER if f.pflicht]
-    annahmen = [f"${spalte(f.key)}{zeile}" for f in OBJEKT_FELDER if f.annahme]
+    annahmen = [f"${spalte(f.key)}{zeile}" for f in OBJEKT_FELDER
+                if f.annahme and not f.leer_erlaubt]
     kaufjahr = f"${spalte('kaufjahr')}{zeile}"
     restbw = f"${spalte('restbuchwert')}{zeile}"
     ak_geb = f"${spalte('ak_gebaeude')}{zeile}"
@@ -255,6 +257,8 @@ def annahmen_objekt(zeile: int, nur_kritisch: bool = False) -> str:
         deckung = deckung_anlagen(f.key, zeile) or aus_kostenstelle(f.key, zeile)
         if f.key in DARLEHEN_ANNAHMEN:   # ohne Restschuld kein Darlehen, keine Annahme
             return f"{formel}*(N(${spalte('restschuld')}{zeile})>0)"
+        if f.leer_erlaubt:               # leer ist keine Annahme
+            formel = f'{formel}*(${spalte(f.key)}{zeile}<>"")'
         return f"{formel}*NOT({deckung})" if deckung else formel
 
     summe = "+".join(zaehlt(f) for f in felder)
@@ -393,8 +397,10 @@ def _erhaltung_bestand(zeile: int, objekt_nr: int) -> str:
     def stamm(name):
         return f"N({_stamm(name, objekt_nr)})"
 
+    # ohne Baujahr keine Alterung
     def ueber(jahr):
-        return f"MAX({jahr}-{stamm('obj_Baujahr')}-par_ErhAlterungAb,0)"
+        return (f"IF({stamm('obj_Baujahr')}=0,0,"
+                f"MAX({jahr}-{stamm('obj_Baujahr')}-par_ErhAlterungAb,0))")
 
     index = f"(1+par_Erhaltsteig)^({t}-par_Basisjahr)"
     alterung = f"(1+par_ErhAlterung)^({ueber(t)}-{ueber('par_Basisjahr')})"
@@ -1321,6 +1327,13 @@ def pruefung_summen() -> dict:
 def annahme_verkauf(key: str, zeile: int, schnellcheck: bool):
     """Annahmeformel einer Verkaufszeile; § 6b und Reinvestition nur im Schnellcheck."""
     id_, jahr = _v("objekt_id", zeile), _v("jahr", zeile)
+    if key == "bezeichnung":
+        # C2 des Kostenstellenblatts (Bezeichnung kurz), ohne Blatt der Objektname
+        nr = f"MATCH({id_},obj_ID,0)"
+        blatt = f"INDEX(obj_KStBlatt,{nr})"
+        kst = f"INDIRECT(\"'\"&SUBSTITUTE({blatt},\"'\",\"''\")&\"'!C2\")&\"\""
+        return (f'=IF({id_}="","",IFERROR(IF({blatt}<>"",{kst},'
+                f'INDEX(obj_Name,{nr})&""),""))')
     if key == "preis":
         wert = f"INDEX(obj_Verkehrswert,MATCH({id_},obj_ID,0))*(1+par_Wertsteig)^({jahr}-par_Basisjahr)"
         return f'=IF(OR({id_}="",{jahr}=""),"",IFERROR({wert},""))'
