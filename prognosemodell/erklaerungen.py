@@ -48,6 +48,15 @@ PARAMETER_WIRKUNG = {
                       "Restbuchwert. ja: Wechsel zur linearen AfA (Restbuchwert / "
                       "Restnutzungsdauer, Nutzungsdauer = 1 / AfA-Satz), sobald diese höher ist; "
                       "bei AfA-Satz ≥ degressivem Satz ist das von Anfang an so.",
+    "par_QNGSatz": "Neuobjekte mit „Sonder-AfA § 7b (QNG)“ = ja: Sonder-AfA je Jahr = "
+                   "Bemessungsgrundlage § 7b × Satz, fest und zusätzlich zur regulären AfA. "
+                   "Wird vor der regulären AfA gezogen und mindert deren Restbuchwert.",
+    "par_QNGJahre": "Begünstigungszeitraum: Kaufjahr und Folgejahre. Danach nur noch die "
+                    "reguläre AfA, linear vom Restwert × AfA-Satz (§ 7a Abs. 9 EStG).",
+    "par_QNGHoechstQm": "Nur Neuobjekte mit Fläche: Bemessungsgrundlage § 7b höchstens Fläche × "
+                        "Betrag.",
+    "par_QNGObergrenzeQm": "Nur Neuobjekte mit Fläche: AK Gebäude / Fläche darüber → keine "
+                           "Sonder-AfA, Status meldet es.",
     "par_Alternativrendite": "Zinsertrag je Jahr = Liquidität am Vorjahresende × Satz, voll "
                              "steuerpflichtig; negative Liquidität kostet denselben Satz. "
                              "Entscheidet den Vergleich A gegen B (Immobilie oder Geldanlage).",
@@ -61,6 +70,10 @@ PARAMETER_WIRKUNG = {
     "par_6bFrist": "Fristjahr der Rücklage = Verkaufsjahr + Frist. Kauf danach überträgt "
                    "nichts; der Rest wird im Fristjahr aufgelöst.",
     "par_6bFristNeubau": "Ersetzt die Frist, wenn im Blatt Verkäufe „§ 6b Neubau begonnen = ja“.",
+    "par_6bVorjahr": "ja: Ein Neuobjekt darf ein Jahr vor dem Verkauf seiner Quelle gekauft "
+                     "sein; der Gewinn wird im Verkaufsjahr abgezogen, beim Gebäude höchstens "
+                     "vom Buchwert Ende Kaufjahr, und die AfA rechnet schon in diesem Jahr von "
+                     "den geminderten AK. nein: nur Kauf ab dem Verkaufsjahr.",
     "par_6bZuschlag": "Gewinnzuschlag = aufgelöster Betrag × Satz × Jahre zwischen Bildung und "
                       "Auflösung; steuerwirksam im Fristjahr (Szenario A).",
     "par_DOGrenze": "Warnung in der Prüfung, wenn mehr Verkäufe im Zeitraum liegen.",
@@ -200,8 +213,19 @@ SPALTEN = {
     "ne_Ue3": "Rest des G+B-Gewinns auf das Gebäude: höchstens AK Gebäude neu − ü1.",
     "ne_UeGesamt": "ü1 + ü2 + ü3: mindert die AK und geht als Übertragung in den "
                    "Rücklagenspiegel.",
+    "ne_UeFolge": "Teil der Übertragung aus Quellen, die erst im Jahr nach dem Kauf verkauft "
+                  "werden (§ 6b Abs. 1 Satz 1): wird im Verkaufsjahr abgezogen, bis dahin "
+                  "laufen Buchwert und Sonder-AfA ohne ihn.",
+    "ne_UeFolgeGeb": "davon ü1 + ü3 auf das Gebäude; höchstens Buchwert Ende Kaufjahr "
+                     "(AK Gebäude − Sonder-AfA § 7b des Kaufjahrs, § 6b Abs. 5).",
+    "ne_QNGBasisKauf": "Bemessungsgrundlage § 7b im Kaufjahr: ohne den erst im Verkaufsjahr "
+                       "abgezogenen Gewinn; ab dann gilt die geminderte (§ 7a Abs. 1 Satz 3).",
     "ne_AfABasis": "AK Gebäude neu − ü1 − ü3: Basis für AfA und Buchwert Gebäude.",
     "ne_AKGuB": "AK G+B neu − ü2: Buchwert G+B.",
+    "ne_QNGBasis": "Nur mit Sonder-AfA § 7b (QNG) = ja: AfA-Basis Gebäude, mit Fläche höchstens "
+                   "Fläche × Höchstbetrag je m²; 0 über der Baukostenobergrenze.",
+    "ne_QNGBasisOhne6b": "Wie Bemessungsgrundlage § 7b, aber von der vollen AK Gebäude "
+                         "(Szenarien B und C).",
     "ne_MitQuelle": "1 = mindestens eine Quelle angegeben (Quellen ausgeschalteter Verkäufe "
                     "zählen nicht); das Neuobjekt entfällt in Szenario B.",
     "ne_AKGesamt": "Kaufpreis + Kaufnebenkosten.",
@@ -231,11 +255,17 @@ SPALTEN = {
     "prg_Erhaltung": "Erhaltung Basisjahr, fortgeschrieben mit Erhaltungssteigerung, Alterung "
                      "über dem Gebäudealter (nur mit Baujahr), plus Großmaßnahme im Jahr der Maßnahme.",
     "prg_AfA": "AfA laut Blatt Anlagen bzw. AfA-Plan, sonst AfA je Jahr bis der Restbuchwert "
-               "verbraucht ist. Neuobjekt: AfA-Basis × Satz (bzw. degressiv).",
+               "verbraucht ist. Neuobjekt: Sonder-AfA § 7b + AfA-Basis × Satz (bzw. "
+               "degressiv vom Restbuchwert nach der Sonder-AfA).",
+    "prg_AfAQNG": "Neuobjekt mit QNG: Bemessungsgrundlage § 7b × Satz im Kaufjahr und den "
+                  "Folgejahren (Parameter), vor der regulären AfA; in der AfA enthalten.",
+    "prg_AfAQNGOhne6b": "Sonder-AfA § 7b von der Bemessungsgrundlage ohne § 6b (Szenarien B "
+                        "und C); in AfA ohne § 6b enthalten.",
     "prg_Verkehrswert": "Verkehrswert aktuell × (1 + Wertsteigerung)^Jahre, unabhängig vom "
                         "Verkauf. Neuobjekt: Kaufpreis × (1 + Wertsteigerung)^Jahre seit Kauf.",
     "prg_Buchwert": "Buchwert Vorjahr − AfA, nicht unter 0.",
-    "prg_Ergebnis": "Miete + weitere Einnahmen − Erhaltung − weitere Ausgaben − AfA.",
+    "prg_Ergebnis": "Miete + weitere Einnahmen − Erhaltung − weitere Ausgaben − AfA (mit "
+                    "Sonder-AfA § 7b, beim Neuobjekt schon im Kaufjahr).",
     "prg_Bestand": "1 = am Jahresende im Bestand (Verkaufsjahr schon 0).",
     "prg_KreditZins": "Neuobjekt: Zinsen des Kredits (Blatt Darlehen). Bestand mit Restschuld: "
                       "Restschuld Vorjahresende × Zinssatz; ohne Restschuld: Zinsaufwand "

@@ -475,6 +475,8 @@ def prognose_zeile(zeile: int, objekt_nr: int, erstes_jahr: bool) -> dict:
         # Szenarien B und C: Bestandsobjekte rechnen wie im Plan
         "mit_quelle": _leer_oder(zeile, "0"),
         "afa_ohne6b": _leer_oder(zeile, _p("afa", zeile)),
+        "afa_qng": _leer_oder(zeile, "0"),
+        "afa_qng_ohne6b": _leer_oder(zeile, "0"),
         "buchwert_ohne6b": _leer_oder(zeile, _p("buchwert", zeile)),
         "buchwert_gub_ohne6b": _leer_oder(zeile, _p("buchwert_gub", zeile)),
         "erhaltung_halten": _leer_oder(zeile, _erhaltung_bestand(zeile, objekt_nr)),
@@ -528,25 +530,53 @@ def prognose_zeile_neu(zeile: int, neu_nr: int, erstes_jahr: bool) -> dict:
     t, kj, gueltig = _p("jahr", zeile), ne("ne_Kaufjahr"), f'{ne("ne_Gueltig")}=1'
     aktiv = f"{_p('aktiv', zeile)}=1"
 
-    def afa(basis, bw_key, afa_key):
-        """AfA und Buchwert ab der AfA-Basis basis, Vorjahresbuchwert aus Spalte bw_key."""
+    def afa(basis, folge, qng_basis, qng_basis_kauf, bw_key, afa_key, qng_key):
+        """Sonder-AfA § 7b, AfA und Buchwert ab der AfA-Basis basis, Vorjahresbuchwert aus
+        Spalte bw_key; qng_basis = Bemessungsgrundlage § 7b (0 ohne QNG). folge = Gewinn,
+        der erst im Verkaufsjahr (Kaufjahr + 1) abgezogen wird; bis dahin gelten basis +
+        folge und qng_basis_kauf."""
         bw_vor = "0" if erstes_jahr else _p(bw_key, zeile - 1)
+        # Buchwert zu Jahresbeginn; im Kaufjahr die AfA-Basis ohne den späteren Abzug (Kauf
+        # zum Jahresende), im Verkaufsjahr der Quelle schon um den Abzug gemindert, so dass
+        # dessen AfA bereits von den geminderten AK rechnet (§ 6b Abs. 6)
+        bw_start = (f"IF({t}={kj},{basis}+{folge},"
+                    f"IF({t}={kj}+1,MAX({bw_vor}-{folge},0),{bw_vor}))")
+        qng = _p(qng_key, zeile)
+        # Sonder-AfA zuerst, die reguläre AfA nur auf das, was sie übrig lässt
+        rest = f"{bw_start}-{qng}"
+        satz = ne("ne_AfASatz")
         # Degressiv vom Restbuchwert; mit par_AfAWechsel = ja linear über die
         # Restnutzungsdauer, sobald das mehr ist (§ 7 Abs. 5a Satz 4 EStG, ein Wahlrecht).
         # Restnutzungsdauer zu Jahresbeginn, mindestens 1 Jahr.
-        rnd = f'MAX(1/{ne("ne_AfASatz")}-({t}-{kj}-1),1)'
-        degressiv = (f'MIN(IF(par_AfAWechsel="ja",MAX({bw_vor}*par_AfADegressiv,'
-                     f"{bw_vor}/{rnd}),{bw_vor}*par_AfADegressiv),{bw_vor})")
-        linear = f'MIN({basis}*{ne("ne_AfASatz")},{bw_vor})'
+        rnd = f'MAX(1/{satz}-({t}-{kj}-1),1)'
+        degressiv = (f'MIN(IF(par_AfAWechsel="ja",MAX({bw_start}*par_AfADegressiv,'
+                     f"{bw_start}/{rnd}),{bw_start}*par_AfADegressiv),{rest})")
+        # Nach der Sonder-AfA linear vom Restwert am Ende des Begünstigungszeitraums mit
+        # unverändertem Satz (§ 7a Abs. 9 EStG): AfA-Basis − Sonder-AfA aller Jahre −
+        # reguläre AfA ab dem Jahr nach dem Kauf
+        restwert = (f"MAX({basis}-{qng_basis_kauf}*par_QNGSatz"
+                    f"-(par_QNGJahre-1)*{qng_basis}*par_QNGSatz"
+                    f"-(par_QNGJahre-1)*{basis}*{satz},0)")
+        linear_basis = (f"IF(AND({qng_basis}>0,par_QNGJahre>0,{t}>={kj}+par_QNGJahre),"
+                        f"{restwert},{basis})")
+        linear = f"MIN({linear_basis}*{satz},{rest})"
         return (
-            _leer_oder(zeile, f'IF({aktiv},IF({ne("ne_AfAMethode")}="{AFA_DEGRESSIV}",'
+            _leer_oder(zeile, f"IF(AND({t}>={kj},{t}<{kj}+par_QNGJahre),"
+                              f"MIN(IF({t}={kj},{qng_basis_kauf},{qng_basis})*par_QNGSatz,"
+                              f"{bw_start}),0)"),
+            _leer_oder(zeile, f'{qng}+IF({aktiv},IF({ne("ne_AfAMethode")}="{AFA_DEGRESSIV}",'
                               f'{degressiv},{linear}),0)'),
-            _leer_oder(zeile, f'IF({gueltig},IF({t}<{kj},0,IF({t}={kj},{basis},'
-                              f'MAX({bw_vor}-{_p(afa_key, zeile)},0))),0)'),
+            _leer_oder(zeile, f'IF({gueltig},IF({t}<{kj},0,'
+                              f'MAX({bw_start}-{_p(afa_key, zeile)},0)),0)'),
         )
 
-    afa_plan, buchwert_plan = afa(ne("ne_AfABasis"), "buchwert", "afa")
-    afa_ohne, buchwert_ohne = afa(ne("ne_AKGebNeu"), "buchwert_ohne6b", "afa_ohne6b")
+    folge_geb = f'N({ne("ne_UeFolgeGeb")})'
+    qng_plan, afa_plan, buchwert_plan = afa(
+        ne("ne_AfABasis"), folge_geb, ne("ne_QNGBasis"), ne("ne_QNGBasisKauf"),
+        "buchwert", "afa", "afa_qng")
+    qng_ohne, afa_ohne, buchwert_ohne = afa(
+        ne("ne_AKGebNeu"), "0", ne("ne_QNGBasisOhne6b"), ne("ne_QNGBasisOhne6b"),
+        "buchwert_ohne6b", "afa_ohne6b", "afa_qng_ohne6b")
 
     def kst(pos):
         """Jahreswert der Neukauf-Kostenstelle (Blatt Neukauf-KSt, fortgeschrieben); "" ohne."""
@@ -586,17 +616,21 @@ def prognose_zeile_neu(zeile: int, neu_nr: int, erstes_jahr: bool) -> dict:
             f"*(1+par_Erhaltsteig)^({t}-{kj}))"),
         "ausgaben": aus_kst_oder("ausgaben", f"IF({mit_qm},{miete}*par_QmVerwQuote,0)"),
         "afa": afa_plan,
+        "afa_qng": qng_plan,
         "buchwert": buchwert_plan,
+        # die Sonder-AfA § 7b wirkt schon im Kaufjahr, wenn das Objekt noch nicht aktiv ist
         "ergebnis": _leer_oder(
             zeile,
             f"({_p('miete', zeile)}+{_p('einnahmen', zeile)}-{_p('erhaltung', zeile)}"
-            f"-{_p('ausgaben', zeile)}-{_p('afa', zeile)})*{_p('aktiv', zeile)}"),
+            f"-{_p('ausgaben', zeile)})*{_p('aktiv', zeile)}-{_p('afa', zeile)}"),
         # Wert = Kaufpreis, ab dem Kaufjahr mit der Wertsteigerung fortgeschrieben
         "verkehrswert": _leer_oder(zeile, f'IF({gueltig},IF({t}>={kj},'
                                           f'{ne("ne_Kaufpreis")}*(1+par_Wertsteig)^({t}-{kj}),0),0)'),
         "bestand": _leer_oder(zeile, f"IF({gueltig},IF({t}>={kj},1,0),0)"),
         "neu": _leer_oder(zeile, "1"),
-        "buchwert_gub": _leer_oder(zeile, f'IF({gueltig},IF({t}>={kj},{ne("ne_AKGuB")},0),0)'),
+        # bei Kauf im Vorjahr der Veräußerung mindert ü2 den G+B erst im Verkaufsjahr
+        "buchwert_gub": _leer_oder(zeile, f'IF({gueltig},IF({t}>={kj},{ne("ne_AKGuB")}'
+                                          f'+IF({t}={kj},N({ne("ne_UeFolge")})-{folge_geb},0),0),0)'),
         # gehört nicht zur Baseline
         "buchwert_halten": _leer_oder(zeile, "0"),
         "afa_halten": _leer_oder(zeile, "0"),
@@ -604,6 +638,7 @@ def prognose_zeile_neu(zeile: int, neu_nr: int, erstes_jahr: bool) -> dict:
         # Szenarien B und C: ohne Übertragung der Rücklage, volle AK als AfA-Basis
         "mit_quelle": _leer_oder(zeile, ne("ne_MitQuelle")),
         "afa_ohne6b": afa_ohne,
+        "afa_qng_ohne6b": qng_ohne,
         "buchwert_ohne6b": buchwert_ohne,
         "buchwert_gub_ohne6b": _leer_oder(zeile, f'IF({gueltig},IF({t}>={kj},'
                                                  f'{ne("ne_AKGuBNeu")},0),0)'),
@@ -821,8 +856,11 @@ def ruecklage_jahr_zeile(zeile: int, erstes_jahr: bool) -> dict:
         "jahr": "=par_Startjahr" if erstes_jahr else f"={_rs('jahr', zeile - 1)}+1",
         "gewinne": f"={gewinne}",
         "bildung": f"=SUMIFS(rl_Betrag,rl_Jahr,{jahr})",
-        # Übertragung zum Ende des Kaufjahrs des Neuobjekts
-        "uebertragung": f"=SUMIFS(ne_UeGesamt,ne_Kaufjahr,{jahr})",
+        # Übertragung zum Ende des Kaufjahrs des Neuobjekts; bei Kauf im Vorjahr der
+        # Veräußerung im Verkaufsjahr, also ein Jahr nach dem Kauf
+        "uebertragung": (f"=SUMIFS(ne_UeGesamt,ne_Kaufjahr,{jahr})"
+                         f"-SUMIFS(ne_UeFolge,ne_Kaufjahr,{jahr})"
+                         f"+SUMIFS(ne_UeFolge,ne_Kaufjahr,{jahr}-1)"),
         "aufloesung": f"=SUMIFS(rl_Aufloesung,rl_Fristjahr,{jahr})",
         "zuschlag": f"=SUMIFS(rl_Zuschlag,rl_Fristjahr,{jahr})",
         "steuerwirksam": (f"={_rs('gewinne', zeile)}-{_rs('bildung', zeile)}"
@@ -875,8 +913,19 @@ def _uebertragung_moeglich(zeile: int, k: int) -> str:
     """Bedingung: Quelle k bekannt, Kauf zwischen Bildungs- und Fristjahr."""
     q, kj = _n(QUELLEN[k][0], zeile), _n("kaufjahr", zeile)
     # verschachtelt, weil AND alle Argumente auswertet und MATCH sonst #N/A liefert
-    return (f'IF({_quelle_bekannt(zeile, k)},AND({kj}>={_rl("rl_Jahr", q)},'
+    return (f'IF({_quelle_bekannt(zeile, k)},AND({kj}>={_rl("rl_Jahr", q)}-{_VORJAHR},'
             f'{kj}<={_rl("rl_Fristjahr", q)}),FALSE)')
+
+
+# 1, wenn ein Kauf im Vorjahr der Veräußerung zählt (§ 6b Abs. 1 Satz 1)
+_VORJAHR = 'IF(par_6bVorjahr="ja",1,0)'
+
+
+def _vorjahr(zeile: int, k: int) -> str:
+    """Bedingung: Quelle k bekannt und erst im Jahr nach dem Kauf verkauft; ihr Gewinn wird
+    im Verkaufsjahr abgezogen (§ 6b Abs. 1 Satz 1)."""
+    q, kj = _n(QUELLEN[k][0], zeile), _n("kaufjahr", zeile)
+    return f'IF({_quelle_bekannt(zeile, k)},{_rl("rl_Jahr", q)}={kj}+1,FALSE)'
 
 
 def _erloes_moeglich(zeile: int, k: int) -> str:
@@ -925,6 +974,17 @@ def neu_zeile(zeile: int) -> dict:
 
     ak = f"(N({_n('kaufpreis', zeile)})+N({_n('nebenkosten', zeile)}))"
     ak_geb, ak_gub = _n("ak_geb_neu", zeile), _n("ak_gub_neu", zeile)
+    # Kauf im Vorjahr: Gebäude höchstens mit dem Buchwert Ende Kaufjahr (§ 6b Abs. 5), also
+    # nach der Sonder-AfA § 7b des Kaufjahrs; die übrige AfA beginnt erst im Folgejahr
+    qng_kaufjahr = f"IF(par_QNGJahre>0,N({_n('qng_basis_ohne6b', zeile)})*par_QNGSatz,0)"
+
+    def geb_grenze(k):
+        return f"({ak_geb}-IF({_vorjahr(zeile, k)},{qng_kaufjahr},0))"
+
+    def folge(keys):
+        return "+".join(f"IF({_vorjahr(zeile, k)},"
+                        + "+".join(_q(key, k, zeile) for key in keys) + ",0)"
+                        for k in range(len(QUELLEN)))
     gub_ein, geb_ein = _n("ak_gub_eingabe", zeile), _n("ak_geb_eingabe", zeile)
     formeln = {
         "gueltig": wenn(f'IF(AND({_n("aktiv", zeile)}<>"nein",{_gefuellt(pflicht)}={len(pflicht)},'
@@ -941,8 +1001,14 @@ def neu_zeile(zeile: int) -> dict:
         "ue2": wenn(alle("ue2")),
         "ue3": wenn(alle("ue3")),
         "ue_gesamt": wenn(f"{_n('ue1', zeile)}+{_n('ue2', zeile)}+{_n('ue3', zeile)}"),
+        "ue_folge": wenn(folge(("ue1", "ue2", "ue3"))),
+        "ue_folge_geb": wenn(folge(("ue1", "ue3"))),
         "afa_basis": wenn(f"{ak_geb}-{_n('ue1', zeile)}-{_n('ue3', zeile)}"),
         "ak_gub": wenn(f"{ak_gub}-{_n('ue2', zeile)}"),
+        "qng_basis": wenn(_qng_basis(zeile, _n("afa_basis", zeile))),
+        "qng_basis_kauf": wenn(_qng_basis(zeile, f"{_n('afa_basis', zeile)}"
+                                                 f"+{_n('ue_folge_geb', zeile)}")),
+        "qng_basis_ohne6b": wenn(_qng_basis(zeile, ak_geb)),
         # Quelle eines ausgeschalteten Verkaufs zählt nicht: das Neuobjekt bleibt auch in
         # Szenario B, als Kauf ohne Verkauf
         "mit_quelle": wenn("IF(OR(" + ",".join(
@@ -973,9 +1039,9 @@ def neu_zeile(zeile: int) -> dict:
                                    f"-{verbraucht('ue1', k)},0)"),
             f"{feld}_rl_gub": wenn(f"IF({moeglich},{_rl('rl_GuB', q)}"
                                    f"-{verbraucht('ue2', k)}-{verbraucht('ue3', k)},0)"),
-            f"{feld}_ue1": wenn(f"MAX(MIN({rl_geb},{ak_geb}-({vorher('ue1', k)})),0)"),
+            f"{feld}_ue1": wenn(f"MAX(MIN({rl_geb},{geb_grenze(k)}-({vorher('ue1', k)})),0)"),
             f"{feld}_ue2": wenn(f"MAX(MIN({rl_gub},{ak_gub}-({vorher('ue2', k)})),0)"),
-            f"{feld}_ue3": wenn(f"MAX(MIN({rl_gub}-{ue2},{ak_geb}-({alle('ue1')})"
+            f"{feld}_ue3": wenn(f"MAX(MIN({rl_gub}-{ue2},{geb_grenze(k)}-({alle('ue1')})"
                                 f"-({vorher('ue3', k)})),0)"),
             # nur mit Verkaufserlös zur Finanzierung = ja; sonst wirkt die Rücklage nur steuerlich
             f"{feld}_erloes": wenn(f'IF({_n("erloes_fin", zeile)}<>"ja",0,'
@@ -986,6 +1052,28 @@ def neu_zeile(zeile: int) -> dict:
     return formeln
 
 
+def _qng_ueber_obergrenze(zeile: int) -> str:
+    """Bedingung: Fläche angegeben und AK Gebäude je m² über der Baukostenobergrenze § 7b."""
+    flaeche = _n("flaeche", zeile)
+    return (f"IF(N({flaeche})>0,{_n('ak_geb_neu', zeile)}/N({flaeche})"
+            f">par_QNGObergrenzeQm,FALSE)")
+
+
+def _qng_basis(zeile: int, basis: str) -> str:
+    """Bemessungsgrundlage der Sonder-AfA § 7b: basis, mit Fläche höchstens
+    par_QNGHoechstQm je m²; 0 ohne QNG, außerhalb des Modells oder über der Obergrenze."""
+    flaeche = _n("flaeche", zeile)
+    return (f'IF(AND({_n("qng", zeile)}="ja",{_n("gueltig", zeile)}=1),'
+            f"IF({_qng_ueber_obergrenze(zeile)},0,MAX(IF(N({flaeche})>0,"
+            f"MIN({basis},par_QNGHoechstQm*{flaeche}),{basis}),0)),0)")
+
+
+def _hinweis_qng(zeile: int) -> str:
+    """"; Fehlertext" der Sonder-AfA § 7b oder ""."""
+    return (f'IF(AND({_n("qng", zeile)}="ja",{_qng_ueber_obergrenze(zeile)}),'
+            f'"; § 7b: AK Gebäude je m² über der Baukostenobergrenze, keine Sonder-AfA","")')
+
+
 def _hinweis_quelle(zeile: int, k: int) -> str:
     """"; Fehlertext" der Quelle k oder ""; die Zeile bleibt im Modell."""
     q, kj = _n(QUELLEN[k][0], zeile), _n("kaufjahr", zeile)
@@ -993,7 +1081,8 @@ def _hinweis_quelle(zeile: int, k: int) -> str:
     pruefungen = [
         (_quelle_aus(zeile, k), "Verkauf ausgeschaltet, Rücklage entfällt, keine Übertragung"),
         (f"COUNTIF(rl_ID,{q})=0", "Rücklage unbekannt, keine Übertragung"),
-        (f"{kj}<{_rl('rl_Jahr', q)}", "Kauf vor Bildung der Rücklage, keine Übertragung"),
+        (f"{kj}<{_rl('rl_Jahr', q)}-{_VORJAHR}",
+         "Kauf vor Bildung der Rücklage, keine Übertragung"),
         (f"{kj}>{_rl('rl_Fristjahr', q)}", "Kauf nach Fristjahr, keine Übertragung"),
     ]
     if k:
@@ -1029,7 +1118,7 @@ def status_neu(zeile: int) -> str:
     id_, kj = _n("neu_id", zeile), _n("kaufjahr", zeile)
     pflicht = [_n(f.key, zeile) for f in NEU_FELDER if f.pflicht]
     hinweise = "&".join([_hinweis_quelle(zeile, k) for k in range(len(QUELLEN))]
-                        + [_hinweis_kredit(zeile)])
+                        + [_hinweis_kredit(zeile), _hinweis_qng(zeile)])
     return (
         f'=IF({id_}="","",'
         f'IF({_n("aktiv", zeile)}="nein","{STATUS_AUS}",'
@@ -1351,6 +1440,7 @@ def pruefung_anzahl() -> dict:
         "kst_abweichung": "=SUMPRODUCT(--((" + "+".join(
             f'(obk_{k}<>"")*({_feldname(k)}<>obk_{k})' for k in KST_VERKNUEPFT) + ")>0))",
         "neukauf_kst": '=SUMPRODUCT((ne_KSt<>"")*(COUNTIF(nk_ID,ne_KSt)=0))',
+        "vorjahr": '=COUNTIF(ne_UeFolge,">0.005")',
         "ak_aufteilung": '=COUNTIF(ne_AKAbweichung,">0.5")+COUNTIF(ne_AKAbweichung,"<-0.5")',
         "afa_plan": '=COUNTIF(afp_Anzahl,">0")',
         "anlagen_afa": '=COUNTIF(obj_AnlDiff,">1")+COUNTIF(obj_AnlDiff,"<-1")',
