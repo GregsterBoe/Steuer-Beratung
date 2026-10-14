@@ -185,7 +185,9 @@ punkte([
     "ja“ abzüglich des Nettoerlöses der Quell-Verkäufe; leer oder „nein“ = ganze AK.",
     "**Finanzierung Rest:** leer bzw. „Eigenmittel“ zahlt den Bedarf aus der Liquidität; "
     "„Kredit“ finanziert ihn. Kreditbetrag leer = ganzer Bedarf, sonst der eingetragene Betrag, "
-    "der Rest kommt aus Eigenmitteln.",
+    "der Rest kommt aus Eigenmitteln. Alternativ gibt die Kreditquote den Kredit in % von "
+    "Kaufpreis + Nebenkosten vor. Betrag und Quote stehen fest: der Verkaufserlös deckt dann "
+    "nur den Eigenkapitalteil, der Rest bleibt für spätere Käufe bzw. in der Liquidität.",
     "**Kreditangaben:** Zinssatz, Tilgungsart (Annuität mit anfänglicher Tilgung, linear oder "
     "endfällig), Tilgung p. a., optional die Laufzeit, nach der die Restschuld getilgt wird.",
     "Zinsen mindern das Ergebnis und die Steuer, die Tilgung nur die Liquidität, die Restschuld "

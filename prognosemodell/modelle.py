@@ -657,7 +657,8 @@ NEU_FELDER = [
     Feld("erloes_fin", "Verkaufserlös zur Finanzierung", "ne_ErloesFin", FMT_TEXT, False, 12,
          auswahl=("ja", "nein"),
          hinweis="ja: der Nettoerlös der Quell-Verkäufe deckt einen Teil des Kaufpreises und "
-                 "mindert den Finanzierungsbedarf (und damit den Kredit). nein oder leer: die "
+                 "mindert den Finanzierungsbedarf; ist ein Kreditbetrag oder eine Kreditquote "
+                 "eingetragen, nur den Teil, den der Kredit offen lässt. nein oder leer: die "
                  "Rücklage wirkt nur steuerlich (AfA-Basis), finanziert wird der ganze Kaufpreis "
                  "+ Nebenkosten über Kredit und Eigenmittel"),
     Feld("fin_art", "Finanzierung Rest", "ne_FinArt", FMT_TEXT, False, 12,
@@ -670,8 +671,8 @@ NEU_FELDER = [
     Feld("kredit_quote", "Kreditquote", "ne_KreditQuote", FMT_PROZENT, False, 10,
          minimum=0, maximum=1,
          hinweis="Kredit in % von Kaufpreis + Nebenkosten, z. B. 70 % bei 30 % Eigenkapital; "
-                 "höchstens der Finanzierungsbedarf (eingesetzter Verkaufserlös zählt als "
-                 "Eigenkapital). Nur bei Finanzierung Rest = Kredit und ohne Kreditbetrag"),
+                 "fest, mit Verkaufserlös zur Finanzierung = ja deckt der Erlös nur das "
+                 "Eigenkapital. Nur bei Finanzierung Rest = Kredit und ohne Kreditbetrag"),
     Feld("kredit_zins", "Zinssatz Kredit", "ne_KreditZins", FMT_PROZENT, False, 10,
          minimum=0, maximum=0.2, hinweis="Zins p. a. auf die Restschuld am Vorjahresende"),
     Feld("tilgungsart", "Tilgungsart", "ne_Tilgungsart", FMT_TEXT, False, 11,

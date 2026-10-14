@@ -1327,12 +1327,12 @@ Status je Quelle (Quelle 2 und 3 mit Vorsatz „Quelle n:“): Rücklage unbekan
 | Spalte | Name | Formel |
 | --- | --- | --- |
 | Kaufpreis + Nebenkosten | ne\_AKGesamt | Kaufpreis + Nebenkosten |
-| Einsatz Verkaufserlös | ne\_Erloes | nur mit ne\_ErloesFin = ja: je Quelle MIN(Nettoerlös − in Zeilen darüber eingesetzt; AK gesamt − Quellen davor), Verkauf bis zum Kaufjahr |
+| Einsatz Verkaufserlös | ne\_Erloes | nur mit ne\_ErloesFin = ja: je Quelle MIN(Nettoerlös − in Zeilen darüber eingesetzt; AK gesamt − fester Kredit − Quellen davor), Verkauf bis zum Kaufjahr |
 | Finanzierungsbedarf | ne\_Bedarf | AK gesamt − Einsatz |
-| Kredit | ne\_Kredit | bei Finanzierung Rest = Kredit: Kreditbetrag, leer = Bedarf; sonst 0 |
+| Kredit | ne\_Kredit | bei Finanzierung Rest = Kredit: Kreditbetrag, sonst AK gesamt × Kreditquote (fester Kredit), ohne beides = Bedarf; sonst 0 |
 | Eigenmittel | ne\_Eigen | Bedarf − Kredit, aus der Liquidität |
 
-Anders als die Übertragung braucht der Einsatz des Erlöses keine offene Frist. Ohne Quelle ist der ganze Kaufpreis Bedarf.
+Anders als die Übertragung braucht der Einsatz des Erlöses keine offene Frist. Ohne Quelle ist der ganze Kaufpreis Bedarf. Ein fester Kredit (Betrag oder Quote) geht dem Erlös vor: Bei 70 % Quote deckt der Erlös nur die 30 % Eigenkapital, der Rest steht Zeilen darunter zur Verfügung und bleibt sonst in der Liquidität. Die Liquidität rechnet ohnehin mit allen Nettoerlösen, allen Kaufpreisen und den Kreditauszahlungen; der nicht eingesetzte Erlös wird also nicht versteuert, sondern verzinst sich mit der Alternativrendite (der Zinsertrag ist steuerpflichtig).
 
 **Kredit.** Eingaben im Blatt Neuobjekte: Finanzierung Rest (Eigenmittel oder Kredit), Kreditbetrag, Zinssatz, Tilgungsart (Annuität, linear, endfällig; leer = Annuität), Tilgung p. a. in % des Kreditbetrags (bei Annuität anfänglich), Laufzeit (endfällig Pflicht, sonst optional: danach wird die Restschuld auf einmal getilgt). Status: „Kredit: Zinssatz fehlt“, „Kredit: Tilgung fehlt“, „Kredit: Laufzeit fehlt (endfällig)“, „Kreditangaben ohne Finanzierung Rest = Kredit, kein Kredit“.
 

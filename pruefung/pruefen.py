@@ -1858,8 +1858,9 @@ def faelle():
             ("BWA:KSt 31:1310", 2028, 0),
             ("zuo_Differenz", lj(2028), 0),
         ]),
-        # Kreditquote 70 %: NEU-001 AK 2,1 Mio × 70 % = 1,47 Mio, gedeckelt auf den Bedarf
-        # 700.000 (Verkaufserlös zählt als Eigenkapital); NEU-002 ohne Quelle AK 1,1 Mio ×
+        # Kreditquote 70 %: NEU-001 AK 2,1 Mio × 70 % = 1,47 Mio Kredit fest, der Nettoerlös
+        # 1,4 Mio deckt nur den Eigenkapitalteil 630.000, die übrigen 770.000 finanzieren
+        # NEU-004 (ohne Kredit) mit; NEU-002 ohne Quelle AK 1,1 Mio ×
         # 70 % = 770.000 Kredit, 330.000 Eigenmittel; NEU-003 Quote ohne Kredit: kein Kredit
         ("Finanzierung: Kreditquote in % von Kaufpreis + Nebenkosten",
          Modell(objekte=[abnahme4],
@@ -1873,11 +1874,16 @@ def faelle():
                                       anteil_gub=0.3, afa_satz=0.03, fin_art="Kredit",
                                       kredit_quote=0.7, kredit_zins=0.04, tilgung=0.02),
                             Neuobjekt("NEU-003", 2029, kaufpreis=1_000_000, anteil_gub=0.3,
-                                      afa_satz=0.03, kredit_quote=0.7)],
+                                      afa_satz=0.03, kredit_quote=0.7),
+                            Neuobjekt("NEU-004", 2029, kaufpreis=1_000_000, anteil_gub=0.3,
+                                      afa_satz=0.03, quelle="RL-OBJ-001", erloes_fin="ja")],
                 parameter=OHNE_ZINS), [
             ("ne_Status", 0, "OK"),
-            ("ne_Kredit", 0, 700_000),
+            ("ne_Erloes", 0, 630_000),
+            ("ne_Bedarf", 0, 1_470_000),
+            ("ne_Kredit", 0, 1_470_000),
             ("ne_Eigen", 0, 0),
+            ("liq_Kredit", lj(2028), 1_470_000),
             ("ne_Status", 1, "OK"),
             ("ne_Kredit", 1, 770_000),
             ("ne_Eigen", 1, 330_000),
@@ -1885,6 +1891,8 @@ def faelle():
             ("prg_KreditZins", prg_neu(2, 2030), 30_800),
             ("ne_Kredit", 2, 0),
             ("ne_Status", 2, "Kreditangaben ohne Finanzierung Rest = Kredit, kein Kredit"),
+            ("ne_Erloes", 3, 770_000),   # Rest des Erlöses, den NEU-001 nicht braucht
+            ("ne_Eigen", 3, 230_000),
         ]),
         # Verkaufserlös zur Finanzierung leer: die Rücklage wirkt nur steuerlich (Übertragung
         # ü1 220.000, ü2 500.000, AfA-Basis 1,25 Mio wie mit Erlös), finanziert wird die ganze

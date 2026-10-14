@@ -1009,6 +1009,10 @@ def neu_zeile(zeile: int) -> dict:
 
     ak = f"(N({_n('kaufpreis', zeile)})+N({_n('nebenkosten', zeile)}))"
     ak_geb, ak_gub = _n("ak_geb_neu", zeile), _n("ak_gub_neu", zeile)
+    # fester Kredit aus Kreditbetrag oder Kreditquote, 0 ohne Finanzierung Rest = Kredit
+    kredit_fest = (f'IF({_n("fin_art", zeile)}<>"{FIN_KREDIT}",0,'
+                   f'IF({_n("kredit_betrag", zeile)}<>"",N({_n("kredit_betrag", zeile)}),'
+                   f'{ak}*N({_n("kredit_quote", zeile)})))')
     # Kauf im Vorjahr: Gebäude höchstens mit dem Buchwert Ende Kaufjahr (§ 6b Abs. 5), also
     # nach der Sonder-AfA § 7b des Kaufjahrs; die übrige AfA beginnt erst im Folgejahr
     qng_kaufjahr = f"IF(par_QNGJahre>0,N({_n('qng_basis_ohne6b', zeile)})*par_QNGSatz,0)"
@@ -1056,11 +1060,10 @@ def neu_zeile(zeile: int) -> dict:
         "erloes": wenn(alle("erloes")),
         "bedarf": wenn(f"IF({_n('gueltig', zeile)}=1,{_n('ak_gesamt', zeile)}"
                        f"-{_n('erloes', zeile)},0)"),
+        # Kreditbetrag oder -quote steht fest; ohne beides deckt der Kredit den Bedarf
         "kredit": wenn(f'IF(AND({_n("gueltig", zeile)}=1,{_n("fin_art", zeile)}="{FIN_KREDIT}"),'
-                       f'IF({_n("kredit_betrag", zeile)}<>"",N({_n("kredit_betrag", zeile)}),'
-                       f'IF({_n("kredit_quote", zeile)}<>"",'
-                       f'MIN({_n("ak_gesamt", zeile)}*{_n("kredit_quote", zeile)},'
-                       f'MAX({_n("bedarf", zeile)},0)),MAX({_n("bedarf", zeile)},0))),0)'),
+                       f'IF(OR({_n("kredit_betrag", zeile)}<>"",{_n("kredit_quote", zeile)}<>""),'
+                       f'{kredit_fest},MAX({_n("bedarf", zeile)},0)),0)'),
         "eigen": wenn(f"{_n('bedarf', zeile)}-{_n('kredit', zeile)}"),
         "miete_qm_jahr": wenn(f'IF(N({_n("flaeche", zeile)})*N({_n("miete_qm", zeile)})>0,'
                               f'{_n("flaeche", zeile)}*{_n("miete_qm", zeile)}*12,"")'),
@@ -1080,11 +1083,13 @@ def neu_zeile(zeile: int) -> dict:
             f"{feld}_ue2": wenn(f"MAX(MIN({rl_gub},{ak_gub}-({vorher('ue2', k)})),0)"),
             f"{feld}_ue3": wenn(f"MAX(MIN({rl_gub}-{ue2},{geb_grenze(k)}-({alle('ue1')})"
                                 f"-({vorher('ue3', k)})),0)"),
-            # nur mit Verkaufserlös zur Finanzierung = ja; sonst wirkt die Rücklage nur steuerlich
+            # nur mit Verkaufserlös zur Finanzierung = ja; sonst wirkt die Rücklage nur steuerlich.
+            # Der Erlös deckt nur, was ein fester Kredit (Betrag oder Quote) offen lässt; der
+            # Rest bleibt für spätere Käufe bzw. in der Liquidität
             f"{feld}_erloes": wenn(f'IF({_n("erloes_fin", zeile)}<>"ja",0,'
                                    f"IF({_erloes_moeglich(zeile, k)},MAX(MIN({netto}"
-                                   f"-{verbraucht('erloes', k)},{ak}-({vorher('erloes', k)})),"
-                                   f"0),0))"),
+                                   f"-{verbraucht('erloes', k)},{ak}-{kredit_fest}"
+                                   f"-({vorher('erloes', k)})),0),0))"),
         })
     return formeln
 
