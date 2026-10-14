@@ -306,7 +306,8 @@ absatz("Für den Mandanten gibt es eine schlanke Fassung der Mappe mit bis zu ac
        "LibreOffice vorher durch.")
 tabelle(["Blatt", "Inhalt"], [
     ["Überblick", "Empfehlung, Endvermögen je Option, Datenlage, Verkehrswert und "
-                  "Gesamtvermögen je Jahr mit Diagrammen"],
+                  "Gesamtvermögen je Jahr mit Diagrammen, Gesamtvermögen aller Optionen "
+                  "je Jahr in einem Diagramm"],
     ["Jahresrechnung", "je Jahr vom Ergebnis über Steuer und Geldfluss zum Vermögen, Plan "
                        "und Halten, Differenz; jede Spalte rechnet von oben nach unten"],
     ["Ergebnisbrücke", "vom Ergebnis bei Halten je Verkauf und Kauf zum Ergebnis im Plan "

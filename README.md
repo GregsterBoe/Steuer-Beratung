@@ -190,7 +190,7 @@ Die Ergebnisse stehen auch im **DATEV-BWA-Format** (Projektplan, Abschnitt 18):
 - **Blatt Verkauf und Kauf:** je Verkauf eine Ergebnissicht für die Berichterstattung und eine Detailsicht. Die Ergebnissicht zeigt Erlös, Reinvestition, Kapitalanlage, Übertrag § 6b und den Vergleich Halten gegen Alternative im ersten vollen Jahr. Die Detailsicht zeigt die Einzelauflistung nach G+B und Gebäude und die Planung. Dazu kommt je Neuobjekt die Detailsicht des Kaufs.
 
 **Mandanten-Export:** `python -m prognosemodell.export Prognose.xlsx` schreibt daneben `Prognose_Mandant.xlsx` (anderer Name mit `--ausgabe`), eine schlanke Fassung für den Mandanten, nur mit Werten. Die Mappe muss in Excel gespeichert sein; eine frisch erzeugte, nie geöffnete Mappe rechnet LibreOffice vorher durch. Bis zu acht Blätter:
-- **Überblick:** Empfehlung, Endvermögen je Option, Datenlage, Verkehrswert und Gesamtvermögen je Jahr mit Diagrammen.
+- **Überblick:** Empfehlung, Endvermögen je Option, Datenlage, Verkehrswert und Gesamtvermögen je Jahr mit Diagrammen (Halten gegen Plan), dazu das Gesamtvermögen je Jahr für alle vier Optionen mit einem gemeinsamen Diagramm.
 - **Jahresrechnung:** je Jahr vom Ergebnis über Steuer und Geldfluss zum Vermögen, für Plan und Halten, dazu die Differenz. Jede Spalte rechnet von oben nach unten.
 - **Ergebnisbrücke:** vom Ergebnis bei Halten über die Pakete (Verkauf mit seinen Käufen) zum Ergebnis im Plan, ohne leere Pakete und Vorgänge und ohne Kontrollzeile. Ohne Verkauf und Kauf entfällt das Blatt.
 - **BWA gesamt:** Summen-BWA mit Ist-Jahren und Planjahren und der Herleitung der Sonderposten; bei „Vergleich mit Halten = ja“ auch die Differenz zu Halten.

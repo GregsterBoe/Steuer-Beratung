@@ -241,7 +241,7 @@ def export_zelle(ex, name: str, spalte: int):
         if zeile is None:
             return None
     zeile = next((z for z in range(zeile, ws.max_row + 1)
-                  if ws.cell(row=z, column=1).value == beschriftung), None)
+                  if str(ws.cell(row=z, column=1).value) == beschriftung), None)
     if zeile is None:
         return None
     if spalte < 1000:
@@ -1592,6 +1592,15 @@ def faelle():
             ("Export:Überblick:Ergebnis/Verkaufen, sofort versteuern, Erlös anlegen", 2,
              Wie("vg_B")),
             ("Export:Überblick:Plausibilitätsprüfung", 2, Wie("pr_Gesamt")),
+            # alle Optionen je Jahr: Halten, Plan, C, B; Endjahr gleich dem Vergleich
+            ("Export:Überblick:Gesamtvermögen nach latenter Steuer je Option/2046", 2,
+             Wie("vg_Baseline")),
+            ("Export:Überblick:Gesamtvermögen nach latenter Steuer je Option/2046", 3,
+             Wie("vg_A")),
+            ("Export:Überblick:Gesamtvermögen nach latenter Steuer je Option/2046", 4,
+             Wie("vg_C")),
+            ("Export:Überblick:Gesamtvermögen nach latenter Steuer je Option/2030", 5,
+             Wie("vgj_B", 3)),
             ("Export:Jahresrechnung:Plan:/Steuer", 2029, Wie("liq_Steuer", lj(2029))),
             ("Export:Jahresrechnung:Halten:/Steuer", 2029, Wie("lqb_Steuer", lj(2029))),
             ("Export:Jahresrechnung:Plan:/= Gesamtvermögen nach latenter Steuer", 2046,

@@ -38,9 +38,10 @@ from openpyxl.worksheet.hyperlink import Hyperlink
 from .bwa import HALTEBLATT, SONDERBEREICH, SUMMENBLATT, SUMMENZEILEN
 from .formeln import deckt_anlagen, hspalte, ispalte
 from .mappe import (FILL_ANNAHME, FILL_EINGELESEN, FILL_KOPF, FONT_KOPF, OPTIONEN, _diagramm,
-                    zentrale_annahmen)
+                    diagramm_szenarien, zentrale_annahmen)
 from .modelle import (DARLEHEN_ANNAHMEN, FMT_EURO, KST_VERKNUEPFT, OBJEKT_EINGELESEN,
-                      OBJEKT_FELDER, PARAMETER, PRUEFUNGEN, STATUS_AUS)
+                      OBJEKT_FELDER, PARAMETER, PRUEFUNGEN, STATUS_AUS, SZ_A, SZ_B, SZ_BASELINE,
+                      SZ_C)
 from .vorlagen import ERSTE_ZEILE, SPALTE_JAHR, SPALTE_PLAN, SPALTE_VORJAHRE
 
 UEBERBLICK = "Überblick"
@@ -238,6 +239,28 @@ def _blatt_ueberblick(ex, wb, quelle: str, blaetter: list) -> None:
         chart = _diagramm(ws, titel, spalte, kopf, erste, letzte)
         chart.height, chart.width = 7, 17
         ws.add_chart(chart, f"F{4 + i * 14}")
+
+    # alle Optionen nebeneinander, nicht nur Halten gegen Plan; Reihenfolge wie OPTIONEN
+    zeile = letzte + 2
+    _abschnitt(ws, zeile, "Gesamtvermögen nach latenter Steuer je Option (Ende des Jahres)", 7)
+    kopf = zeile + 1
+    szenarien = [SZ_BASELINE, SZ_A, SZ_C, SZ_B]
+    _kopfzeile(ws, kopf, ["Jahr", "Halten", "Plan (§ 6b-Rücklage)", "sofort versteuern, kaufen",
+                          "sofort versteuern, anlegen"])
+    ws.row_dimensions[kopf].height = 30
+    reihen = [_bereich(wb, "vgj_Jahr")] + [_bereich(wb, f"vgj_{sz.key}") for sz in szenarien]
+    erste = kopf + 1
+    for i, werte_jahr in enumerate(zip(*reihen)):
+        for spalte, wert in enumerate(werte_jahr, start=1):
+            c = ws.cell(row=erste + i, column=spalte, value=wert)
+            c.number_format = "0" if spalte == 1 else FMT_BETRAG
+            if spalte == 1:
+                c.alignment = Alignment(horizontal="left")
+    letzte = erste + len(reihen[0]) - 1
+    chart = diagramm_szenarien(ws, kopf, erste, letzte, szenarien,
+                               "Gesamtvermögen nach latenter Steuer je Option")
+    chart.height, chart.width = 9, 17
+    ws.add_chart(chart, f"G{erste + 1}")
 
     ws.column_dimensions["A"].width = 62
     for spalte in "BCDEFG":
