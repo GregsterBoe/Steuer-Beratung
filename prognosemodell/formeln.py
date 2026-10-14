@@ -1023,12 +1023,14 @@ def neu_zeile(zeile: int) -> dict:
     gub_ein, geb_ein = _n("ak_gub_eingabe", zeile), _n("ak_geb_eingabe", zeile)
     formeln = {
         "gueltig": wenn(f'IF(AND({_n("aktiv", zeile)}<>"nein",{_gefuellt(pflicht)}={len(pflicht)},'
+                        f"{_aufteilung_da(zeile)},"
                         f"COUNTIF(ne_ID,{id_})=1,COUNTIF(obj_ID,{id_})=0,"
                         f"{kj}>=par_Startjahr,{kj}<=par_Endjahr),1,0)"),
         # Nebenkosten im Verhältnis des Kaufpreises aufgeteilt und aktiviert; eingetragene
         # Beträge gehen vor, Gebäude ohne Eingabe = Rest nach G+B
         "ak_gub_neu": wenn(f'IF({gub_ein}="",{ak}*N({_n("anteil_gub", zeile)}),{gub_ein})'),
         "ak_geb_neu": wenn(f'IF({geb_ein}="",{ak}-{ak_gub},{geb_ein})'),
+        "anteil_gub_verw": wenn(f'IF({ak}>0,{ak_gub}/{ak},"")'),
         "ak_abweichung": wenn(f"{ak_gub}+{ak_geb}-{ak}"),
         "rl_geb": wenn(alle("rl_geb")),
         "rl_gub": wenn(alle("rl_gub")),
@@ -1147,6 +1149,11 @@ def _hinweis_kredit(zeile: int) -> str:
     )
 
 
+def _aufteilung_da(zeile: int) -> str:
+    """Anteil G+B oder AK G+B in Euro gefüllt; ohne beides fehlt die Aufteilung der AK."""
+    return f'OR({_n("anteil_gub", zeile)}<>"",{_n("ak_gub_eingabe", zeile)}<>"")'
+
+
 def status_neu(zeile: int) -> str:
     """Plausibilitätsstatus je Neuobjekt. Die ersten Fehler nehmen es aus dem Modell;
     Fehler der Quellen und des Kredits lassen es im Modell und stehen nebeneinander."""
@@ -1158,10 +1165,11 @@ def status_neu(zeile: int) -> str:
         f'=IF({id_}="","",'
         f'IF({_n("aktiv", zeile)}="nein","{STATUS_AUS}",'
         f'IF({_gefuellt(pflicht)}<{len(pflicht)},"Pflichtfeld fehlt",'
+        f'IF(NOT({_aufteilung_da(zeile)}),"Anteil G+B oder AK G+B fehlt",'
         f'IF(COUNTIF(ne_ID,{id_})>1,"NeuID doppelt",'
         f'IF(COUNTIF(obj_ID,{id_})>0,"NeuID wie Bestandsobjekt",'
         f'IF(OR({kj}<par_Startjahr,{kj}>par_Endjahr),"Kaufjahr außerhalb Raster",'
-        f'IF({hinweise}="","{STATUS_OK}",MID({hinweise},3,500))))))))'
+        f'IF({hinweise}="","{STATUS_OK}",MID({hinweise},3,500)))))))))'
     )
 
 
@@ -1670,10 +1678,13 @@ def annahme_neu(key: str, zeile: int):
         return f'=IF({an},"ja","")'
     # in jeder Zeile vorbelegt; Eintippen ersetzt die Formel
     ak = f'(N({_n("kaufpreis", zeile)})+N({_n("nebenkosten", zeile)}))'
+    # ohne Anteil G+B bleibt die Vorbelegung leer, statt G+B mit 0 anzusetzen
     if key == "ak_gub_eingabe":
-        return f'=IF({_n("neu_id", zeile)}="","",{ak}*N({_n("anteil_gub", zeile)}))'
+        return (f'=IF(OR({_n("neu_id", zeile)}="",{_n("anteil_gub", zeile)}=""),"",'
+                f'{ak}*{_n("anteil_gub", zeile)})')
     if key == "ak_geb_eingabe":
-        return f'=IF({_n("neu_id", zeile)}="","",{ak}-N({_n("ak_gub_eingabe", zeile)}))'
+        return (f'=IF(OR({_n("neu_id", zeile)}="",{_n("ak_gub_eingabe", zeile)}=""),"",'
+                f'{ak}-{_n("ak_gub_eingabe", zeile)})')
     if key in annahmen:
         return f'=IF({eigen},"",{annahmen[key]})'
     return None

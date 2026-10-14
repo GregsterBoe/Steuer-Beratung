@@ -830,8 +830,26 @@ def faelle():
                     Neuobjekt("NEU-002", 2028, kaufpreis=500_000, anteil_gub=0.2,
                               afa_satz=0.02, ak_gub_eingabe=150_000, ak_geb_eingabe=400_000),
                     Neuobjekt("NEU-003", 2028, kaufpreis=500_000, anteil_gub=0.2,
-                              nebenkosten=50_000, afa_satz=0.02)]), [
+                              nebenkosten=50_000, afa_satz=0.02),
+                    # nur AK G+B in Euro, ohne Anteil: Anteil wird berechnet
+                    Neuobjekt("NEU-004", 2028, kaufpreis=800_000, nebenkosten=40_000,
+                              afa_satz=0.02, ak_gub_eingabe=210_000),
+                    # weder Anteil noch AK G+B: Aufteilung fehlt, rechnet nicht mit
+                    Neuobjekt("NEU-005", 2028, kaufpreis=800_000, afa_satz=0.02)]), [
             ("ne_AKGuBEingabe", 0, 300_000),
+            ("ne_AnteilGuBVerw", 0, 0.25),
+            ("ne_AnteilGuBVerw", 2, 0.2),
+            ("ne_Status", 3, "OK"),
+            ("ne_Gueltig", 3, 1),
+            ("ne_AKGuBNeu", 3, 210_000),
+            ("ne_AKGebEingabe", 3, 630_000),   # 840.000 − 210.000
+            ("ne_AKGebNeu", 3, 630_000),
+            ("ne_AnteilGuBVerw", 3, 0.25),     # 210.000 / 840.000
+            ("ne_AfABasis", 3, 630_000),
+            ("ne_Status", 4, "Anteil G+B oder AK G+B fehlt"),
+            ("ne_Gueltig", 4, 0),
+            ("ne_AKGuBEingabe", 4, None),
+            ("ne_AKGebEingabe", 4, None),
             ("ne_AKGebEingabe", 0, 900_000),   # vorbelegt: Rest nach G+B
             ("ne_AKGuBNeu", 0, 300_000),
             ("ne_AKGebNeu", 0, 900_000),
@@ -850,7 +868,7 @@ def faelle():
             ("ne_AKAbweichung", 2, 0),
             ("pr_Anzahl", pr("ak_aufteilung"), 1),
             ("pr_Ergebnis", pr("ak_aufteilung"), WARNUNG),
-            ("ne_AKGuBEingabe", 3, None),
+            ("ne_AKGuBEingabe", 5, None),
         ]),
         ("Etappe 6: Statusprüfung Neuobjekte",
          Modell(objekte=[abnahme4],

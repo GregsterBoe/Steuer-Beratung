@@ -115,7 +115,8 @@ tabelle(["Blatt", "Wofür"], [
                      "Preis, Kosten, Anteil G+B lt. Kaufvertrag, § 6b ja/nein, "
                      "„reinvestieren = ja“ legt ein Neuobjekt aus Annahmen an"],
     ["**Neuobjekte**", "Kaufjahr, Kaufpreis, Anteil G+B (AK G+B und AK Gebäude daraus "
-                       "vorbelegt, in Euro überschreibbar), AfA-Satz und -Methode, Sonder-AfA § 7b "
+                       "vorbelegt, in Euro überschreibbar; mit AK G+B in Euro darf der Anteil leer "
+                       "bleiben und wird berechnet), AfA-Satz und -Methode, Sonder-AfA § 7b "
                        "(QNG, 5 % über 4 Jahre vor der regulären AfA), bis zu drei "
                        "Quell-Rücklagen, „Kostenstelle Neukauf“, Finanzierung (Abschnitt 4)"],
     ["**Darlehen**", "Tilgungsplan je Kredit: Zins, Tilgung und Restschuld je Jahr"],
