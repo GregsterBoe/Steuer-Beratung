@@ -686,6 +686,36 @@ NEU_FELDER = [
          minimum=1, maximum=100, ganzzahl=True,
          hinweis="endfällig: Pflicht. Sonst optional: nach so vielen Jahren wird die "
                  "Restschuld auf einmal getilgt"),
+    Feld("tilgungsfrei", "Tilgungsfreie Jahre", "ne_Tilgungsfrei", FMT_ZAHL, False, 9,
+         minimum=0, maximum=100, ganzzahl=True,
+         hinweis="in den ersten Jahren nach dem Kauf nur Zins, keine Tilgung; zählt zur "
+                 "Laufzeit. Annuität und lineare Tilgung danach auf den ursprünglichen "
+                 "Kreditbetrag. Leer = 0"),
+    # Zweitkredit: Teil des Kredits zu eigenen Konditionen, z. B. Förderkredit; Tilgung,
+    # Laufzeit und tilgungsfreie Jahre leer = wie der Hauptkredit
+    Feld("kredit2_anteil", "Zweitkredit Anteil", "ne_Kredit2Anteil", FMT_PROZENT, False, 10,
+         minimum=0, maximum=1,
+         hinweis="Teil des Kredits (Spalte Kredit), der zu den Konditionen des Zweitkredits "
+                 "läuft, z. B. 50 %; der Rest ist der Hauptkredit. Nur bei Finanzierung Rest "
+                 "= Kredit und ohne Betrag Zweitkredit. Leer = kein Zweitkredit"),
+    Feld("kredit2_betrag", "Zweitkredit Betrag", "ne_Kredit2Betrag", FMT_EURO, False,
+         minimum=0,
+         hinweis="fester Betrag des Zweitkredits, z. B. Förder-Höchstbetrag; geht dem Anteil "
+                 "vor, höchstens der Kredit"),
+    Feld("kredit2_zins", "Zinssatz Zweitkredit", "ne_Kredit2Zins", FMT_PROZENT, False, 10,
+         minimum=0, maximum=0.2,
+         hinweis="Pflicht mit Anteil oder Betrag; Zins p. a. auf die Restschuld am "
+                 "Vorjahresende"),
+    Feld("kredit2_tilgungsart", "Tilgungsart Zweitkredit", "ne_Kredit2Tilgungsart", FMT_TEXT,
+         False, 11, auswahl=TILGUNGSARTEN, hinweis="leer = wie Hauptkredit"),
+    Feld("kredit2_tilgung", "Tilgung p. a. Zweitkredit", "ne_Kredit2Tilgung", FMT_PROZENT,
+         False, 10, minimum=0, maximum=1,
+         hinweis="in % des Zweitkredits; leer = wie Hauptkredit"),
+    Feld("kredit2_laufzeit", "Laufzeit Jahre Zweitkredit", "ne_Kredit2Laufzeit", FMT_ZAHL,
+         False, 9, minimum=1, maximum=100, ganzzahl=True, hinweis="leer = wie Hauptkredit"),
+    Feld("kredit2_tilgungsfrei", "Tilgungsfreie Jahre Zweitkredit", "ne_Kredit2Tilgungsfrei",
+         FMT_ZAHL, False, 9, minimum=0, maximum=100, ganzzahl=True,
+         hinweis="leer = wie Hauptkredit; 0 = sofort tilgen"),
 ]
 # Quell-Rücklagen je Neuobjekt: (Feld, benannter Bereich, Präfix der Hilfsspalten)
 QUELLEN = [("quelle", "ne_Quelle", "ne_Q1"), ("quelle2", "ne_Quelle2", "ne_Q2"),
@@ -735,6 +765,7 @@ NEU_SPALTEN = [
     Spalte("erloes", "Einsatz Verkaufserlös", "ne_Erloes", FMT_EURO),
     Spalte("bedarf", "Finanzierungsbedarf", "ne_Bedarf", FMT_EURO),
     Spalte("kredit", "Kredit", "ne_Kredit", FMT_EURO),
+    Spalte("kredit2", "davon Zweitkredit", "ne_Kredit2", FMT_EURO),
     Spalte("eigen", "Eigenmittel", "ne_Eigen", FMT_EURO),
     # Fläche × Mietpreis je m² × 12, leer ohne beide; Basis der m²-Annahmen
     Spalte("miete_qm_jahr", "Jahresmiete aus m²", "ne_MieteQmJahr", FMT_EURO),
@@ -750,16 +781,20 @@ NEU_SPALTEN = [
 # erste Spalte der eingeklappten Hilfsspalten je Quelle
 NEU_DETAIL_ERSTE = "quelle_rl_geb"
 
-# Blatt Darlehen: je Zeile des Blatts Neuobjekte eine Zeile mit dem Tilgungsplan; links die
-# Kreditdaten, rechts je Block (Zinsen, Tilgung, Restschuld) eine Spalte je Prognosejahr
+# Blatt Darlehen: je Zeile des Blatts Neuobjekte eine Zeile mit dem Tilgungsplan des
+# Hauptkredits, darunter ebenso viele Zeilen für die Zweitkredite; links die Kreditdaten,
+# rechts je Block (Zinsen, Tilgung, Restschuld) eine Spalte je Prognosejahr
+KREDIT_HAUPT, KREDIT_ZWEIT = "Hauptkredit", "Zweitkredit"
 DARLEHEN_SPALTEN = [
     Spalte("id", "NeuID", "dl_ID", FMT_TEXT, 12),
+    Spalte("teil", "Kredit", "dl_Teil", FMT_TEXT, 11),
     Spalte("kaufjahr", "Auszahlung Ende Jahr", "dl_Kaufjahr", FMT_JAHR, 10),
     Spalte("betrag", "Kreditbetrag", "dl_Betrag", FMT_EURO),
     Spalte("zinssatz", "Zinssatz", "dl_Zinssatz", FMT_PROZENT, 9),
     Spalte("art", "Tilgungsart", "dl_Art", FMT_TEXT, 11),
     Spalte("tilgungssatz", "Tilgung p. a.", "dl_Tilgungssatz", FMT_PROZENT, 9),
     Spalte("laufzeit", "Laufzeit Jahre", "dl_Laufzeit", FMT_ZAHL, 9),
+    Spalte("tilgungsfrei", "tilgungsfreie Jahre", "dl_Tilgungsfrei", FMT_ZAHL, 9),
     Spalte("rate", "Rate p. a. (Annuität) bzw. Tilgung (linear)", "dl_Rate", FMT_EURO, 15),
     Spalte("getilgt", "getilgt im Jahr", "dl_Getilgt", FMT_TEXT, 11),
 ]
@@ -983,6 +1018,15 @@ class Neuobjekt:
     tilgungsart: Optional[str] = None    # "Annuität" (leer), "linear", "endfällig"
     tilgung: Optional[float] = None      # % des Kreditbetrags, Annuität: anfänglich
     laufzeit: Optional[int] = None       # Jahre bis zur Rückzahlung der Restschuld
+    tilgungsfrei: Optional[int] = None   # Jahre nach dem Kauf nur Zins, leer = 0
+    # Zweitkredit als Teil des Kredits; Tilgung, Laufzeit, tilgungsfrei leer = wie Hauptkredit
+    kredit2_anteil: Optional[float] = None
+    kredit2_betrag: Optional[float] = None   # geht dem Anteil vor
+    kredit2_zins: Optional[float] = None
+    kredit2_tilgungsart: Optional[str] = None
+    kredit2_tilgung: Optional[float] = None
+    kredit2_laufzeit: Optional[int] = None
+    kredit2_tilgungsfrei: Optional[int] = None
 
 
 # Blatt Prüfung: Plausibilitätsprüfungen (Etappe 9, Projektplan Abschnitt 5 und 19)

@@ -189,7 +189,13 @@ punkte([
     "Kaufpreis + Nebenkosten vor. Betrag und Quote stehen fest: der Verkaufserlös deckt dann "
     "nur den Eigenkapitalteil, der Rest bleibt für spätere Käufe bzw. in der Liquidität.",
     "**Kreditangaben:** Zinssatz, Tilgungsart (Annuität mit anfänglicher Tilgung, linear oder "
-    "endfällig), Tilgung p. a., optional die Laufzeit, nach der die Restschuld getilgt wird.",
+    "endfällig), Tilgung p. a., optional die Laufzeit, nach der die Restschuld getilgt wird, "
+    "und tilgungsfreie Jahre (anfangs nur Zins).",
+    "**Zweitkredit:** Ein Teil des Kredits zu eigenen Konditionen, z. B. ein günstiger "
+    "Förderkredit. „Zweitkredit Anteil“ (in % des Kredits) oder „Zweitkredit Betrag“ (geht "
+    "vor) und der Zinssatz; Tilgungsart, Tilgung, Laufzeit und tilgungsfreie Jahre leer = wie "
+    "der Hauptkredit. Der Kredit insgesamt bleibt gleich, im Blatt Darlehen stehen die "
+    "Zweitkredite unter den Hauptkrediten.",
     "Zinsen mindern das Ergebnis und die Steuer, die Tilgung nur die Liquidität, die Restschuld "
     "das Gesamtvermögen. Ist der Kredit getilgt, entfallen Zins und Tilgung (Blatt Darlehen).",
 ])

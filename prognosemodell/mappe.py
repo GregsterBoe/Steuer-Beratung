@@ -861,12 +861,15 @@ def _blatt_darlehen(wb, modell: Modell) -> None:
     """Tilgungsplan je Kredit eines Neuobjekts: Zinsen, Tilgung und Restschuld je Jahr."""
     ws = wb.create_sheet("Darlehen")
     erste = DARLEHEN_ERSTE
-    letzte = erste + modell.kapazitaet.neuobjekte - 1
+    kap = modell.kapazitaet.neuobjekte
+    letzte = erste + 2 * kap - 1
     n = prognosejahre()
-    ws["A1"] = ("Kredite der Neuobjekte (Blatt Neuobjekte, Finanzierung Rest = Kredit). "
+    ws["A1"] = ("Kredite der Neuobjekte (Blatt Neuobjekte, Finanzierung Rest = Kredit): oben "
+                "die Hauptkredite, darunter die Zweitkredite in derselben Reihenfolge. "
                 "Auszahlung zum Ende des Kaufjahrs; Zins und Tilgung ab dem Folgejahr auf die "
                 "Restschuld am Vorjahresende. Annuität: gleiche Rate (Zins + anfängliche "
                 "Tilgung); linear: gleiche Tilgung; endfällig: Rückzahlung nach der Laufzeit. "
+                "In den tilgungsfreien Jahren nur Zins. "
                 "Ist die Restschuld getilgt, entfallen Zins und Tilgung. Die Darlehen der "
                 "Bestandsobjekte rechnet die Prognose je Objekt (Blatt Objekte).")
     ws["A1"].font = Font(italic=True)
@@ -894,8 +897,9 @@ def _blatt_darlehen(wb, modell: Modell) -> None:
             c.font = Font(bold=True)
         ws.column_dimensions[formeln.dl_block_spalte(block, -1)].width = 3
     ws.cell(row=letzte + 1, column=1, value="Summe").font = Font(bold=True)
-    for neu_nr, zeile in enumerate(range(erste, letzte + 1), start=1):
-        rechnung = formeln.darlehen_zeile(zeile, neu_nr)
+    for zeile in range(erste, letzte + 1):
+        neu_nr, zweit = (zeile - erste) % kap + 1, zeile - erste >= kap
+        rechnung = formeln.darlehen_zeile(zeile, neu_nr, zweit)
         for i, s in enumerate(DARLEHEN_SPALTEN, start=1):
             c = ws.cell(row=zeile, column=i, value=rechnung[s.key])
             c.number_format, c.fill = s.format, FILL_BERECHNET

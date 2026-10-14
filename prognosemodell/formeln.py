@@ -15,7 +15,8 @@ from .modelle import (AFA_DEGRESSIV, ANL_NICHT_IM_MODELL, ANLAGE_FELDER, ANLAGE_
                       RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN, STATUS_6B_UNZULAESSIG,
                       STATUS_AUS, STATUS_OK, SZ_A, SZ_B, SZ_BASELINE, SZENARIEN, VERKAUF_FELDER,
                       VERKAUF_SPALTEN, WARNUNG, Szenario, aus_spalten, liq_spalten,
-                      DARLEHEN_SPALTEN, FIN_KREDIT, QUELLEN, TILGUNG_ANNUITAET,
+                      DARLEHEN_SPALTEN, FIN_KREDIT, KREDIT_HAUPT, KREDIT_ZWEIT, QUELLEN,
+                      TILGUNG_ANNUITAET,
                       TILGUNG_ENDFAELLIG, TILGUNG_LINEAR,
                       ZUORDNUNG_BEZEICHNUNG, ZUORDNUNG_MEHRDEUTIG, prognosejahre)
 
@@ -615,7 +616,10 @@ def prognose_zeile_neu(zeile: int, neu_nr: int, erstes_jahr: bool) -> dict:
                 f'{t}-par_Basisjahr+1),"")')
 
     def darlehen(name):
-        return f"IF({gueltig},N(INDEX({name},{neu_nr},{t}-par_Startjahr+1)),0)"
+        """Haupt- und Zweitkredit; die Zweitkredite stehen ROWS(ne_ID) Zeilen tiefer."""
+        spalte = f"{t}-par_Startjahr+1"
+        return (f"IF({gueltig},N(INDEX({name},{neu_nr},{spalte}))"
+                f"+N(INDEX({name},ROWS(ne_ID)+{neu_nr},{spalte})),0)")
 
     def ab_kauf(basis, satz, pos):
         """Wert der Neukauf-Kostenstelle, sonst basis ab dem Kauf mit der Steigerung."""
@@ -1064,6 +1068,10 @@ def neu_zeile(zeile: int) -> dict:
         "kredit": wenn(f'IF(AND({_n("gueltig", zeile)}=1,{_n("fin_art", zeile)}="{FIN_KREDIT}"),'
                        f'IF(OR({_n("kredit_betrag", zeile)}<>"",{_n("kredit_quote", zeile)}<>""),'
                        f'{kredit_fest},MAX({_n("bedarf", zeile)},0)),0)'),
+        # Teil des Kredits zu den Konditionen des Zweitkredits: Betrag vor Anteil
+        "kredit2": wenn(f'IF({_n("kredit", zeile)}>0,IF({_n("kredit2_betrag", zeile)}<>"",'
+                        f'MIN(N({_n("kredit2_betrag", zeile)}),{_n("kredit", zeile)}),'
+                        f'{_n("kredit", zeile)}*N({_n("kredit2_anteil", zeile)})),0)'),
         "eigen": wenn(f"{_n('bedarf', zeile)}-{_n('kredit', zeile)}"),
         "miete_qm_jahr": wenn(f'IF(N({_n("flaeche", zeile)})*N({_n("miete_qm", zeile)})>0,'
                               f'{_n("flaeche", zeile)}*{_n("miete_qm", zeile)}*12,"")'),
@@ -1142,15 +1150,43 @@ def _hinweis_kredit(zeile: int) -> str:
         return f'{_n(key, zeile)}=""'
 
     art = _n("tilgungsart", zeile)
+    angaben = ("kredit_betrag", "kredit_quote", "kredit_zins", "kredit2_anteil",
+               "kredit2_betrag", "kredit2_zins")
     return (
         f'IF({_n("fin_art", zeile)}<>"{FIN_KREDIT}",'
-        f'IF(AND({leer("kredit_betrag")},{leer("kredit_quote")},{leer("kredit_zins")}),"",'
+        f'IF(AND({",".join(leer(k) for k in angaben)}),"",'
         f'"; Kreditangaben ohne Finanzierung Rest = {FIN_KREDIT}, kein Kredit"),'
         f'IF({leer("kredit_zins")},"; Kredit: Zinssatz fehlt",'
         f'IF(AND({art}="{TILGUNG_ENDFAELLIG}",{leer("laufzeit")}),'
         f'"; Kredit: Laufzeit fehlt (endfällig)",'
         f'IF(AND({art}<>"{TILGUNG_ENDFAELLIG}",{leer("tilgung")},{leer("laufzeit")}),'
         f'"; Kredit: Tilgung fehlt",""))))'
+        + _hinweis_kredit2(zeile)
+    )
+
+
+def _hinweis_kredit2(zeile: int) -> str:
+    """"&"; Fehlertext" des Zweitkredits; Tilgung und Laufzeit leer = wie Hauptkredit."""
+    def leer(key):
+        return f'{_n(key, zeile)}=""'
+
+    art = f'IF({_n("kredit2_tilgungsart", zeile)}<>"",{_n("kredit2_tilgungsart", zeile)},' \
+          f'{_n("tilgungsart", zeile)})'
+    ohne_lz = f'AND({leer("kredit2_laufzeit")},{leer("laufzeit")})'
+    ohne_tilgung = f'AND({leer("kredit2_tilgung")},{leer("tilgung")},{ohne_lz})'
+    betrag = _n("kredit2_betrag", zeile)
+    return (
+        f'&IF(OR({_n("fin_art", zeile)}<>"{FIN_KREDIT}",'
+        f'AND({leer("kredit2_anteil")},{leer("kredit2_betrag")})),'
+        f'IF(OR({_n("fin_art", zeile)}<>"{FIN_KREDIT}",{leer("kredit2_zins")}),"",'
+        f'"; Zinssatz Zweitkredit ohne Anteil oder Betrag, kein Zweitkredit"),'
+        f'IF({leer("kredit2_zins")},"; Zweitkredit: Zinssatz fehlt",'
+        f'IF(AND({art}="{TILGUNG_ENDFAELLIG}",{ohne_lz}),'
+        f'"; Zweitkredit: Laufzeit fehlt (endfällig)",'
+        f'IF(AND({art}<>"{TILGUNG_ENDFAELLIG}",{ohne_tilgung}),'
+        f'"; Zweitkredit: Tilgung fehlt",'
+        f'IF(AND({betrag}<>"",N({betrag})>{_n("kredit", zeile)}+0.005),'
+        f'"; Zweitkredit: Betrag über dem Kredit, gekürzt","")))))'
     )
 
 
@@ -1194,8 +1230,9 @@ def dl_block_spalte(block: int, i: int) -> str:
     return get_column_letter(len(DARLEHEN_SPALTEN) + 2 + block * (prognosejahre() + 1) + i)
 
 
-def darlehen_zeile(zeile: int, neu_nr: int) -> dict:
-    """Kreditdaten und Tilgungsplan einer Zeile; leer ohne Kredit."""
+def darlehen_zeile(zeile: int, neu_nr: int, zweit: bool = False) -> dict:
+    """Kreditdaten und Tilgungsplan einer Zeile; leer ohne Kredit. zweit: der Zweitkredit,
+    dessen leere Tilgungsangaben die des Hauptkredits übernehmen."""
     def ne(name):
         return f"INDEX({name},{neu_nr})"
 
@@ -1205,16 +1242,30 @@ def darlehen_zeile(zeile: int, neu_nr: int) -> dict:
     def wenn(ausdruck):
         return f'=IF({d("id")}="","",{ausdruck})'
 
+    def eigen(name, name2):
+        """Angabe des Zweitkredits, leer die des Hauptkredits."""
+        if not zweit:
+            return ne(name)
+        return f'IF({ne(name2)}<>"",{ne(name2)},{ne(name)})'
+
+    if zweit:
+        betrag, zins = f"N({ne('ne_Kredit2')})", f"N({ne('ne_Kredit2Zins')})"
+    else:
+        betrag = f"N({ne('ne_Kredit')})-N({ne('ne_Kredit2')})"
+        zins = f"N({ne('ne_KreditZins')})"
+    art_ein = eigen("ne_Tilgungsart", "ne_Kredit2Tilgungsart")
+    laufzeit = eigen("ne_Laufzeit", "ne_Kredit2Laufzeit")
     art = d("art")
     formeln = {
-        "id": f'=IF(N({ne("ne_Kredit")})>0,{ne("ne_ID")},"")',
+        "id": f'=IF({betrag}>0.005,{ne("ne_ID")},"")',
+        "teil": wenn(f'"{KREDIT_ZWEIT if zweit else KREDIT_HAUPT}"'),
         "kaufjahr": wenn(ne("ne_Kaufjahr")),
-        "betrag": wenn(f"N({ne('ne_Kredit')})"),
-        "zinssatz": wenn(f"N({ne('ne_KreditZins')})"),
-        "art": wenn(f'IF({ne("ne_Tilgungsart")}="","{TILGUNG_ANNUITAET}",'
-                    f'{ne("ne_Tilgungsart")})'),
-        "tilgungssatz": wenn(f"N({ne('ne_Tilgung')})"),
-        "laufzeit": wenn(f'IF(N({ne("ne_Laufzeit")})>0,N({ne("ne_Laufzeit")}),"")'),
+        "betrag": wenn(betrag),
+        "zinssatz": wenn(zins),
+        "art": wenn(f'IF({art_ein}="","{TILGUNG_ANNUITAET}",{art_ein})'),
+        "tilgungssatz": wenn(f"N({eigen('ne_Tilgung', 'ne_Kredit2Tilgung')})"),
+        "laufzeit": wenn(f'IF(N({laufzeit})>0,N({laufzeit}),"")'),
+        "tilgungsfrei": wenn(f"N({eigen('ne_Tilgungsfrei', 'ne_Kredit2Tilgungsfrei')})"),
         "rate": wenn(f'IF({art}="{TILGUNG_ENDFAELLIG}",0,IF({art}="{TILGUNG_LINEAR}",'
                      f'{d("betrag")}*{d("tilgungssatz")},'
                      f'{d("betrag")}*({d("zinssatz")}+{d("tilgungssatz")})))'),
@@ -1232,10 +1283,11 @@ def darlehen_zeile(zeile: int, neu_nr: int) -> dict:
         regulaer = (f'IF({art}="{TILGUNG_ENDFAELLIG}",0,IF({art}="{TILGUNG_LINEAR}",{d("rate")},'
                     f'MAX({d("rate")}-{zins},0)))')
         formeln[("zins", i)] = wenn(f"{vor}*{d('zinssatz')}")
-        # nach der Laufzeit die ganze Restschuld, nie mehr als die Restschuld
+        # nach der Laufzeit die ganze Restschuld, nie mehr als die Restschuld; in den
+        # tilgungsfreien Jahren nur Zins
         formeln[("tilgung", i)] = wenn(
             f"IF({t}<={kj},0,MIN({vor},IF(AND(ISNUMBER({lz}),{t}>={kj}+N({lz})),{vor},"
-            f"{regulaer})))")
+            f"IF({t}<={kj}+{d('tilgungsfrei')},0,{regulaer}))))")
         formeln[("restschuld", i)] = wenn(
             f"IF({t}<{kj},0,IF({t}={kj},{betrag},"
             f"{vor}-{dl_block_spalte(1, i)}{zeile}))")
