@@ -1107,6 +1107,7 @@ def _kauf(b: _Block, anzahl: int) -> None:
     zeile("./. Einsatz Verkaufserlös (Quell-Verkäufe)", f"-N({ne('ne_Erloes')})")
     zeile("= Finanzierungsbedarf", f"N({ne('ne_Bedarf')})", fett=True)
     zeile("davon Kredit", f"N({ne('ne_Kredit')})")
+    zeile("darin Zweitkredit", f"N({ne('ne_Kredit2')})")
     zeile("davon Eigenmittel", f"N({ne('ne_Eigen')})")
     jahr = zeile("erstes volles Jahr", f"{{sp}}{kj}+1", FMT_JAHR)
 

@@ -242,6 +242,9 @@ SPALTEN = {
                  "Nebenkosten) × Kreditquote, fest vor dem Verkaufserlös; ohne beides der "
                  "ganze Finanzierungsbedarf. Auszahlung zum Ende des Kaufjahrs, Plan im Blatt "
                  "Darlehen.",
+    "ne_Kredit2": "Teil des Kredits zu den Konditionen des Zweitkredits: Betrag Zweitkredit "
+                  "(höchstens der Kredit), sonst Kredit × Anteil Zweitkredit; 0 ohne. Der "
+                  "Hauptkredit ist der Rest. Beide mit eigenem Plan im Blatt Darlehen.",
     "ne_Eigen": "Finanzierungsbedarf − Kredit: kommt aus der Liquidität.",
     "ne_MieteQmJahr": "Fläche × Mietpreis je m² × 12, leer ohne beide. Ersetzt Kaufpreis × "
                       "Mietrendite; Erhaltung und Verwaltung dann in % der Miete "
@@ -291,7 +294,11 @@ SPALTEN = {
                      "als weitere Kostenstelle eines Pakets); 0 ohne Verkauf.",
     "prg_Unternehmen": "1 = Kostenstelle der Art Unternehmen (Blatt Objekte), keine Immobilie.",
     # Darlehen
-    "dl_Betrag": "Kredit aus dem Blatt Neuobjekte; 0 = keine Finanzierung per Kredit.",
+    "dl_Teil": "Hauptkredit (oberer Teil des Blatts) oder Zweitkredit (unterer Teil).",
+    "dl_Betrag": "Hauptkredit: Kredit − davon Zweitkredit aus dem Blatt Neuobjekte; "
+                 "Zweitkredit: davon Zweitkredit. Ohne Betrag bleibt die Zeile leer.",
+    "dl_Tilgungsfrei": "Jahre nach dem Kauf mit Zins, aber ohne Tilgung; zählen zur Laufzeit. "
+                       "Zweitkredit leer = wie Hauptkredit.",
     "dl_Rate": "Annuität: Kredit × (Zinssatz + anfängliche Tilgung), gleich bleibend. Linear: "
                "Kredit × Tilgungssatz je Jahr. Endfällig: keine laufende Tilgung.",
     "dl_Getilgt": "Jahr, in dem die Restschuld 0 erreicht; „nach …“: am Rasterende nicht "
