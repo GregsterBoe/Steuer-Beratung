@@ -233,12 +233,13 @@ SPALTEN = {
                     "zählen nicht); das Neuobjekt entfällt in Szenario B.",
     "ne_AKGesamt": "Kaufpreis + Kaufnebenkosten.",
     "ne_Erloes": "Nettoerlös der Quell-Verkäufe, der in diesen Kauf fließt (höchstens Kaufpreis "
-                 "+ Nebenkosten, soweit nicht schon von Zeilen darüber eingesetzt). 0 ohne "
+                 "+ Nebenkosten − fester Kredit aus Kreditbetrag oder -quote, soweit nicht "
+                 "schon von Zeilen darüber eingesetzt). Der Rest bleibt in der Liquidität. 0 ohne "
                  "Verkaufserlös zur Finanzierung = ja: die Rücklage wirkt dann nur steuerlich.",
     "ne_Bedarf": "Kaufpreis + Nebenkosten − Einsatz Verkaufserlös: was anders finanziert werden "
                  "muss.",
     "ne_Kredit": "Bei Finanzierung Rest = Kredit: Kreditbetrag; sonst (Kaufpreis + "
-                 "Nebenkosten) × Kreditquote, höchstens der Finanzierungsbedarf; ohne beides der "
+                 "Nebenkosten) × Kreditquote, fest vor dem Verkaufserlös; ohne beides der "
                  "ganze Finanzierungsbedarf. Auszahlung zum Ende des Kaufjahrs, Plan im Blatt "
                  "Darlehen.",
     "ne_Eigen": "Finanzierungsbedarf − Kredit: kommt aus der Liquidität.",
