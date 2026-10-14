@@ -76,6 +76,14 @@ def nk_spalten() -> tuple:
 
 ISFORMEL = "_xlfn.ISFORMULA"   # Excel 2013+, in der Datei mit Präfix
 MINIFS = "_xlfn.MINIFS"        # Excel 2019+, LibreOffice ab 5.2
+
+
+def _groesster(array: str) -> str:
+    """Größter Wert eines Arrays (Fehler übergangen) statt SUMPRODUCT(MAX(…)): innerhalb
+    von MAX wertet Excel Funktionen wie SEARCH nicht über den ganzen Bereich aus, sondern
+    nimmt nur die Zelle der eigenen Zeile (implizite Schnittmenge). AGGREGATE rechnet das
+    Array ohne Matrixformel; Excel 2010+."""
+    return f"_xlfn.AGGREGATE(14,6,{array},1)"
 # Bedingung für SUMIFS/COUNTIFS: Verkauf nicht ausgeschaltet (leer zählt als ja)
 VK_AKTIV = 'vk_Aktiv,"<>nein"'
 
@@ -533,9 +541,9 @@ def _verkauf_nr(zeile: int) -> str:
     """Zeile im Blatt Verkäufe, deren Verkauf das Objekt enthält (auch als weitere
     Kostenstelle eines Pakets); 0 ohne Verkauf. Gleiche Bedingung wie _verkaufsjahr."""
     nr = "ROW(vk_Umfang)-ROW(INDEX(vk_Umfang,1))+1"
-    return (f"IF({_verkaufsjahr(zeile)}=9999,0,SUMPRODUCT(MAX("
+    return (f"IF({_verkaufsjahr(zeile)}=9999,0," + _groesster(
             f'ISNUMBER(SEARCH(";"&{_p("id", zeile)}&";",vk_Umfang))*(vk_Aktiv<>"nein")'
-            f"*(vk_Jahr={_verkaufsjahr(zeile)})*({nr}))))")
+            f"*(vk_Jahr={_verkaufsjahr(zeile)})*({nr})") + ")")
 
 
 def _darlehen_bestand(zeile: int, objekt_nr: int, erstes_jahr: bool) -> dict:
@@ -787,7 +795,7 @@ def verkauf_zeile(zeile: int) -> dict:
     return {
         "umfang": _umfang(zeile),
         "vorbesitz": wenn(f"{jahr}-" + _mit_weiteren(
-            zeile, obj("obj_Kaufjahr"), f'SUMPRODUCT(MAX({im}*("0"&obj_Kaufjahr)))')),
+            zeile, obj("obj_Kaufjahr"), _groesster(f'{im}*("0"&obj_Kaufjahr)'))),
         "buchwert_geb": wenn(_mit_weiteren(
             zeile, f"SUMIFS(prg_BuchwertObj,prg_IDObj,{id_},prg_JahrObj,{jahr})",
             f"SUMPRODUCT(SUMIFS(prg_BuchwertObj,prg_IDObj,obj_ID,prg_JahrObj,{jahr})*{im})")),
