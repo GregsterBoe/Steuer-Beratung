@@ -17,6 +17,7 @@ import contextlib
 import dataclasses
 import io
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -61,6 +62,9 @@ ZEILE_EINGEKLAPPT = "Zeile eingeklappt:"  # + Blattname; statt Zeile: Zeilennumm
 KOPF = "Kopf:"  # + Blatt:Zeile; statt Zeile: Spaltennummer, Soll Text, " [Tooltip]" mit Kommentar
 AUSWAHL = "Auswahl:"  # + Blattname; statt Zeile: Zelle, Soll (Liste, Anzahl Überprüfungen)
 UEBERLAPPT = "Datenüberprüfungen überlappen"  # Zeile 0, Soll: Liste der Fundstellen ([])
+# Formeln mit SUMPRODUCT(MAX(…SEARCH…)): Excel wertet SEARCH dort nur für die eigene Zeile
+# aus (LibreOffice über den ganzen Bereich), Soll: Liste der Fundstellen ([])
+NUR_EXCEL_FALSCH = "Array-Formeln, die nur Excel falsch rechnet"
 # Mandanten-Export: + Blatt:[Block/]Beschriftung; statt Zeile: Jahr bzw. Spaltennummer
 EXPORT = "Export:"
 EXPORT_FARBE = "Export-Farbe:"   # wie EXPORT, Soll: Füllfarbe (RGB) oder None
@@ -2299,6 +2303,7 @@ def faelle():
             ("par_6bFristNeubau", 0, 6),
             # Auswahllisten: je Zelle genau eine Überprüfung, sonst verwirft Excel sie
             (UEBERLAPPT, 0, []),
+            (NUR_EXCEL_FALSCH, 0, []),
             (f"{AUSWAHL}Verkäufe", "A2", ("obj_ID", 1)),
             (f"{AUSWAHL}Verkäufe", f"{get_column_letter(nr(VERKAUF_FELDER, 'nutzung_6b'))}2",
              ('"ja,nein"', 1)),
@@ -2831,6 +2836,20 @@ def ueberlappungen(wb) -> list:
     return fundstellen
 
 
+def nur_excel_falsch(wb) -> list:
+    """Erste Fundstelle je Blatt einer Formel mit SEARCH in SUMPRODUCT(MAX(…)); siehe
+    formeln._groesster."""
+    fundstellen = []
+    for ws in wb:
+        for zeile in ws.iter_rows():
+            treffer = [c for c in zeile if isinstance(c.value, str)
+                       and re.search(r"SUMPRODUCT\(MAX\([^;]*SEARCH\(", c.value)]
+            if treffer:
+                fundstellen.append(f"{ws.title}!{treffer[0].coordinate}")
+                break
+    return fundstellen
+
+
 def pruefe(fall: str, wb, pruefungen) -> int:
     """Sollwerte eines Falls prüfen, Ergebnis ausgeben, Anzahl Abweichungen zurückgeben."""
     fehler = 0
@@ -2846,6 +2865,8 @@ def pruefe(fall: str, wb, pruefungen) -> int:
             ist = auswahl(getattr(wb, "erzeugt", wb)[name[len(AUSWAHL):]], zeile)
         elif name == UEBERLAPPT:
             ist = ueberlappungen(getattr(wb, "erzeugt", wb))
+        elif name == NUR_EXCEL_FALSCH:
+            ist = nur_excel_falsch(getattr(wb, "erzeugt", wb))
         elif name == EXPORT_BLAETTER:
             ist = export(wb).sheetnames
         elif name.startswith(EXPORT_KONTROLLE):

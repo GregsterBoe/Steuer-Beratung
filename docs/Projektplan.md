@@ -252,6 +252,7 @@ openpyxl schreibt Formeln, berechnet sie aber nicht. Eine frisch generierte Date
 **Zwei gangbare Wege**
 
 - **LibreOffice headless** (empfohlen): LibreOffice öffnet die Datei per Kommandozeile, rechnet alle Formeln und speichert sie neu. Danach liest openpyxl mit data\_only=True die echten Ergebniswerte. Vorteil: rechnet Excel-Formeln sehr originalgetreu, auch SVERWEIS und SUMMEWENNS. Nachteil: LibreOffice muss auf dem Baurechner installiert sein.
+- **Grenze von LibreOffice:** Array-Ausdrücke ohne Matrixformel wertet LibreOffice großzügiger aus als Excel. In Excel rechnet SUMPRODUCT nur seine direkten Argumente über den ganzen Bereich; steckt eine Funktion wie SEARCH in einem MAX innerhalb von SUMPRODUCT, nimmt Excel nur die Zelle der eigenen Zeile (implizite Schnittmenge). So ordnete „Verkauf (Zeile)“ in Excel verkaufte Objekte falsch oder gar nicht zu, und die Ergebnisbrücke ging nicht auf, während alle Tests grün waren. Maxima über Arrays daher mit AGGREGATE(14;6;…;1) (formeln.\_groesster), nie mit SUMPRODUCT(MAX(…)).
 - **Die Bibliothek formulas**: wertet Excel-Formeln direkt in Python aus, ohne Office. Vorteil: leichtgewichtig. Nachteil: deckt nicht jede Funktion gleich gut ab, bei Randfällen muss man gegenprüfen.
 
 **Ablauf des Skripts**
