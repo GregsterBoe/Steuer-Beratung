@@ -334,8 +334,8 @@ def _planformeln_halten(z: dict, sp: str) -> dict:
         return f"SUMIFS(lqb_{name},lqb_Jahr,{jahr})"
 
     basis = {
-        1020: stamm("obj_MieteBasis", "par_Mietsteig"),
-        1090: stamm("obj_EinnBasis", "par_Mietsteig"),
+        1020: f"SUMIFS(prg_MieteHalten,prg_Jahr,{jahr})",
+        1090: f"SUMIFS(prg_EinnahmenHalten,prg_Jahr,{jahr})",
         1240: lqb("AfA"),
         1250: f"SUMIFS(prg_ErhaltungHalten,prg_Jahr,{jahr})",
         1310: lqb("KreditZins"),
@@ -1022,8 +1022,9 @@ def _vorgang(b: _Block, n: int) -> None:
            "Alternative (Verkauf, Kauf, Anlage)", "Differenz")
     afa_h = f"{bw_halten('{x}-1')}-{bw_halten('{x}')}"
     planung = [
-        ("p_miete", "Mieten", halten("obj_MieteBasis", "par_Mietsteig"), alt("prg_Miete")),
-        ("p_einn", "weitere Einnahmen", halten("obj_EinnBasis", "par_Mietsteig"),
+        ("p_miete", "Mieten", "SUMIFS(prg_MieteHalten,prg_ID,{id},prg_Jahr,{x})",
+         alt("prg_Miete")),
+        ("p_einn", "weitere Einnahmen", "SUMIFS(prg_EinnahmenHalten,prg_ID,{id},prg_Jahr,{x})",
          alt("prg_Einnahmen")),
         ("p_zins", "Zinsertrag Kapitalanlage", "0", "{anlage}*par_Alternativrendite"),
         ("p_erh", "./. Erhaltung (mit Alterung und Großmaßnahme)",

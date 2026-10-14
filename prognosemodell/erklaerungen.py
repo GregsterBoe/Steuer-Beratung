@@ -33,9 +33,11 @@ PARAMETER_WIRKUNG = {
                       "(Auswertung). Wirkt damit auf Liquidität, Zinsertrag und das "
                       "Endvermögen aller Szenarien.",
     "par_Mietsteig": "Miete und weitere Einnahmen je Jahr = Basiswert × (1 + Satz)^Jahre. "
-                     "Gilt für Bestand, Neuobjekte und Neukauf-Kostenstellen ohne Planwert.",
+                     "Gilt für Bestand, Neuobjekte und Neukauf-Kostenstellen ohne Planwert; "
+                     "ein Bestandsobjekt kann im Blatt Objekte einen eigenen Satz haben.",
     "par_Erhaltsteig": "Erhaltung je Jahr wächst mit diesem Satz; auch Großmaßnahmen "
-                       "(heutige Preise bis zum Jahr der Maßnahme).",
+                       "(heutige Preise bis zum Jahr der Maßnahme). Ein Bestandsobjekt kann im "
+                       "Blatt Objekte einen eigenen Satz haben.",
     "par_Kostensteig": "Weitere Ausgaben je Jahr = Basiswert × (1 + Satz)^Jahre.",
     "par_Wertsteig": "Verkehrswert je Jahr = Verkehrswert aktuell × (1 + Satz)^Jahre. Bestimmt "
                      "die Verkaufspreis-Annahme, stille Reserven, latente Steuer und das "
@@ -256,7 +258,12 @@ SPALTEN = {
     # Prognose
     "prg_Aktiv": "1 = Objekt erzielt in diesem Jahr Miete und AfA: Bestand bis einschließlich "
                  "Verkaufsjahr, Neuobjekt ab dem Jahr nach dem Kauf.",
-    "prg_Miete": "Bestand: Miete Basisjahr × (1 + Mietsteigerung)^Jahre. Neuobjekt: Planwert der "
+    "prg_MieteHalten": "Bestand ohne Verkauf: Miete Basisjahr × (1 + Mietsteigerung des "
+                       "Objekts)^Jahre, ab „Miete eingefroren ab“ auf dem Stand des Vorjahrs; "
+                       "Neuobjekt 0. Grundlage der Baseline.",
+    "prg_EinnahmenHalten": "Bestand ohne Verkauf: weitere Einnahmen Basisjahr × (1 + "
+                           "Mietsteigerung des Objekts)^Jahre; Neuobjekt 0.",
+    "prg_Miete": "Bestand: Miete bei Halten, bis zum Verkaufsjahr. Neuobjekt: Planwert der "
                  "Neukauf-Kostenstelle, sonst Fläche × Mietpreis je m² × 12 bzw. Kaufpreis × "
                  "Mietrendite, ab dem Kauf mit der Mietsteigerung.",
     "prg_Erhaltung": "Erhaltung Basisjahr, fortgeschrieben mit Erhaltungssteigerung, Alterung "

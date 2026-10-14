@@ -176,6 +176,8 @@ def annahme_objekt(key: str, zeile: int):
 
     ausdruck = {
         "erhaltung": f"{n('miete')}*par_AnnErhQuote",
+        "mietsteig": "par_Mietsteig",
+        "erhaltsteig": "par_Erhaltsteig",
         # Kostenstelle ohne Immobilie: kein Verkehrswert
         "verkehrswert": (f'IF({c("art")}="{ART_UNTERNEHMEN}",0,'
                          f"({n('miete')}+{n('weitere_einnahmen')})*par_AnnVervielfaeltiger)"),
@@ -398,6 +400,21 @@ def _indexiert(name: str, satz: str, zeile: int, objekt_nr: int, aktiv: bool = T
     return f"{ausdruck}*{_p('aktiv', zeile)}" if aktiv else ausdruck
 
 
+def _satz(name: str, parameter: str, objekt_nr: int) -> str:
+    """Steigerung je Objekt (Blatt Objekte), leer der Parameter."""
+    return f'IF({_stamm(name, objekt_nr)}="",{parameter},N({_stamm(name, objekt_nr)}))'
+
+
+def _miete_halten(zeile: int, objekt_nr: int) -> str:
+    """Miete ohne Verkauf: Basis mit der Mietsteigerung des Objekts; ab dem Jahr
+    „Miete eingefroren ab“ auf dem Stand des Vorjahrs."""
+    t = _p("jahr", zeile)
+    fix = f"N({_stamm('obj_MieteFixAb', objekt_nr)})"
+    bis = f"MAX(IF({fix}>0,MIN({t},{fix}-1),{t})-par_Basisjahr,0)"
+    return (f"{_stamm('obj_MieteBasis', objekt_nr)}"
+            f"*(1+{_satz('obj_Mietsteig', 'par_Mietsteig', objekt_nr)})^{bis}")
+
+
 def _erhaltung_bestand(zeile: int, objekt_nr: int) -> str:
     """Erhaltung bei Halten: Basiswert mit Erhaltungssteigerung, ab par_ErhAlterungAb
     Lebensjahren zusätzlich par_ErhAlterung je Jahr, dazu die Großmaßnahme in ihrem Jahr."""
@@ -411,7 +428,7 @@ def _erhaltung_bestand(zeile: int, objekt_nr: int) -> str:
         return (f"IF({stamm('obj_Baujahr')}=0,0,"
                 f"MAX({jahr}-{stamm('obj_Baujahr')}-par_ErhAlterungAb,0))")
 
-    index = f"(1+par_Erhaltsteig)^({t}-par_Basisjahr)"
+    index = f"(1+{_satz('obj_Erhaltsteig', 'par_Erhaltsteig', objekt_nr)})^({t}-par_Basisjahr)"
     alterung = f"(1+par_ErhAlterung)^({ueber(t)}-{ueber('par_Basisjahr')})"
     gross = f"IF({t}={stamm('obj_SanJahr')},{stamm('obj_SanBetrag')},0)"
     return f"({stamm('obj_ErhBasis')}*{alterung}+{gross})*{index}"
@@ -452,8 +469,8 @@ def prognose_zeile(zeile: int, objekt_nr: int, erstes_jahr: bool) -> dict:
         "jahr": "=par_Startjahr" if erstes_jahr else f"={_p('jahr', zeile - 1)}+1",
         # 0 ab dem Jahr nach dem Verkauf
         "aktiv": _leer_oder(zeile, f"IF({_p('jahr', zeile)}<={_verkaufsjahr(zeile)},1,0)"),
-        "miete": indexiert("obj_MieteBasis", "par_Mietsteig"),
-        "einnahmen": indexiert("obj_EinnBasis", "par_Mietsteig"),
+        "miete": _leer_oder(zeile, f"{_p('miete_halten', zeile)}*{_p('aktiv', zeile)}"),
+        "einnahmen": _leer_oder(zeile, f"{_p('einnahmen_halten', zeile)}*{_p('aktiv', zeile)}"),
         "erhaltung": _leer_oder(zeile, f"{_p('erhaltung_halten', zeile)}*{_p('aktiv', zeile)}"),
         "ausgaben": indexiert("obj_AusgBasis", "par_Kostensteig"),
         # keine AfA über den Restbuchwert hinaus; im Bestand gleich der AfA bei Halten
@@ -483,13 +500,17 @@ def prognose_zeile(zeile: int, objekt_nr: int, erstes_jahr: bool) -> dict:
         "buchwert_ohne6b": _leer_oder(zeile, _p("buchwert", zeile)),
         "buchwert_gub_ohne6b": _leer_oder(zeile, _p("buchwert_gub", zeile)),
         "erhaltung_halten": _leer_oder(zeile, _erhaltung_bestand(zeile, objekt_nr)),
+        "miete_halten": _leer_oder(zeile, _miete_halten(zeile, objekt_nr)),
+        "einnahmen_halten": _leer_oder(
+            zeile, _indexiert("obj_EinnBasis",
+                              _satz("obj_Mietsteig", "par_Mietsteig", objekt_nr),
+                              zeile, objekt_nr, False)),
         "quelle": _leer_oder(zeile, '""'),
         **_darlehen_bestand(zeile, objekt_nr, erstes_jahr),
         # Ergebnisbrücke: laufendes Ergebnis, als würde das Objekt nie verkauft
         "ergebnis_halten": _leer_oder(
             zeile,
-            f"{_indexiert('obj_MieteBasis', 'par_Mietsteig', zeile, objekt_nr, False)}"
-            f"+{_indexiert('obj_EinnBasis', 'par_Mietsteig', zeile, objekt_nr, False)}"
+            f"{_p('miete_halten', zeile)}+{_p('einnahmen_halten', zeile)}"
             f"-{_p('erhaltung_halten', zeile)}"
             f"-{_indexiert('obj_AusgBasis', 'par_Kostensteig', zeile, objekt_nr, False)}"
             f"-{_p('afa_halten', zeile)}"),
@@ -670,6 +691,8 @@ def prognose_zeile_neu(zeile: int, neu_nr: int, erstes_jahr: bool) -> dict:
         "buchwert_halten": _leer_oder(zeile, "0"),
         "afa_halten": _leer_oder(zeile, "0"),
         "erhaltung_halten": _leer_oder(zeile, "0"),
+        "miete_halten": _leer_oder(zeile, "0"),
+        "einnahmen_halten": _leer_oder(zeile, "0"),
         # Szenarien B und C: ohne Übertragung der Rücklage, volle AK als AfA-Basis
         "mit_quelle": _leer_oder(zeile, ne("ne_MitQuelle")),
         "afa_ohne6b": afa_ohne,
@@ -1417,8 +1440,8 @@ def _liq_baseline(c, zeile: int, t: str, erstes_jahr: bool) -> dict:
     bw_vor = ('SUMIFS(obj_Restbuchwert,obj_ID,"<>")' if erstes_jahr
               else _summe_jahr("prg_BuchwertHalten", f"{t}-1"))
     return {
-        "einnahmen": (f"={stamm('obj_MieteBasis', 'par_Mietsteig')}"
-                      f"+{stamm('obj_EinnBasis', 'par_Mietsteig')}"),
+        "einnahmen": (f"={_summe_jahr('prg_MieteHalten', t)}"
+                      f"+{_summe_jahr('prg_EinnahmenHalten', t)}"),
         # Erhaltung mit Alterung und Großmaßnahmen aus der Prognose, wie bei Halten
         "ausgaben": (f"={_summe_jahr('prg_ErhaltungHalten', t)}"
                      f"+{stamm('obj_AusgBasis', 'par_Kostensteig')}"),

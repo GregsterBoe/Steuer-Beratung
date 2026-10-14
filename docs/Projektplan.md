@@ -73,6 +73,7 @@ Vier Rechenbausteine, alle als Zellformeln. Die Notation unten ist fachlich, in 
 - Buchwert\_t = Restbuchwert\_(t−1) − AfA\_t
 - Ergebnis\_t = (Miete\_t + weitere Einnahmen\_t − Erhaltung\_t − weitere Ausgaben\_t − AfA\_t) × aktiv-Flag
 - weitere Einnahmen wachsen mit der Mietsteigerung, weitere Ausgaben mit par\_Kostensteig
+- Miet- und Erhaltungssteigerung je Objekt: obj\_Mietsteig und obj\_Erhaltsteig, vorbelegt mit par\_Mietsteig bzw. par\_Erhaltsteig (blau, abgeleitet, zählt nicht als Annahme), leer = Parameter. obj\_MieteFixAb (leer = nie): Miete\_t = Miete\_2026 × (1 + Satz)^(MIN(t; Jahr − 1) − 2026), weitere Einnahmen steigen weiter. Die Prognose führt dazu prg\_MieteHalten und prg\_EinnahmenHalten (ohne Verkauf, Neuobjekte 0); Baseline, „Alle Objekte halten“ und der Ausgangsfall im Sonderbereich summieren diese Spalten statt der Basiswerte × Parameter
 - aktiv-Flag = 1, solange t ≤ Verkaufsjahr, sonst 0
 
 **Verkaufsaufteilung im Verkaufsjahr**
