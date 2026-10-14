@@ -224,6 +224,19 @@ OBJEKT_FELDER = [
     Feld("zinsen", "Zinsaufwand Basisjahr", "obj_ZinsBasis", FMT_EURO, False, minimum=0,
          hinweis="BWA 1310; leer = 0. Ohne Restschuld fortgeschrieben mit der Veränderung "
                  "(Parameter) bis zum Verkauf; mit Restschuld nur Grundlage des Zinssatzes"),
+    # Fortschreibung je Objekt: vorbelegt mit dem Parameter, überschreibbar
+    Feld("mietsteig", "Mietsteigerung p. a.", "obj_Mietsteig", FMT_PROZENT, False, 10,
+         minimum=-0.2, maximum=0.2, annahme=True, abgeleitet=True, leer_erlaubt=True,
+         hinweis="vorbelegt: Mietsteigerung vom Parameterblatt; eigener Satz für dieses "
+                 "Objekt eintippen. Gilt für Miete und weitere Einnahmen. Leer = Parameter"),
+    Feld("erhaltsteig", "Erhaltungssteigerung p. a.", "obj_Erhaltsteig", FMT_PROZENT, False,
+         10, minimum=-0.2, maximum=0.2, annahme=True, abgeleitet=True, leer_erlaubt=True,
+         hinweis="vorbelegt: Erhaltungssteigerung vom Parameterblatt; eigener Satz für dieses "
+                 "Objekt eintippen. Gilt auch für die Großmaßnahme. Leer = Parameter"),
+    Feld("miete_fix_ab", "Miete eingefroren ab Jahr", "obj_MieteFixAb", FMT_JAHR, False, 10,
+         minimum=1900, maximum=2100, ganzzahl=True,
+         hinweis="ab diesem Jahr keine Mietsteigerung mehr: die Miete bleibt auf dem Stand "
+                 "des Vorjahrs (weitere Einnahmen steigen weiter). Leer = nie"),
     # steuerliche Stammdaten (Anlagenverzeichnis); fehlen sie, greift die Annahme
     Feld("verkehrswert", "Verkehrswert aktuell", "obj_Verkehrswert", FMT_EURO, False, minimum=0,
          annahme=True, hinweis="leer: Jahresmiete × Vervielfältiger (Parameter)"),
@@ -424,6 +437,9 @@ PROGNOSE_SPALTEN = [
     Spalte("buchwert_gub_ohne6b", "Buchwert G+B ohne § 6b", "prg_BuchwertGuBOhne6b", FMT_EURO, 16),
     # Erhaltung, als würde das Objekt nie verkauft (Baseline, Ausgangsfall im Sonderbereich)
     Spalte("erhaltung_halten", "Erhaltung bei Halten", "prg_ErhaltungHalten", FMT_EURO),
+    # Miete und weitere Einnahmen, als würde das Objekt nie verkauft; Neuobjekte 0
+    Spalte("miete_halten", "Miete bei Halten", "prg_MieteHalten", FMT_EURO),
+    Spalte("einnahmen_halten", "weitere Einnahmen bei Halten", "prg_EinnahmenHalten", FMT_EURO),
     # Sonderbereich Verkauf und Kauf: RücklageID, aus der das Neuobjekt gekauft ist
     Spalte("quelle", "Quelle RücklageID", "prg_Quelle", FMT_TEXT, 14),
     # AfA, als würde das Objekt nie verkauft: je Anlage aus dem Blatt Anlagen, sonst AfA je
@@ -949,6 +965,10 @@ class Objekt:
     zinssatz: Optional[float] = None
     rate: Optional[float] = None         # Zins + Tilgung p. a.
     art: Optional[str] = None            # Art der Kostenstelle, leer = Immobilie
+    # None = Parameter (Annahmeformel), "" = Zelle leer, ebenfalls Parameter
+    mietsteig: Optional[float] = None
+    erhaltsteig: Optional[float] = None
+    miete_fix_ab: Optional[int] = None   # ab diesem Jahr keine Mietsteigerung
 
 
 @dataclass

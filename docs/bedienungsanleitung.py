@@ -163,6 +163,10 @@ punkte([
     "Zelle wird orange, das Prüfungsblatt warnt. Die Schaltfläche **„Objekte -> Kostenstellen“** "
     "überträgt den Wert ins Kostenstellenblatt und stellt die Verknüpfung wieder her.",
     "Die Monatsspalten des Basisjahrs sind eingeklappt; das „+“ über der Jahresspalte öffnet sie.",
+    "**Steigerung je Objekt:** Die Spalten Mietsteigerung und Erhaltungssteigerung im Blatt "
+    "Objekte sind mit dem Parameter vorbelegt (blau) und lassen sich je Objekt überschreiben; "
+    "leer gilt wieder der Parameter. „Miete eingefroren ab Jahr“: ab diesem Jahr bleibt die "
+    "Miete auf dem Stand des Vorjahrs (weitere Einnahmen steigen weiter).",
 ])
 
 doc.add_heading("Neukauf-Kostenstellen (KSt 31–35)", level=2)
