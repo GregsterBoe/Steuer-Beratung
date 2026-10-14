@@ -1112,6 +1112,173 @@ def _blatt_vergleich(wb) -> None:
     ws.freeze_panes = f"B{erste}"
 
 
+def _blatt_bruecke(wb, modell: Modell) -> None:
+    """Ergebnisbrücke: Ergebnis vor Steuern bei Halten, je Verkauf und Neuobjekt die
+    Wirkung, Zins auf die Liquidität, Ergebnis vor Steuern Plan A; Spalten = Planjahre."""
+    ws = wb.create_sheet("Ergebnisbrücke", 2)
+    ws["A1"] = "Ergebnisbrücke: Wirkung der Entscheidungen auf das Ergebnis"
+    ws["A1"].font = FONT_TITEL
+    ws["A2"] = ("Vom Ergebnis vor Steuern bei Halten (Baseline, alle Kostenstellen) über die "
+                "Wirkung jedes Verkaufs und jedes Kaufs zum Ergebnis vor Steuern im Plan A. "
+                "Verkauf: Gewinn und Rücklage (Einstellung, Auflösung, Zuschlag) minus das "
+                "laufende Ergebnis, das mit dem Objekt entfällt. Kauf: Miete − Kosten − AfA "
+                "(nach § 6b-Abzug, mit Sonder-AfA) − Kreditzinsen.")
+    ws["A3"] = ("Die Kontrolle muss 0 sein. Die Steuer steht nachrichtlich darunter: mit "
+                "Verlustvortrag lässt sie sich nicht einzelnen Entscheidungen zuordnen.")
+    for zelle in ("A2", "A3"):
+        ws[zelle].alignment = Alignment(wrap_text=True, vertical="top")
+    ws.merge_cells("A2:L2")
+    ws.merge_cells("A3:L3")
+    ws.row_dimensions[2].height = 45
+    ws.row_dimensions[3].height = 30
+
+    kopf, jahre = 5, prognosejahre()
+    erste_sp, letzte_sp = 3, 2 + jahre
+    _kopf(ws, kopf, ["Position", "Summe"] + [None] * jahre)
+    for k in range(jahre):
+        c = ws.cell(row=kopf, column=erste_sp + k,
+                    value="=par_Startjahr" if k == 0
+                    else f"={get_column_letter(erste_sp + k - 1)}{kopf}+1")
+        c.number_format = FMT_JAHR
+    von, bis = get_column_letter(erste_sp), get_column_letter(letzte_sp)
+    texte = erklaerungen.BRUECKE
+    zeile = kopf + 1
+    zeilen = {}   # Schlüssel -> Zeile
+
+    def abschnitt(text):
+        nonlocal zeile
+        ws.cell(row=zeile, column=1, value=text).font = Font(bold=True, italic=True)
+        zeile += 1
+
+    def position(key, text, formel, fett=False, einzug=False, name=None):
+        """Eine Zeile; formel(jahr) liefert die Formel, text darf eine Formel sein."""
+        nonlocal zeile
+        c = ws.cell(row=zeile, column=1, value=text)
+        c.font = Font(bold=fett)
+        if einzug:
+            c.alignment = Alignment(indent=1)
+        if key in texte:
+            _tooltip(c, texte[key])
+        leer = f'IF($A{zeile}="","",' if str(text).startswith("=") else "("
+        c = ws.cell(row=zeile, column=2, value=f"={leer}SUM({von}{zeile}:{bis}{zeile}))")
+        c.number_format, c.fill, c.font = FMT_EURO, FILL_BERECHNET, Font(bold=True)
+        for k in range(jahre):
+            jahr = f"{get_column_letter(erste_sp + k)}${kopf}"
+            c = ws.cell(row=zeile, column=erste_sp + k, value=formel(jahr))
+            c.number_format, c.fill = FMT_EURO, FILL_BERECHNET
+            if fett:
+                c.font = Font(bold=True)
+        if name:
+            _name(wb, name, f"'Ergebnisbrücke'!${von}${zeile}:${bis}${zeile}")
+        zeilen[key] = zeile
+        zeile += 1
+
+    def fest(key):
+        return lambda jahr: formeln.bruecke_summen(jahr)[key]
+
+    def ref(key):
+        return lambda jahr: f"{jahr.split('$')[0]}{zeilen[key]}"
+
+    position("halten", "Ergebnis vor Steuern bei Halten", fest("halten"), fett=True,
+             name="brk_Halten")
+    position("halten_immobilien", "davon Immobilien",
+             lambda j: (f"={ref('halten')(j)}-{j.split('$')[0]}{zeile + 1}"
+                        f"-{j.split('$')[0]}{zeile + 2}"),
+             einzug=True, name="brk_HaltenImmobilien")
+    position("halten_unternehmen", "davon Kostenstellen Unternehmen (keine Immobilie)",
+             fest("halten_unternehmen"), einzug=True, name="brk_HaltenUnternehmen")
+    position("halten_zins", "davon Zinsertrag Liquidität", fest("halten_zins"), einzug=True,
+             name="brk_HaltenZins")
+    zeile += 1
+
+    # Pakete: je Verkauf Zwischensumme aus dem Verkauf und den Käufen aus seiner Rücklage
+    # oder seinem Erlös; darunter die Käufe einzeln mit ihrer Paketnummer (Spalte hinter
+    # den Jahren), über die SUMIFS sie den Paketen zuordnet
+    n_vk, n_ne = modell.kapazitaet.verkaeufe, modell.kapazitaet.neuobjekte
+    paket_start = zeile + 1
+    ohne = paket_start + 3 * n_vk
+    ne_erste = ohne + 12
+    ne_letzte = ne_erste + n_ne - 1
+    sp_paket = get_column_letter(letzte_sp + 1)
+    pakete = f"${sp_paket}${ne_erste}:${sp_paket}${ne_letzte}"
+
+    def spalte(j):
+        return j.split("$")[0]
+
+    def kaeufe(bedingung):
+        return lambda j: (f"SUMIFS({spalte(j)}${ne_erste}:{spalte(j)}${ne_letzte},"
+                          f"{pakete},{bedingung})")
+
+    abschnitt("Pakete: Verkauf mit den Käufen aus seiner Rücklage oder seinem Erlös")
+    koepfe = []
+    for nr in range(1, n_vk + 1):
+        kopfzeile = zeile
+        koepfe.append(kopfzeile)
+        position(f"paket{nr}", formeln.bruecke_paket_text(nr),
+                 lambda j, z=kopfzeile: (f'=IF($A{z}="","",'
+                                         f"{spalte(j)}{z + 1}+{spalte(j)}{z + 2})"),
+                 fett=True)
+        position(f"vk{nr}", formeln.bruecke_verkauf_text(nr),
+                 lambda j, nr=nr: formeln.bruecke_verkauf(nr, j), einzug=True)
+        position(f"vk_kaeufe{nr}", formeln.bruecke_kaeufe_text(nr, pakete),
+                 lambda j, nr=nr: f'=IF(INDEX(vk_ID,{nr})="","",{kaeufe(nr)(j)})',
+                 einzug=True)
+    assert zeile == ohne
+    position("ohne", "Käufe ohne Verkauf", lambda j: f"={kaeufe(0)(j)}", fett=True)
+    zeile += 1
+
+    position("entscheidungen", "Summe Pakete und Käufe ohne Verkauf",
+             lambda j: "=SUM(" + ",".join(f"{spalte(j)}{z}" for z in koepfe + [ohne]) + ")",
+             fett=True, name="brk_Entscheidungen")
+    position("vk_veraeusserung", "davon Gewinn und Rücklage", fest("vk_veraeusserung"),
+             einzug=True, name="brk_Veraeusserung")
+    position("vk_laufend", "davon entfallendes laufendes Ergebnis", fest("vk_laufend"),
+             einzug=True, name="brk_Laufend")
+    position("neuobjekte", "davon Käufe",
+             lambda j: f"=SUM({spalte(j)}{ne_erste}:{spalte(j)}{ne_letzte})", einzug=True,
+             name="brk_Neuobjekte")
+    zeile += 1
+
+    position("zins", "Zinseffekt Liquidität (Plan − Halten)", fest("zins"), fett=True,
+             name="brk_Zins")
+    position("plan", "Ergebnis vor Steuern Plan A", fest("plan"), fett=True, name="brk_Plan")
+    position("kontrolle", "Kontrolle: Halten + Wirkungen − Plan (muss 0 sein)",
+             lambda j: (f"=ROUND({ref('halten')(j)}+{ref('entscheidungen')(j)}"
+                        f"+{ref('zins')(j)}-{ref('plan')(j)},2)"),
+             name="brk_Kontrolle")
+    zeile += 1
+
+    abschnitt("Käufe einzeln")
+    assert zeile == ne_erste
+    c = ws.cell(row=kopf, column=letzte_sp + 1, value="Paket (Zeile Verkauf)")
+    c.font, c.fill = FONT_KOPF, FILL_KOPF
+    c.alignment = Alignment(wrap_text=True, vertical="center")
+    _tooltip(c, texte["paket"])
+    for nr in range(1, n_ne + 1):
+        c = ws.cell(row=zeile, column=letzte_sp + 1, value=formeln.bruecke_paket_nr(nr))
+        c.number_format, c.fill = FMT_ZAHL, FILL_BERECHNET
+        position(f"ne{nr}", formeln.bruecke_neu_text(nr, f"${sp_paket}{zeile}"),
+                 lambda j, nr=nr: formeln.bruecke_neu(nr, j), einzug=True)
+    ws.column_dimensions[sp_paket].width = 11
+    zeile += 1
+
+    abschnitt("nachrichtlich: Steuer und Ergebnis nach Steuern")
+    position("steuer_halten", "Steuer bei Halten", fest("steuer_halten"), einzug=True)
+    position("steuer_plan", "Steuer Plan A", fest("steuer_plan"), einzug=True)
+    position("nach_halten", "Ergebnis nach Steuern bei Halten", fest("nach_halten"),
+             einzug=True)
+    position("nach_plan", "Ergebnis nach Steuern Plan A", fest("nach_plan"), einzug=True)
+    position("nach_wirkung", "Wirkung der Entscheidungen nach Steuern",
+             lambda j: f"={ref('nach_plan')(j)}-{ref('nach_halten')(j)}", fett=True,
+             name="brk_NachSteuer")
+
+    ws.column_dimensions["A"].width = 52
+    ws.column_dimensions["B"].width = 14
+    for k in range(jahre):
+        ws.column_dimensions[get_column_letter(erste_sp + k)].width = 12
+    ws.freeze_panes = f"C{kopf + 1}"
+
+
 def _blatt_uebersicht(wb) -> None:
     """Immobilienwert und Gesamtvermögen je Jahr: Plan mit Verkäufen gegen Halten ohne Verkauf."""
     ws = wb.create_sheet("Übersicht", 0)
@@ -1522,6 +1689,7 @@ def erstelle_mappe(modell: Modell) -> Workbook:
     _blatt_auswertung(wb)
     _blatt_uebersicht(wb)
     _blatt_vergleich(wb)
+    _blatt_bruecke(wb, modell)
     _blatt_pruefung(wb)
     _blatt_varianten(wb)
     bwa_blaetter = bwa.blaetter_bwa(wb, modell)

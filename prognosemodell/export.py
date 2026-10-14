@@ -5,9 +5,11 @@ Aufruf: python -m prognosemodell.export MAPPE [--ausgabe PFAD]
 Die Mappe muss durchgerechnet sein, also in Excel gespeichert. Ist sie es nicht (frisch
 erzeugt und nie geöffnet), rechnet LibreOffice sie durch, sofern es installiert ist.
 
-Statt aller Eingabe-, Rechen- und Kontrollblätter enthält der Export sechs Blätter:
+Statt aller Eingabe-, Rechen- und Kontrollblätter enthält der Export bis zu sieben Blätter:
 - Überblick: Empfehlung, Endvermögen je Option, Datenlage, Verkehrswert und Vermögen je Jahr
 - Jahresrechnung: je Jahr Ergebnis und Steuer, Geldfluss und Vermögen, Plan und Halten
+- Ergebnisbrücke: vom Ergebnis bei Halten je Verkauf und Kauf zum Ergebnis im Plan
+  (entfällt ohne Verkauf und Kauf)
 - BWA gesamt: Summen-BWA aller Objekte; mit „Vergleich mit Halten = ja“ auch Halten und
   die Differenz
 - BWA je Objekt: alle Kostenstellenblätter untereinander
@@ -41,12 +43,15 @@ from .vorlagen import ERSTE_ZEILE, SPALTE_JAHR, SPALTE_PLAN, SPALTE_VORJAHRE
 
 UEBERBLICK = "Überblick"
 JAHRESRECHNUNG = "Jahresrechnung"
+BRUECKE = "Ergebnisbrücke"
 BWA_GESAMT = "BWA gesamt"
 BWA_OBJEKTE = "BWA je Objekt"
 VERKAUF_KAUF = "Verkauf und Kauf"
 ANNAHMEN = "Annahmen"
 INHALT = [
     (JAHRESRECHNUNG, "je Jahr Ergebnis und Steuer, Geldfluss und Vermögen; Plan und Halten"),
+    (BRUECKE, "Wirkung jedes Verkaufs und Kaufs auf das Ergebnis vor Steuern, von Halten "
+              "zum Plan"),
     (BWA_GESAMT, "Summen-BWA über alle Objekte: Ist-Jahre aus der Buchhaltung, dann die "
                  "Planjahre"),
     (BWA_OBJEKTE, "BWA je Kostenstelle untereinander, mit Inhaltsverzeichnis"),
@@ -359,6 +364,66 @@ def _blatt_jahresrechnung(ex, wb) -> None:
     for spalte in range(2, n + 3):
         ws.column_dimensions[get_column_letter(spalte)].width = BREITE_ZAHL
     _druck(ws, f"{kopf}:{kopf}")
+
+
+# --- Blatt Ergebnisbrücke ---
+
+def _blatt_bruecke(ex, wb) -> bool:
+    """Werte des Blatts Ergebnisbrücke ohne leere Pakete und Vorgänge, ohne Paketspalte und
+    Kontrollzeile; ohne
+    Verkauf und Kauf kein Blatt (False)."""
+    if not any(_ungleich_null(_bereich(wb, f"brk_{name}"))
+               for name in ("Veraeusserung", "Laufend", "Neuobjekte")):
+        return False
+    quelle = wb[BRUECKE]
+    blatt, ref = next(iter(wb.defined_names["brk_Halten"].destinations))
+    erste = wb[blatt][ref.replace("$", "").split(":")[0]]
+    kopf, spalte = erste.row - 1, erste.column
+    jahre = [c.value for c in quelle[kopf][spalte - 1:]
+             if isinstance(c.value, (int, float))]
+    n = len(jahre)
+    kontrolle = next(iter(wb.defined_names["brk_Kontrolle"].destinations))[1]
+    kontrollzeile = int(kontrolle.split("$")[2].split(":")[0])
+    ws = ex.create_sheet(BRUECKE)
+    zeile = _titel(ws, "Ergebnisbrücke: Wirkung der Entscheidungen",
+                   "Vom Ergebnis vor Steuern bei Halten je Verkauf und Kauf zum Ergebnis vor "
+                   "Steuern im Plan. Verkauf: Gewinn und § 6b-Rücklage minus das laufende "
+                   "Ergebnis, das mit dem Objekt entfällt. Kauf: Miete − Kosten − AfA − "
+                   "Kreditzinsen. Summe = über alle Jahre.")
+    _kopfzeile(ws, zeile, ["Position"] + jahre + ["Summe"])
+    ws.freeze_panes = ws.cell(row=zeile + 1, column=2)
+    kopfzeile = zeile
+    zeile += 1
+    for q in range(kopf + 1, quelle.max_row + 1):
+        text = quelle.cell(row=q, column=1).value
+        if text in (None, "") or q == kontrollzeile:
+            continue
+        werte = [_zahl(quelle.cell(row=q, column=spalte + i).value) for i in range(n)]
+        einzug = quelle.cell(row=q, column=1).alignment.indent
+        if quelle.cell(row=q, column=2).value is None:   # Abschnitt
+            zeile += 1
+            _abschnitt(ws, zeile, text, n + 2)
+            zeile += 1
+            continue
+        # leere Pakete und Vorgänge entfallen, feste Summenzeilen bleiben
+        if not _ungleich_null(werte) and not text.startswith(
+                ("Ergebnis", "Summe", "Zinseffekt", "Wirkung")):
+            continue
+        fett = bool(quelle.cell(row=q, column=1).font.bold)
+        c = ws.cell(row=zeile, column=1, value=text)
+        c.alignment = Alignment(indent=einzug)
+        for i, wert in enumerate(werte + [sum(werte)], start=2):
+            ws.cell(row=zeile, column=i, value=wert).number_format = FMT_BETRAG
+        if fett:
+            for i in range(1, n + 3):
+                c = ws.cell(row=zeile, column=i)
+                c.font, c.border = FONT_FETT, RAHMEN_SUMME
+        zeile += 1
+    ws.column_dimensions["A"].width = BREITE_TEXT
+    for i in range(2, n + 3):
+        ws.column_dimensions[get_column_letter(i)].width = BREITE_ZAHL
+    _druck(ws, f"{kopfzeile}:{kopfzeile}")
+    return True
 
 
 # --- BWA-Blätter ---
@@ -757,8 +822,11 @@ def erstelle_export(wb, formeln_wb=None, quelle: str = "") -> Workbook:
     liefert die Herkunft der Objektdaten, ohne sie bleiben die Zellen ohne Farbe."""
     ex = Workbook()
     spalten = _bwa_spalten(wb)
-    blaetter = [UEBERBLICK, JAHRESRECHNUNG, BWA_GESAMT, BWA_OBJEKTE]
+    blaetter = [UEBERBLICK, JAHRESRECHNUNG]
     _blatt_jahresrechnung(ex, wb)
+    if _blatt_bruecke(ex, wb):
+        blaetter.append(BRUECKE)
+    blaetter += [BWA_GESAMT, BWA_OBJEKTE]
     _blatt_bwa_gesamt(ex, wb, spalten)
     _blatt_bwa_objekte(ex, wb, spalten)
     if _blatt_verkauf_kauf(ex, wb):

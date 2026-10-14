@@ -109,7 +109,8 @@ tabelle(["Blatt", "Wofür"], [
     ["**Start**", "Empfehlung (Option mit dem höchsten Endvermögen nach latenter Steuer), "
                   "Vorsprung gegenüber Halten, tiefster Liquiditätsstand, Anleitung mit Links"],
     ["**Parameter**", "Alle Sätze und Annahmen zentral; Schaltflächen (Abschnitt 7)"],
-    ["**Objekte**", "Ein Bestandsobjekt je Zeile: Miete, Kosten, AK, Kaufjahr, Verkehrswert, Status"],
+    ["**Objekte**", "Ein Bestandsobjekt je Zeile: Miete, Kosten, AK, Kaufjahr, Verkehrswert, "
+                    "Status; Kostenstellen ohne Immobilie mit Art „Unternehmen“"],
     ["**Verkäufe**", "ObjektID, Verkauf aktiv (nein = ausgeschaltet, Rücklage entfällt), Jahr, "
                      "Preis, Kosten, Anteil G+B lt. Kaufvertrag, § 6b ja/nein, "
                      "„reinvestieren = ja“ legt ein Neuobjekt aus Annahmen an"],
@@ -120,6 +121,8 @@ tabelle(["Blatt", "Wofür"], [
     ["**Darlehen**", "Tilgungsplan je Kredit: Zins, Tilgung und Restschuld je Jahr"],
     ["**Anlagen**", "Anlagenverzeichnis: AK, Buchwert und AfA je Anlage und Jahr"],
     ["**Übersicht / Vergleich**", "Ergebnis je Jahr und Szenarien nebeneinander (Abschnitt 5)"],
+    ["**Ergebnisbrücke**", "Wirkung jedes Verkaufs und Kaufs auf das Ergebnis vor Steuern, "
+                           "von Halten zum Plan (Abschnitt 5)"],
     ["**Prüfung**", "Alle Plausibilitätsprüfungen als Fehler, Warnung oder Hinweis"],
     ["**Alle Objekte, KSt-Blätter**", "Ist und Plan im BWA-Format je Kostenstelle und "
                                       "als Summe; Verkauf und Kauf als eigenes Blatt"],
@@ -208,6 +211,12 @@ punkte([
     "**Übersicht:** Wert der Immobilien und Gesamtvermögen je Jahr, als Tabelle und Diagramm, "
     "mit und ohne die geplanten Verkäufe.",
     "**Vergleich:** Kennzahlen der Szenarien am Ende des Prognosezeitraums nebeneinander.",
+    "**Ergebnisbrücke:** je Jahr vom Ergebnis vor Steuern bei Halten über die Pakete und den "
+    "Zinseffekt der Liquidität zum Ergebnis vor Steuern im Plan. Ein Paket ist ein Verkauf "
+    "(Gewinn und Rücklage minus das entfallende laufende Ergebnis) mit den Käufen aus seiner "
+    "Rücklage oder seinem Erlös (Miete − Kosten − AfA − Kreditzinsen), mit Zwischensumme; "
+    "Käufe ohne Quelle stehen getrennt, darunter alle Käufe einzeln mit ihrem Paket. Die Kontrollzeile muss 0 sein. Kostenstellen der Art „Unternehmen“ "
+    "(Blatt Objekte, keine Immobilie) stehen getrennt im Ergebnis bei Halten.",
     "**Varianten:** mit „Variante festhalten“ gesicherte Stände, etwa verschiedene Verkaufsjahre.",
     "**Alle Objekte halten:** die Summen-BWA, als würden alle Objekte gehalten und nichts "
     "gekauft (Baseline).",
@@ -277,7 +286,7 @@ punkte([
 ])
 
 doc.add_heading("10. Mandanten-Export", level=1)
-absatz("Für den Mandanten gibt es eine schlanke Fassung der Mappe mit sechs Blättern, nur "
+absatz("Für den Mandanten gibt es eine schlanke Fassung der Mappe mit bis zu sieben Blättern, nur "
        "mit Werten: Mappe in Excel speichern und schließen, dann python -m "
        "prognosemodell.export Prognose.xlsx. Daneben entsteht Prognose_Mandant.xlsx; mit "
        "--ausgabe ein anderer Name. Eine frisch erzeugte, nie geöffnete Mappe rechnet "
@@ -287,6 +296,8 @@ tabelle(["Blatt", "Inhalt"], [
                   "Gesamtvermögen je Jahr mit Diagrammen"],
     ["Jahresrechnung", "je Jahr vom Ergebnis über Steuer und Geldfluss zum Vermögen, Plan "
                        "und Halten, Differenz; jede Spalte rechnet von oben nach unten"],
+    ["Ergebnisbrücke", "vom Ergebnis bei Halten je Verkauf und Kauf zum Ergebnis im Plan "
+                       "(entfällt ohne Verkauf und Kauf)"],
     ["BWA gesamt", "Summen-BWA aller Objekte, Ist-Jahre und Planjahre, Herleitung der "
                    "Sonderposten; bei „Vergleich mit Halten = ja“ auch Halten und Differenz"],
     ["BWA je Objekt", "alle Kostenstellenblätter untereinander, mit Inhaltsverzeichnis"],

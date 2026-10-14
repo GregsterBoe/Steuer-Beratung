@@ -15,7 +15,7 @@
 
 | Eingabe | Rechnung | Ausgabe | Kontrolle | BWA |
 | --- | --- | --- | --- | --- |
-| Parameter, Objekte, Anlagen, Verkäufe, Neuobjekte | Prognose, Rücklagen, Darlehen, Liquidität | Start, Übersicht, Vergleich, Auswertung | Prüfung, Varianten | Alle Objekte, Alle Objekte halten, je Kostenstelle ein Blatt, Verkauf und Kauf |
+| Parameter, Objekte, Anlagen, Verkäufe, Neuobjekte | Prognose, Rücklagen, Darlehen, Liquidität | Start, Übersicht, Vergleich, Ergebnisbrücke, Auswertung | Prüfung, Varianten | Alle Objekte, Alle Objekte halten, je Kostenstelle ein Blatt, Verkauf und Kauf |
 
 ## Etappen
 
@@ -145,6 +145,21 @@ Alle Szenarien rechnen gleichzeitig, Liquidität und Auswertung haben je Szenari
 
 Das Blatt **Vergleich** stellt die Kennzahlen am Ende des Rasters nebeneinander, mit den Differenzen A − B, A − C und A − Baseline, dazu das Endvermögen nach latenter Steuer je Jahr als Diagramm. A − C zeigt die reine Wirkung von § 6b: ohne Alternativrendite ein Gleichstand, mit Rendite der Zins auf die gestundete Steuer.
 
+Das Blatt **Ergebnisbrücke** zeigt, wie die Entscheidungen auf das Ergebnis wirken. Die Spalten sind die Planjahre und eine Summe. Die Zeilen führen vom Ergebnis vor Steuern bei Halten (Baseline) zum Ergebnis vor Steuern im Plan A:
+- **Ergebnis bei Halten**, aufgeteilt in Immobilien, Kostenstellen der Art Unternehmen und Zinsertrag der Liquidität.
+- **Je Verkauf ein Paket mit Zwischensumme**, darunter zwei Zeilen:
+  - **Verkauf:** im Verkaufsjahr der steuerwirksame Gewinn, bei § 6b minus die Einstellung in die Rücklage; im Fristjahr Auflösung und Zuschlag; ab dem Folgejahr minus das laufende Ergebnis, das mit den verkauften Kostenstellen entfällt (Miete − Kosten − AfA − Darlehenszinsen). Ein Verkaufspaket steht in einer Zeile.
+  - **Käufe aus dem Verkauf:** alle Neuobjekte, deren erste Quelle mit einem Verkauf (Quelle 1, sonst 2, sonst 3) die Rücklage oder den Erlös dieses Verkaufs nennt. Auch ein Verkauf ohne § 6b zählt, über „RL-“ & ObjektID.
+- **Käufe ohne Verkauf:** Neuobjekte ohne Quelle.
+- **Summe Pakete und Käufe ohne Verkauf**, davon Gewinn und Rücklage, entfallendes laufendes Ergebnis und Käufe.
+- **Käufe einzeln** (unten): je Kauf Miete − Kosten − AfA − Kreditzinsen, mit dem Paket, zu dem er zählt. Die AfA rechnet von den um die Rücklage geminderten AK, mit Sonder-AfA § 7b.
+- **Zinseffekt der Liquidität:** Verkaufserlöse, Kaufpreise und Steuer verändern die Liquidität und damit deren Verzinsung.
+- **Kontrolle:** Halten + Summe Pakete und Käufe ohne Verkauf + Zinseffekt − Plan, muss 0 sein; sonst meldet das Prüfungsblatt einen Fehler.
+
+Die Steuer steht nachrichtlich darunter (Halten, Plan und die Wirkung nach Steuern), denn mit Verlustvortrag lässt sie sich nicht einzelnen Entscheidungen zuordnen.
+
+**Kostenstellen ohne Immobilie:** Jede Kostenstelle der Kostenstellen-Datei wird ein Objekt, auch eine für gesonderte Unternehmenseinnahmen und -ausgaben. Solche Kostenstellen bekommen im Blatt Objekte die Art „Unternehmen“ (leer = Immobilie). Sie werden wie ein Objekt aus dem Basisjahr fortgeschrieben (Einnahmen mit der Mietsteigerung, Ausgaben mit der Kostensteigerung, AfA aus den Anlagen) und zählen in Liquidität, Steuer und „Alle Objekte“ mit. Sie haben keinen Verkehrswert, und die Ergebnisbrücke weist sie getrennt aus. Ein Verkauf einer solchen Kostenstelle meldet das Prüfungsblatt als Warnung.
+
 Das Blatt **Prüfung** rechnet alle Plausibilitätsprüfungen als Formeln, je mit Art und Anzahl betroffener Zeilen:
 - **Fehler:** Status ungleich OK in Objekten, Verkäufen oder Neuobjekten (darunter Fristverstoß), Steuerwelt nicht GmbH
 - **Warnung:** Vorbesitzzeit für § 6b zu kurz, Rücklage nur teilweise oder gar nicht übertragen, Drei-Objekt-Grenze überschritten
@@ -172,9 +187,10 @@ Die Ergebnisse stehen auch im **DATEV-BWA-Format** (Projektplan, Abschnitt 18):
 - **Vergleich mit Halten:** In „Alle Objekte“ steht in D3 der Schalter „Vergleich mit Halten“ (ja/nein). Bei „ja“ zeigen die Spalten rechts neben den Planjahren je Position und Jahr die Differenz Plan − Halten (grün mehr, rot weniger), auch für Herleitung und Finanzierung; bei „nein“ bleiben sie leer. `--uebernehmen` übernimmt den Schalter.
 - **Blatt Verkauf und Kauf:** je Verkauf eine Ergebnissicht für die Berichterstattung und eine Detailsicht. Die Ergebnissicht zeigt Erlös, Reinvestition, Kapitalanlage, Übertrag § 6b und den Vergleich Halten gegen Alternative im ersten vollen Jahr. Die Detailsicht zeigt die Einzelauflistung nach G+B und Gebäude und die Planung. Dazu kommt je Neuobjekt die Detailsicht des Kaufs.
 
-**Mandanten-Export:** `python -m prognosemodell.export Prognose.xlsx` schreibt daneben `Prognose_Mandant.xlsx` (anderer Name mit `--ausgabe`), eine schlanke Fassung für den Mandanten, nur mit Werten. Die Mappe muss in Excel gespeichert sein; eine frisch erzeugte, nie geöffnete Mappe rechnet LibreOffice vorher durch. Sechs Blätter:
+**Mandanten-Export:** `python -m prognosemodell.export Prognose.xlsx` schreibt daneben `Prognose_Mandant.xlsx` (anderer Name mit `--ausgabe`), eine schlanke Fassung für den Mandanten, nur mit Werten. Die Mappe muss in Excel gespeichert sein; eine frisch erzeugte, nie geöffnete Mappe rechnet LibreOffice vorher durch. Bis zu sieben Blätter:
 - **Überblick:** Empfehlung, Endvermögen je Option, Datenlage, Verkehrswert und Gesamtvermögen je Jahr mit Diagrammen.
 - **Jahresrechnung:** je Jahr vom Ergebnis über Steuer und Geldfluss zum Vermögen, für Plan und Halten, dazu die Differenz. Jede Spalte rechnet von oben nach unten.
+- **Ergebnisbrücke:** vom Ergebnis bei Halten über die Pakete (Verkauf mit seinen Käufen) zum Ergebnis im Plan, ohne leere Pakete und Vorgänge und ohne Kontrollzeile. Ohne Verkauf und Kauf entfällt das Blatt.
 - **BWA gesamt:** Summen-BWA mit Ist-Jahren und Planjahren und der Herleitung der Sonderposten; bei „Vergleich mit Halten = ja“ auch Halten und Differenz.
 - **BWA je Objekt:** alle Kostenstellenblätter untereinander, mit Inhaltsverzeichnis.
 - **Verkauf und Kauf:** Verkäufe, Neuobjekte, Ergebnis- und Detailsicht je Vorgang. Ohne Verkauf und Kauf entfällt das Blatt.
