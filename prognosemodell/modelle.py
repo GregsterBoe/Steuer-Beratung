@@ -583,9 +583,12 @@ NEU_FELDER = [
                  "Fristjahr der Rücklage"),
     Feld("kaufpreis", "Kaufpreis", "ne_Kaufpreis", FMT_EURO, True, minimum=0,
          hinweis="ohne Nebenkosten; Basis für Miete (Mietrendite), Erhaltung und Verkehrswert"),
-    Feld("anteil_gub", "Anteil G+B", "ne_AnteilGuB", FMT_PROZENT, True, 10, minimum=0, maximum=1,
+    # leer erlaubt, wenn AK G+B in Euro eingetragen ist; der verwendete Anteil steht dann
+    # in „Anteil G+B verwendet“
+    Feld("anteil_gub", "Anteil G+B", "ne_AnteilGuB", FMT_PROZENT, False, 10, minimum=0, maximum=1,
          hinweis="Anteil Grund und Boden an Kaufpreis und Nebenkosten; G+B wird nicht "
-                 "abgeschrieben"),
+                 "abgeschrieben. Leer lassen, wenn AK G+B in Euro eingetragen ist: der "
+                 "Anteil ergibt sich daraus (Spalte „Anteil G+B verwendet“)"),
     Feld("nebenkosten", "Kaufnebenkosten", "ne_Nebenkosten", FMT_EURO, False, minimum=0,
          hinweis="Grunderwerbsteuer, Notar, Makler in Euro; anteilig auf G+B und Gebäude "
                  "aktiviert. Leer = 0"),
@@ -593,7 +596,8 @@ NEU_FELDER = [
     # für G+B bei sich änderndem Kaufpreis (Gebäude = Rest)
     Feld("ak_gub_eingabe", "AK G+B", "ne_AKGuBEingabe", FMT_EURO, False, abgeleitet=True,
          hinweis="vorbelegt: (Kaufpreis + Nebenkosten) × Anteil G+B. Betrag eintippen, um G+B "
-                 "fest vorzugeben; AK Gebäude ist dann der Rest"),
+                 "fest vorzugeben; AK Gebäude ist dann der Rest, der Anteil G+B darf leer "
+                 "bleiben. Anteil G+B oder AK G+B muss gefüllt sein"),
     Feld("ak_geb_eingabe", "AK Gebäude", "ne_AKGebEingabe", FMT_EURO, False, abgeleitet=True,
          hinweis="vorbelegt: Kaufpreis + Nebenkosten − AK G+B. Betrag eintippen, um das "
                  "Gebäude fest vorzugeben; weicht die Summe vom Kaufpreis ab, warnt die Prüfung"),
@@ -699,6 +703,8 @@ NEU_SPALTEN = [
     Spalte("gueltig", "im Modell", "ne_Gueltig", FMT_ZAHL, 8),
     Spalte("ak_gub_neu", "AK G+B neu", "ne_AKGuBNeu", FMT_EURO),
     Spalte("ak_geb_neu", "AK Gebäude neu", "ne_AKGebNeu", FMT_EURO),
+    # AK G+B / (Kaufpreis + Nebenkosten): Eingabe, sonst aus dem Betrag G+B berechnet
+    Spalte("anteil_gub_verw", "Anteil G+B verwendet", "ne_AnteilGuBVerw", FMT_PROZENT, 11),
     # AK G+B + AK Gebäude − (Kaufpreis + Nebenkosten); ≠ 0 nur bei Eingabe beider Beträge
     Spalte("ak_abweichung", "Abweichung Aufteilung", "ne_AKAbweichung", FMT_EURO, 12),
     Spalte("rl_geb", "Rücklage Gebäude verfügbar", "ne_RLGeb", FMT_EURO),

@@ -1089,7 +1089,7 @@ def _kauf(b: _Block, anzahl: int) -> None:
     kj = zeile("Kaufjahr (Kauf zum Jahresende)", ne("ne_Kaufjahr"), FMT_JAHR)
     zeile("Kaufpreis", f"N({ne('ne_Kaufpreis')})")
     zeile("Kaufnebenkosten", f"N({ne('ne_Nebenkosten')})")
-    zeile("Anteil G+B", f"N({ne('ne_AnteilGuB')})", FMT_PROZENT)
+    zeile("Anteil G+B", f"N({ne('ne_AnteilGuBVerw')})", FMT_PROZENT)
     zeile("AK G+B", f"N({ne('ne_AKGuBNeu')})")
     zeile("AK Gebäude", f"N({ne('ne_AKGebNeu')})")
     zeile("ü1 Gebäudegewinn auf Gebäude", f"-N({ne('ne_Ue1')})")

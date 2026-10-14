@@ -47,7 +47,7 @@ Dreizehn feste Blätter, getrennt nach Eingabe, Rechnung, Ausgabe und Kontrolle.
 | Objekte | Eingabe | ObjektID, AK Gebäude, AK G+B, AfA-Satz, Kaufjahr, Restbuchwert 2026, Miete 2026, Erhaltung 2026 | Stammdaten je Bestandsobjekt |
 | Anlagen | Eingabe | Inventar-Nr., ObjektID, Art, AHK, Buchwert Stand, AfA-Methode, AfA-Satz, AfA p. a.; AfA je Prognosejahr | Anlagenverzeichnis, liefert AK, Buchwert, Kaufjahr und AfA je Objekt (Abschnitt 21) |
 | Verkäufe | Eingabe | ObjektID, weitere Kostenstellen (Paket), Verkaufsjahr, Verkaufspreis oder Faktor, Verkaufskosten, 6b-Nutzung (ja/nein), Neubau begonnen (ja/nein) | ein Datensatz je geplantem Verkauf |
-| Neuobjekte | Eingabe | NeuID, Kaufjahr, Kaufpreis, Anteil G+B, Nebenkosten, AfA-Satz, AfA-Methode, Mietrendite, Erhaltungsquote, Quelle-Rücklage | Reinvestitionsobjekte |
+| Neuobjekte | Eingabe | NeuID, Kaufjahr, Kaufpreis, Anteil G+B oder AK G+B in Euro, Nebenkosten, AfA-Satz, AfA-Methode, Mietrendite, Erhaltungsquote, Quelle-Rücklage | Reinvestitionsobjekte |
 | Prognose | Rechnung | ObjektID × Jahr (2027-2046), Miete, Erhaltung, AfA, Buchwert, Ergebnis, aktiv-Flag | Jahresmatrix je Objekt, Herzstück |
 | Rücklagen | Rechnung | RücklageID, Verkaufsjahr, Betrag G+B, Betrag Gebäude, Fristjahr, übertragen Gebäude und G+B, Auflösung, Zuschlag; Spiegel je Jahr | § 6b-Spiegel je Rücklage und je Jahr |
 | Liquidität | Rechnung | Jahr, Steuer mit Verlustvortrag, Verkaufserlöse, Buchwert-Rückfluss, Kauf Neuobjekte, Liquidität kumuliert, Zinsertrag; Szenarien A, B, C und Baseline | Steuer und Geldfluss je Jahr |
@@ -437,7 +437,7 @@ Ein Neuobjekt nimmt die Rücklage auf. Der übertragene Gewinn mindert die AfA-B
 | V | steuerliche AK G+B | ne\_AKGuB | M − R |
 | W | Status | ne\_Status | Plausibilität |
 
-Nach den Kaufnebenkosten folgen die Eingaben AK G+B (ne\_AKGuBEingabe) und AK Gebäude (ne\_AKGebEingabe) in Euro. Sie sind mit (D + F) × E bzw. dem Rest vorbelegt (blau); ein eingetippter Betrag ersetzt die Vorbelegung. So bleibt z. B. G+B fest, während sich der Kaufpreis und damit der Gebäudeanteil ändern. Die Spalte Abweichung Aufteilung (ne\_AKAbweichung) zeigt M + N − (D + F); ungleich 0 meldet die Prüfung als Warnung.
+Nach den Kaufnebenkosten folgen die Eingaben AK G+B (ne\_AKGuBEingabe) und AK Gebäude (ne\_AKGebEingabe) in Euro. Sie sind mit (D + F) × E bzw. dem Rest vorbelegt (blau); ein eingetippter Betrag ersetzt die Vorbelegung. So bleibt z. B. G+B fest, während sich der Kaufpreis und damit der Gebäudeanteil ändern. Der Anteil G+B darf leer bleiben, wenn AK G+B in Euro eingetragen ist; die Vorbelegung von AK G+B bleibt dann leer, AK Gebäude ist der Rest. Ohne beides meldet der Status „Anteil G+B oder AK G+B fehlt“ und das Neuobjekt rechnet nicht mit. Die berechnete Spalte Anteil G+B verwendet (ne\_AnteilGuBVerw) zeigt AK G+B / (D + F), also den eingetragenen oder den aus dem Betrag folgenden Anteil; das Neuobjektblatt der BWA zeigt diesen Wert. Die Spalte Abweichung Aufteilung (ne\_AKAbweichung) zeigt M + N − (D + F); ungleich 0 meldet die Prüfung als Warnung.
 
 Nebenkosten wie Grunderwerbsteuer und Notar werden aktiviert und im Verhältnis des Kaufpreises auf G+B und Gebäude verteilt. Die verfügbare Rücklage (O, P) ist nur gefüllt, wenn das Kaufjahr zwischen Bildungsjahr und Fristjahr der Quelle liegt, sonst 0. Die AfA-Methode ist linear (Satz × AfA-Basis) oder degressiv nach § 7 Abs. 5a EStG.
 
