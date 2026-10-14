@@ -241,7 +241,7 @@ def export_zelle(ex, name: str, spalte: int):
         if zeile is None:
             return None
     zeile = next((z for z in range(zeile, ws.max_row + 1)
-                  if ws.cell(row=z, column=1).value == beschriftung), None)
+                  if str(ws.cell(row=z, column=1).value) == beschriftung), None)
     if zeile is None:
         return None
     if spalte < 1000:
@@ -1580,7 +1580,8 @@ def faelle():
         ("Export: Mandanten-Export mit Verkauf, Kauf und Darlehen",
          Getippt(exp, {("Alle Objekte", "D3"): "ja"}), [
             (EXPORT_BLAETTER, 0, ["Überblick", "Jahresrechnung", "Ergebnisbrücke", "BWA gesamt",
-                                  "BWA je Objekt", "Verkauf und Kauf", "Annahmen"]),
+                                  "BWA halten", "BWA je Objekt", "Verkauf und Kauf",
+                                  "Annahmen"]),
             ("Export:Ergebnisbrücke:Ergebnis vor Steuern Plan A", 2030, Wie("aus_GuV", lj(2030))),
             ("Export:Ergebnisbrücke:Verkauf KSt 1 2028", 2029,
              Wie("BRK:Verkauf KSt 1 2028", 2029)),
@@ -1591,6 +1592,15 @@ def faelle():
             ("Export:Überblick:Ergebnis/Verkaufen, sofort versteuern, Erlös anlegen", 2,
              Wie("vg_B")),
             ("Export:Überblick:Plausibilitätsprüfung", 2, Wie("pr_Gesamt")),
+            # alle Optionen je Jahr: Halten, Plan, C, B; Endjahr gleich dem Vergleich
+            ("Export:Überblick:Gesamtvermögen nach latenter Steuer je Option/2046", 2,
+             Wie("vg_Baseline")),
+            ("Export:Überblick:Gesamtvermögen nach latenter Steuer je Option/2046", 3,
+             Wie("vg_A")),
+            ("Export:Überblick:Gesamtvermögen nach latenter Steuer je Option/2046", 4,
+             Wie("vg_C")),
+            ("Export:Überblick:Gesamtvermögen nach latenter Steuer je Option/2030", 5,
+             Wie("vgj_B", 3)),
             ("Export:Jahresrechnung:Plan:/Steuer", 2029, Wie("liq_Steuer", lj(2029))),
             ("Export:Jahresrechnung:Halten:/Steuer", 2029, Wie("lqb_Steuer", lj(2029))),
             ("Export:Jahresrechnung:Plan:/= Gesamtvermögen nach latenter Steuer", 2046,
@@ -1604,7 +1614,10 @@ def faelle():
             ("Export:BWA gesamt:Plan:/Gesamtkosten", 2026, Wie("BWA:Alle Objekte:1280", 2026)),
             ("Export:BWA gesamt:Plan:/Personalkosten", 2027, "fehlt"),   # überall 0
             ("Export:BWA gesamt:Plan:/Veräußerungsgewinn (netto)", 2028, Wie("vk_Gewinn")),
-            ("Export:BWA gesamt:Halten:/Umsatzerlöse", 2030, Wie("bwb_1020", lj(2030))),
+            ("Export:BWA gesamt:Halten:/Umsatzerlöse", 2030, "fehlt"),   # im Blatt BWA halten
+            ("Export:BWA halten:Halten:/Umsatzerlöse", 2030, Wie("bwb_1020", lj(2030))),
+            ("Export:BWA halten:Halten:/Umsatzerlöse", 2024, Wie("BWA:Alle Objekte:1020", 2024)),
+            ("Export:BWA halten:Halten:/Veräußerungsgewinn (netto)", 2028, "fehlt"),
             ("Export:BWA gesamt:Differenz/Umsatzerlöse", 2030, Wie("DIFF:1020", 2030)),
             ("Export:BWA je Objekt:KSt 1/Umsatzerlöse", 2024, Wie("BWA:KSt 1:1020", 2024)),
             ("Export:BWA je Objekt:KSt 1/Umsatzerlöse", 2028, Wie("BWA:KSt 1:1020", 2028)),

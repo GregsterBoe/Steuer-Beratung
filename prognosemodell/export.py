@@ -5,13 +5,15 @@ Aufruf: python -m prognosemodell.export MAPPE [--ausgabe PFAD]
 Die Mappe muss durchgerechnet sein, also in Excel gespeichert. Ist sie es nicht (frisch
 erzeugt und nie geöffnet), rechnet LibreOffice sie durch, sofern es installiert ist.
 
-Statt aller Eingabe-, Rechen- und Kontrollblätter enthält der Export bis zu sieben Blätter:
+Statt aller Eingabe-, Rechen- und Kontrollblätter enthält der Export bis zu acht Blätter:
 - Überblick: Empfehlung, Endvermögen je Option, Datenlage, Verkehrswert und Vermögen je Jahr
 - Jahresrechnung: je Jahr Ergebnis und Steuer, Geldfluss und Vermögen, Plan und Halten
 - Ergebnisbrücke: vom Ergebnis bei Halten je Verkauf und Kauf zum Ergebnis im Plan
   (entfällt ohne Verkauf und Kauf)
-- BWA gesamt: Summen-BWA aller Objekte; mit „Vergleich mit Halten = ja“ auch Halten und
-  die Differenz
+- BWA gesamt: Summen-BWA aller Objekte; mit „Vergleich mit Halten = ja“ auch die Differenz
+  zu Halten
+- BWA halten: Summen-BWA als Status quo, alle Objekte behalten (entfällt, wenn sie der BWA
+  gesamt gleicht)
 - BWA je Objekt: alle Kostenstellenblätter untereinander
 - Verkauf und Kauf: Verkäufe, Neuobjekte und die Sicht je Vorgang (entfällt ohne beides)
 - Annahmen: zentrale Annahmen, Daten je Objekt mit Herkunft, auffällige Prüfungen
@@ -36,15 +38,17 @@ from openpyxl.worksheet.hyperlink import Hyperlink
 from .bwa import HALTEBLATT, SONDERBEREICH, SUMMENBLATT, SUMMENZEILEN
 from .formeln import deckt_anlagen, hspalte, ispalte
 from .mappe import (FILL_ANNAHME, FILL_EINGELESEN, FILL_KOPF, FONT_KOPF, OPTIONEN, _diagramm,
-                    zentrale_annahmen)
+                    diagramm_szenarien, zentrale_annahmen)
 from .modelle import (DARLEHEN_ANNAHMEN, FMT_EURO, KST_VERKNUEPFT, OBJEKT_EINGELESEN,
-                      OBJEKT_FELDER, PARAMETER, PRUEFUNGEN, STATUS_AUS)
+                      OBJEKT_FELDER, PARAMETER, PRUEFUNGEN, STATUS_AUS, SZ_A, SZ_B, SZ_BASELINE,
+                      SZ_C)
 from .vorlagen import ERSTE_ZEILE, SPALTE_JAHR, SPALTE_PLAN, SPALTE_VORJAHRE
 
 UEBERBLICK = "Überblick"
 JAHRESRECHNUNG = "Jahresrechnung"
 BRUECKE = "Ergebnisbrücke"
 BWA_GESAMT = "BWA gesamt"
+BWA_HALTEN = "BWA halten"
 BWA_OBJEKTE = "BWA je Objekt"
 VERKAUF_KAUF = "Verkauf und Kauf"
 ANNAHMEN = "Annahmen"
@@ -54,6 +58,8 @@ INHALT = [
               "zum Plan"),
     (BWA_GESAMT, "Summen-BWA über alle Objekte: Ist-Jahre aus der Buchhaltung, dann die "
                  "Planjahre"),
+    (BWA_HALTEN, "Summen-BWA als Status quo: alle Objekte behalten, ohne Verkäufe und "
+                 "Neuobjekte"),
     (BWA_OBJEKTE, "BWA je Kostenstelle untereinander, mit Inhaltsverzeichnis"),
     (VERKAUF_KAUF, "geplante Verkäufe und Neuobjekte, Ergebnis und Herleitung je Vorgang"),
     (ANNAHMEN, "zentrale Annahmen, Daten je Objekt mit Herkunft, Plausibilitätsprüfung"),
@@ -233,6 +239,28 @@ def _blatt_ueberblick(ex, wb, quelle: str, blaetter: list) -> None:
         chart = _diagramm(ws, titel, spalte, kopf, erste, letzte)
         chart.height, chart.width = 7, 17
         ws.add_chart(chart, f"F{4 + i * 14}")
+
+    # alle Optionen nebeneinander, nicht nur Halten gegen Plan; Reihenfolge wie OPTIONEN
+    zeile = letzte + 2
+    _abschnitt(ws, zeile, "Gesamtvermögen nach latenter Steuer je Option (Ende des Jahres)", 7)
+    kopf = zeile + 1
+    szenarien = [SZ_BASELINE, SZ_A, SZ_C, SZ_B]
+    _kopfzeile(ws, kopf, ["Jahr", "Halten", "Plan (§ 6b-Rücklage)", "sofort versteuern, kaufen",
+                          "sofort versteuern, anlegen"])
+    ws.row_dimensions[kopf].height = 30
+    reihen = [_bereich(wb, "vgj_Jahr")] + [_bereich(wb, f"vgj_{sz.key}") for sz in szenarien]
+    erste = kopf + 1
+    for i, werte_jahr in enumerate(zip(*reihen)):
+        for spalte, wert in enumerate(werte_jahr, start=1):
+            c = ws.cell(row=erste + i, column=spalte, value=wert)
+            c.number_format = "0" if spalte == 1 else FMT_BETRAG
+            if spalte == 1:
+                c.alignment = Alignment(horizontal="left")
+    letzte = erste + len(reihen[0]) - 1
+    chart = diagramm_szenarien(ws, kopf, erste, letzte, szenarien,
+                               "Gesamtvermögen nach latenter Steuer je Option")
+    chart.height, chart.width = 9, 17
+    ws.add_chart(chart, f"G{erste + 1}")
 
     ws.column_dimensions["A"].width = 62
     for spalte in "BCDEFG":
@@ -532,26 +560,52 @@ def _blatt_bwa_gesamt(ex, wb, spalten: list) -> None:
                    "und Neuobjekten), Steuer und Zinsertrag der Alternativanlage nur hier. "
                    "Unter der BWA die Herleitung der Sonderposten mit der BWA-Nr., in die sie "
                    "eingehen. Zeilen ohne Wert sind ausgelassen.")
-    bloecke = [("Plan: mit Verkäufen und Neuobjekten", SUMMENBLATT)]
+    plan = _bwa_lesen(wb[SUMMENBLATT], spalten)
+    _abschnitt(ws, zeile, "Plan: mit Verkäufen und Neuobjekten", len(spalten) + 2)
+    zeile = _bwa_block(ws, zeile + 1, _bwa_filtern(plan), spalten) + 1
+    # Halten selbst steht im Blatt BWA halten
     if vergleich:
-        bloecke.append(("Halten: alle Objekte behalten", HALTEBLATT))
-    bwa = {}
-    for titel, blatt in bloecke:
-        _abschnitt(ws, zeile, titel, len(spalten) + 2)
-        bwa[blatt] = _bwa_lesen(wb[blatt], spalten)
-        zeile = _bwa_block(ws, zeile + 1, _bwa_filtern(bwa[blatt]), spalten) + 1
-    if vergleich:
-        _abschnitt(ws, zeile, "Differenz Plan − Halten (+ Plan höher)", len(spalten) + 2)
-        halten = {z.nr: z.werte for z in bwa[HALTEBLATT] if z.art == "bwa"}
-        plan_ab = next(i for i, (s, _) in enumerate(spalten) if s >= SPALTE_PLAN)
+        _abschnitt(ws, zeile, f"Differenz Plan − Halten (+ Plan höher; Halten im Blatt "
+                              f"{BWA_HALTEN})", len(spalten) + 2)
+        halten = {z.nr: z.werte for z in _bwa_lesen(wb[HALTEBLATT], spalten) if z.art == "bwa"}
+        plan_ab = _plan_ab(spalten)
         diff = [BwaZeile("bwa", z.nr, z.text, None,
                          [None] * plan_ab + [_zahl(a) - _zahl(b) for a, b in
                                              zip(z.werte[plan_ab:], halten[z.nr][plan_ab:])])
-                for z in bwa[SUMMENBLATT] if z.art == "bwa" and z.nr in halten]
+                for z in plan if z.art == "bwa" and z.nr in halten]
         _bwa_block(ws, zeile + 1, _bwa_filtern(diff), spalten, FMT_DIFF)
     _bwa_breiten(ws, spalten)
     ws.freeze_panes = "C5"
     _druck(ws)
+
+
+def _plan_ab(spalten: list) -> int:
+    """Index der ersten Planspalte in spalten."""
+    return next(i for i, (s, _) in enumerate(spalten) if s >= SPALTE_PLAN)
+
+
+def _blatt_bwa_halten(ex, wb, spalten: list) -> bool:
+    """Summen-BWA bei Halten (Status quo). False und kein Blatt, wenn sie in den Planjahren
+    der BWA gesamt gleicht, also ohne Verkauf und Kauf."""
+    halten = _bwa_lesen(wb[HALTEBLATT], spalten)
+    plan = {z.nr: z.werte for z in _bwa_lesen(wb[SUMMENBLATT], spalten) if z.art == "bwa"}
+    ab = _plan_ab(spalten)
+    if all(abs(_zahl(a) - _zahl(b)) <= SCHWELLE
+           for z in halten if z.art == "bwa"
+           for a, b in zip(z.werte[ab:], plan.get(z.nr, [None] * len(spalten))[ab:])):
+        return False
+    ws = ex.create_sheet(BWA_HALTEN)
+    zeile = _titel(ws, "BWA halten: Status quo, alle Objekte behalten",
+                   "Wie die BWA gesamt, aber ohne Verkäufe und Neuobjekte: alle Bestandsobjekte "
+                   "bleiben über das ganze Raster, ihre Darlehen laufen weiter. Ist-Spalten wie "
+                   "in der BWA gesamt, Planspalten aus der Baseline (Steuer mit Verlustvortrag). "
+                   "Zeilen ohne Wert sind ausgelassen.")
+    _abschnitt(ws, zeile, "Halten: alle Objekte behalten", len(spalten) + 2)
+    _bwa_block(ws, zeile + 1, _bwa_filtern(halten), spalten)
+    _bwa_breiten(ws, spalten)
+    ws.freeze_panes = "C5"
+    _druck(ws)
+    return True
 
 
 def _blatt_bwa_objekte(ex, wb, spalten: list) -> None:
@@ -826,8 +880,11 @@ def erstelle_export(wb, formeln_wb=None, quelle: str = "") -> Workbook:
     _blatt_jahresrechnung(ex, wb)
     if _blatt_bruecke(ex, wb):
         blaetter.append(BRUECKE)
-    blaetter += [BWA_GESAMT, BWA_OBJEKTE]
+    blaetter.append(BWA_GESAMT)
     _blatt_bwa_gesamt(ex, wb, spalten)
+    if _blatt_bwa_halten(ex, wb, spalten):
+        blaetter.append(BWA_HALTEN)
+    blaetter.append(BWA_OBJEKTE)
     _blatt_bwa_objekte(ex, wb, spalten)
     if _blatt_verkauf_kauf(ex, wb):
         blaetter.append(VERKAUF_KAUF)

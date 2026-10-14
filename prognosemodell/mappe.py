@@ -1101,18 +1101,7 @@ def _blatt_vergleich(wb) -> None:
         bst = get_column_letter(i)
         _name(wb, f"vgj_{sz.key}", f"'Vergleich'!${bst}${jerste}:${bst}${jletzte}")
 
-    chart = _linien("Endvermögen nach latenter Steuer")
-    chart.add_data(Reference(ws, min_col=2, max_col=1 + len(SZENARIEN), min_row=jkopf,
-                             max_row=jletzte), titles_from_data=True)
-    chart.set_categories(Reference(ws, min_col=1, min_row=jerste, max_row=jletzte))
-    farben = {"A": "305496", "B": "C00000", "C": "70AD47", "Baseline": "A5A5A5"}
-    for serie, sz in zip(chart.series, SZENARIEN):
-        serie.smooth = False
-        serie.graphicalProperties.line.solidFill = farben[sz.key]
-        serie.graphicalProperties.line.width = 28000
-        if sz == SZ_BASELINE:
-            serie.graphicalProperties.line.dashStyle = "dash"
-    ws.add_chart(chart, f"H{titel}")
+    ws.add_chart(diagramm_szenarien(ws, jkopf, jerste, jletzte, SZENARIEN), f"H{titel}")
     ws.freeze_panes = f"B{erste}"
 
 
@@ -1373,6 +1362,26 @@ def _diagramm(ws, titel: str, spalte_baseline: int, kopf: int, erste: int, letzt
     for serie in chart.series:
         serie.smooth = False
         serie.graphicalProperties.line.width = 28000
+    return chart
+
+
+SZENARIO_FARBEN = {"A": "305496", "B": "C00000", "C": "70AD47", "Baseline": "A5A5A5"}
+
+
+def diagramm_szenarien(ws, kopf: int, erste: int, letzte: int, szenarien,
+                       titel: str = "Endvermögen nach latenter Steuer") -> LineChart:
+    """Vermögen je Szenario: Jahre in Spalte A, ab Spalte B je Szenario eine Spalte in der
+    Reihenfolge von szenarien, Kopf mit den Namen."""
+    chart = _linien(titel)
+    chart.add_data(Reference(ws, min_col=2, max_col=1 + len(szenarien), min_row=kopf,
+                             max_row=letzte), titles_from_data=True)
+    chart.set_categories(Reference(ws, min_col=1, min_row=erste, max_row=letzte))
+    for serie, sz in zip(chart.series, szenarien):
+        serie.smooth = False
+        serie.graphicalProperties.line.solidFill = SZENARIO_FARBEN[sz.key]
+        serie.graphicalProperties.line.width = 28000
+        if sz == SZ_BASELINE:
+            serie.graphicalProperties.line.dashStyle = "dash"
     return chart
 
 
