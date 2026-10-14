@@ -189,11 +189,12 @@ Die Ergebnisse stehen auch im **DATEV-BWA-Format** (Projektplan, Abschnitt 18):
 - **Vergleich mit Halten:** In „Alle Objekte“ steht in D3 der Schalter „Vergleich mit Halten“ (ja/nein). Bei „ja“ zeigen die Spalten rechts neben den Planjahren je Position und Jahr die Differenz Plan − Halten (grün mehr, rot weniger), auch für Herleitung und Finanzierung; bei „nein“ bleiben sie leer. `--uebernehmen` übernimmt den Schalter.
 - **Blatt Verkauf und Kauf:** je Verkauf eine Ergebnissicht für die Berichterstattung und eine Detailsicht. Die Ergebnissicht zeigt Erlös, Reinvestition, Kapitalanlage, Übertrag § 6b und den Vergleich Halten gegen Alternative im ersten vollen Jahr. Die Detailsicht zeigt die Einzelauflistung nach G+B und Gebäude und die Planung. Dazu kommt je Neuobjekt die Detailsicht des Kaufs.
 
-**Mandanten-Export:** `python -m prognosemodell.export Prognose.xlsx` schreibt daneben `Prognose_Mandant.xlsx` (anderer Name mit `--ausgabe`), eine schlanke Fassung für den Mandanten, nur mit Werten. Die Mappe muss in Excel gespeichert sein; eine frisch erzeugte, nie geöffnete Mappe rechnet LibreOffice vorher durch. Bis zu sieben Blätter:
+**Mandanten-Export:** `python -m prognosemodell.export Prognose.xlsx` schreibt daneben `Prognose_Mandant.xlsx` (anderer Name mit `--ausgabe`), eine schlanke Fassung für den Mandanten, nur mit Werten. Die Mappe muss in Excel gespeichert sein; eine frisch erzeugte, nie geöffnete Mappe rechnet LibreOffice vorher durch. Bis zu acht Blätter:
 - **Überblick:** Empfehlung, Endvermögen je Option, Datenlage, Verkehrswert und Gesamtvermögen je Jahr mit Diagrammen.
 - **Jahresrechnung:** je Jahr vom Ergebnis über Steuer und Geldfluss zum Vermögen, für Plan und Halten, dazu die Differenz. Jede Spalte rechnet von oben nach unten.
 - **Ergebnisbrücke:** vom Ergebnis bei Halten über die Pakete (Verkauf mit seinen Käufen) zum Ergebnis im Plan, ohne leere Pakete und Vorgänge und ohne Kontrollzeile. Ohne Verkauf und Kauf entfällt das Blatt.
-- **BWA gesamt:** Summen-BWA mit Ist-Jahren und Planjahren und der Herleitung der Sonderposten; bei „Vergleich mit Halten = ja“ auch Halten und Differenz.
+- **BWA gesamt:** Summen-BWA mit Ist-Jahren und Planjahren und der Herleitung der Sonderposten; bei „Vergleich mit Halten = ja“ auch die Differenz zu Halten.
+- **BWA halten:** dieselbe Summen-BWA als Status quo: alle Objekte behalten, ohne Verkäufe und Neuobjekte („Alle Objekte halten“). Gleicht sie der BWA gesamt (ohne Verkauf und Kauf), entfällt das Blatt.
 - **BWA je Objekt:** alle Kostenstellenblätter untereinander, mit Inhaltsverzeichnis.
 - **Verkauf und Kauf:** Verkäufe, Neuobjekte, Ergebnis- und Detailsicht je Vorgang. Ohne Verkauf und Kauf entfällt das Blatt.
 - **Annahmen:** zentrale Annahmen, Daten je Objekt mit Herkunft (blau Annahme, grün Buchhaltung oder Anlagenverzeichnis), auffällige Prüfungen.

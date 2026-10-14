@@ -1580,7 +1580,8 @@ def faelle():
         ("Export: Mandanten-Export mit Verkauf, Kauf und Darlehen",
          Getippt(exp, {("Alle Objekte", "D3"): "ja"}), [
             (EXPORT_BLAETTER, 0, ["Überblick", "Jahresrechnung", "Ergebnisbrücke", "BWA gesamt",
-                                  "BWA je Objekt", "Verkauf und Kauf", "Annahmen"]),
+                                  "BWA halten", "BWA je Objekt", "Verkauf und Kauf",
+                                  "Annahmen"]),
             ("Export:Ergebnisbrücke:Ergebnis vor Steuern Plan A", 2030, Wie("aus_GuV", lj(2030))),
             ("Export:Ergebnisbrücke:Verkauf KSt 1 2028", 2029,
              Wie("BRK:Verkauf KSt 1 2028", 2029)),
@@ -1604,7 +1605,10 @@ def faelle():
             ("Export:BWA gesamt:Plan:/Gesamtkosten", 2026, Wie("BWA:Alle Objekte:1280", 2026)),
             ("Export:BWA gesamt:Plan:/Personalkosten", 2027, "fehlt"),   # überall 0
             ("Export:BWA gesamt:Plan:/Veräußerungsgewinn (netto)", 2028, Wie("vk_Gewinn")),
-            ("Export:BWA gesamt:Halten:/Umsatzerlöse", 2030, Wie("bwb_1020", lj(2030))),
+            ("Export:BWA gesamt:Halten:/Umsatzerlöse", 2030, "fehlt"),   # im Blatt BWA halten
+            ("Export:BWA halten:Halten:/Umsatzerlöse", 2030, Wie("bwb_1020", lj(2030))),
+            ("Export:BWA halten:Halten:/Umsatzerlöse", 2024, Wie("BWA:Alle Objekte:1020", 2024)),
+            ("Export:BWA halten:Halten:/Veräußerungsgewinn (netto)", 2028, "fehlt"),
             ("Export:BWA gesamt:Differenz/Umsatzerlöse", 2030, Wie("DIFF:1020", 2030)),
             ("Export:BWA je Objekt:KSt 1/Umsatzerlöse", 2024, Wie("BWA:KSt 1:1020", 2024)),
             ("Export:BWA je Objekt:KSt 1/Umsatzerlöse", 2028, Wie("BWA:KSt 1:1020", 2028)),

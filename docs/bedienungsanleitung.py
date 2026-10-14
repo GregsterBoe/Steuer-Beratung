@@ -299,7 +299,7 @@ punkte([
 ])
 
 doc.add_heading("10. Mandanten-Export", level=1)
-absatz("Für den Mandanten gibt es eine schlanke Fassung der Mappe mit bis zu sieben Blättern, nur "
+absatz("Für den Mandanten gibt es eine schlanke Fassung der Mappe mit bis zu acht Blättern, nur "
        "mit Werten: Mappe in Excel speichern und schließen, dann python -m "
        "prognosemodell.export Prognose.xlsx. Daneben entsteht Prognose_Mandant.xlsx; mit "
        "--ausgabe ein anderer Name. Eine frisch erzeugte, nie geöffnete Mappe rechnet "
@@ -312,7 +312,9 @@ tabelle(["Blatt", "Inhalt"], [
     ["Ergebnisbrücke", "vom Ergebnis bei Halten je Verkauf und Kauf zum Ergebnis im Plan "
                        "(entfällt ohne Verkauf und Kauf)"],
     ["BWA gesamt", "Summen-BWA aller Objekte, Ist-Jahre und Planjahre, Herleitung der "
-                   "Sonderposten; bei „Vergleich mit Halten = ja“ auch Halten und Differenz"],
+                   "Sonderposten; bei „Vergleich mit Halten = ja“ auch die Differenz zu Halten"],
+    ["BWA halten", "dieselbe Summen-BWA als Status quo: alle Objekte behalten, ohne Verkäufe "
+                   "und Neuobjekte (entfällt ohne Verkauf und Kauf)"],
     ["BWA je Objekt", "alle Kostenstellenblätter untereinander, mit Inhaltsverzeichnis"],
     ["Verkauf und Kauf", "Verkäufe, Neuobjekte, Ergebnis und Herleitung je Vorgang "
                          "(entfällt ohne Verkauf und Kauf)"],
