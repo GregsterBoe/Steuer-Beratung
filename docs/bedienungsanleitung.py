@@ -304,6 +304,12 @@ punkte([
     "daran); Objekte, Anlagen und Neukauf-Kostenstellen werden über ihre ID zugeordnet.",
 ])
 
+absatz("**Übersichtskostenstelle:** Gehören mehrere Kostenstellen zu einem Gebäude, fasst "
+       "--uebersicht \"Musterstraße 5=KSt 10,KSt 11\" sie in einem eigenen BWA-Blatt "
+       "zusammen (mehrfach möglich; ObjektID oder Blattname). Das Blatt summiert nur die "
+       "Kostenstellenblätter, rechnet nicht mit und erscheint im Mandanten-Export unter BWA "
+       "je Objekt.")
+
 doc.add_heading("10. Mandanten-Export", level=1)
 absatz("Für den Mandanten gibt es eine schlanke Fassung der Mappe mit bis zu acht Blättern, nur "
        "mit Werten: Mappe in Excel speichern und schließen, dann python -m "
@@ -322,7 +328,8 @@ tabelle(["Blatt", "Inhalt"], [
                    "Sonderposten; bei „Vergleich mit Halten = ja“ auch die Differenz zu Halten"],
     ["BWA halten", "dieselbe Summen-BWA als Status quo: alle Objekte behalten, ohne Verkäufe "
                    "und Neuobjekte (entfällt ohne Verkauf und Kauf)"],
-    ["BWA je Objekt", "alle Kostenstellenblätter untereinander, mit Inhaltsverzeichnis"],
+    ["BWA je Objekt", "alle Kostenstellenblätter untereinander, mit Inhaltsverzeichnis; "
+                      "dazu die Übersichtskostenstellen"],
     ["Verkauf und Kauf", "Verkäufe, Neuobjekte, Ergebnis und Herleitung je Vorgang "
                          "(entfällt ohne Verkauf und Kauf)"],
     ["Annahmen", "zentrale Annahmen, Daten je Objekt mit Herkunft (blau Annahme, grün "

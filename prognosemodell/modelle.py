@@ -1198,3 +1198,7 @@ class Modell:
     bwa_zuordnung: dict = field(default_factory=dict)
     # Zeilen je Eingabeblatt (Objekte, Verkäufe, Neuobjekte, Neukauf-KSt)
     kapazitaet: Kapazitaet = field(default_factory=Kapazitaet)
+    # Übersichtskostenstellen: Name -> ObjektIDs bzw. Blattnamen der Kostenstellen, z. B.
+    # {"Musterstraße 5": ["KSt 10", "KSt 11"]}; je ein BWA-Blatt mit deren Summe, nur zur
+    # Ansicht und für den Mandanten-Export, nicht in der Rechnung
+    uebersichten: dict = field(default_factory=dict)

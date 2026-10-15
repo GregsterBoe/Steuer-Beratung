@@ -14,7 +14,7 @@ Statt aller Eingabe-, Rechen- und Kontrollblätter enthält der Export bis zu ac
   zu Halten
 - BWA halten: Summen-BWA als Status quo, alle Objekte behalten (entfällt, wenn sie der BWA
   gesamt gleicht)
-- BWA je Objekt: alle Kostenstellenblätter untereinander
+- BWA je Objekt: alle Kostenstellenblätter untereinander, dazu die Übersichtskostenstellen
 - Verkauf und Kauf: Verkäufe, Neuobjekte und die Sicht je Vorgang (entfällt ohne beides)
 - Annahmen: zentrale Annahmen, Daten je Objekt mit Herkunft, auffällige Prüfungen
 Zeilen ohne Wert entfallen, ebenso Monatsspalten, Hilfszeilen und ausgeschaltete Vorgänge.
@@ -35,7 +35,8 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import column_index_from_string, get_column_letter
 from openpyxl.worksheet.hyperlink import Hyperlink
 
-from .bwa import HALTEBLATT, SONDERBEREICH, SUMMENBLATT, SUMMENZEILEN
+from .bwa import (HALTEBLATT, SONDERBEREICH, SUMMENBLATT, SUMMENZEILEN, UEBERSICHT_KST,
+                  UEBERSICHT_ZELLE)
 from .formeln import deckt_anlagen, hspalte, ispalte
 from .mappe import (FILL_ANNAHME, FILL_EINGELESEN, FILL_KOPF, FONT_KOPF, OPTIONEN, _diagramm,
                     diagramm_szenarien, zentrale_annahmen)
@@ -615,13 +616,17 @@ def _blatt_bwa_objekte(ex, wb, spalten: list) -> None:
     zeile = _titel(ws, "BWA je Objekt",
                    "Je Kostenstelle die BWA: Ist-Spalten aus der Buchhaltung, Planspalten aus "
                    "der Prognose; nach einem Verkauf leer, Neuobjekte ab dem Jahr nach dem Kauf. "
-                   "Steuer und Zinsertrag der Alternativanlage stehen nur im Blatt BWA gesamt.")
+                   "Steuer und Zinsertrag der Alternativanlage stehen nur im Blatt BWA gesamt. "
+                   "Eine Übersicht fasst die Kostenstellen eines Gebäudes zusammen (Summe der "
+                   "genannten Kostenstellen, zusätzlich zu deren BWA).")
     _abschnitt(ws, zeile, "Inhalt", 2)
     inhalt = zeile + 1
     zeile = inhalt + len(blaetter) + 1
     for i, quelle in enumerate(blaetter):
         kst, name = quelle["B2"].value, quelle["C2"].value
         titel = f"{kst} – {name}" if name else str(kst)
+        if kst == UEBERSICHT_KST and quelle[UEBERSICHT_ZELLE].value:
+            titel += f" ({quelle[UEBERSICHT_ZELLE].value})"
         _link(ws.cell(row=inhalt + i, column=1, value=titel), f"'{BWA_OBJEKTE}'!A{zeile}")
         _abschnitt(ws, zeile, titel, len(spalten) + 2)
         zeile = _bwa_block(ws, zeile + 1, _bwa_filtern(_bwa_lesen(quelle, spalten)),

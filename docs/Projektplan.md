@@ -1457,7 +1457,7 @@ Kontrolle im Blatt BWA-Zuordnung: 1353 der Halten-Ansicht gegen lqb\_ZvE je Jahr
 - **Jahresrechnung:** Jahre als Spalten, Summe über die Jahre bei Flussgrößen. Je Sicht (Plan = liq/aus, Halten = lqb/asb) drei Abschnitte, Abzüge mit Minus: Ergebnis und Steuer (Einnahmen − Ausgaben − AfA = laufendes Ergebnis; + Verkauf und Rücklage + Zinsertrag − Kreditzins = Ergebnis vor Verlustvortrag; − Verlustvortrag = Bemessungsgrundlage; Steuer), Geldfluss (laufendes Ergebnis + AfA + Zinsertrag − Kreditzins − Steuer + Verkaufserlöse − Kauf + Kredit − Tilgung = freier Mittelzufluss), Vermögen (Verkehrswert + Liquidität − Restschuld = vor latenter Steuer; − latente Steuer = nach latenter Steuer). Danach Differenz Plan − Halten für die Kernzeilen. Gleicht der Plan dem Halten (ohne Verkauf und Kauf), entfallen Halten und Differenz.
 - **BWA gesamt:** „Alle Objekte“ ohne Monatsspalten und Hilfszeile; bei bwa\_VglHalten = ja dazu Plan − Halten je BWA-Zeile in den Planjahren.
 - **BWA halten:** „Alle Objekte halten“ (Status quo) wie die BWA gesamt aufbereitet, unabhängig von bwa\_VglHalten. Entfällt, wenn die Planjahre der BWA gesamt gleichen (ohne Verkauf und Kauf).
-- **BWA je Objekt:** alle übrigen BWA-Blätter (B4 „Nr.“, Hilfszeile „Jahr (für Formeln)“) untereinander, Inhaltsverzeichnis mit Links.
+- **BWA je Objekt:** alle übrigen BWA-Blätter (B4 „Nr.“, Hilfszeile „Jahr (für Formeln)“) untereinander, Inhaltsverzeichnis mit Links; Übersichtskostenstellen (Abschnitt 33) mit den zusammengefassten Kostenstellen im Titel.
 - **Verkauf und Kauf:** Tabellen der Verkäufe und Neuobjekte (ausgeschaltete grau durchgestrichen), darunter aus dem Sonderbereich die Vorgänge mit „rechnet mit = 1“ und die Detailsicht Kauf nur mit den Spalten erfasster Neuobjekte. Ohne Verkauf und Neuobjekt entfällt das Blatt.
 - **Annahmen:** Basisjahr, Prognosejahre und die zentralen Annahmen des Startblatts (mappe.zentrale\_annahmen), Daten je Objekt mit Herkunft als Farbe nach der Farblogik des Blatts Objekte (Formel der Auffülllogik blau; Verknüpfung zum Kostenstellenblatt, eingelesener Wert oder Deckung aus dem Blatt Anlagen grün, formeln.deckt\_anlagen; Zinssatz und Rate nur mit Restschuld), Prüfungen mit Anzahl > 0.
 
@@ -1499,3 +1499,15 @@ Prüfung: Paket OBJ-001 2030 = −40.115,43 − 36.600 (Sonder-AfA im Kaufjahr 5
 2. Brücke des Endvermögens nach latenter Steuer.
 3. Brücke gegen Szenario C (Wert von § 6b je Vorgang).
 4. Kostenstellen Unternehmen: Planwerte je Jahr (wie Neukauf-KSt) oder eigene Steigerungssätze statt Fortschreibung; neutrale Zeilen (1312, 1322, 1323) einlesen.
+
+## 33. Übersichtskostenstellen
+
+**Wunsch:** mehrere Kostenstellen, die zu einem Gebäude gehören, in einer BWA zusammengefasst sehen, ohne dass sich an der Rechnung etwas ändert.
+
+**Aufruf:** `python -m prognosemodell --kostenstellen … --uebersicht "NAME=KST,KST,…"`, mehrfach möglich. Kennungen sind ObjektIDs, NeuIDs oder Blattnamen der Kostenstellen, ohne Rücksicht auf Groß- und Kleinschreibung; unbekannte meldet das Skript und lässt sie weg, ohne bekannte Kostenstelle entfällt das Blatt (Modell.uebersichten).
+
+**Blatt NAME** (hinter der letzten seiner Kostenstellen): BWA-Layout mit B2 „Übersicht“, C2 NAME, E3 „Kostenstellen: …“. Jede Zelle (Ist-Vorjahre, Monate, Basisjahr, Planjahre, Herleitung der Sonderposten, Finanzierung) ist die Summe derselben Zelle der Kostenstellenblätter. Nur Formeln auf diese Blätter, kein anderes Blatt verweist auf die Übersicht: „Alle Objekte“, Liquidität und Auswertung zählen sie nicht mit, nichts wird doppelt gezählt. Werte ändert man in den Kostenstellenblättern.
+
+**Mandanten-Export:** im Blatt BWA je Objekt wie jedes BWA-Blatt, Titel „Übersicht – NAME (Kostenstellen: …)“.
+
+**Prüfung im Prüfskript:** „BWA: Übersichtskostenstelle nur Ansicht und Export“: Summe von KSt 1 und KSt 2 in Ist, Basisjahr und Planjahren, Kopf, Alle Objekte ohne Übersicht, unbekannte Kennung, Blatt ohne bekannte Kostenstelle entfällt, Export.

@@ -1,6 +1,6 @@
 """Mappe generieren: python -m prognosemodell [--ausgabe PFAD] [--ohne-testdaten]
 [--kostenstellen PFAD] [--inventar PFAD [--inventar-stand JAHR]] [--makros] [--schnellcheck]
-[--uebernehmen ALTE_MAPPE]"""
+[--uebernehmen ALTE_MAPPE] [--uebersicht NAME=KST,KST,...]"""
 
 import argparse
 import sys
@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .einlesen import (anlagen_zusammenfuehren, lese_inventar, lese_kostenstellen,
                        ordne_anlagen_zu, stand_aus_dateiname, zusammenfuehren)
+from .bwa import uebersicht_mitglieder
 from .mappe import erstelle_mappe
 from .uebernahme import uebernehmen
 from .modelle import PARAMETER, ZUORDNUNG_KOST1, Modell
@@ -36,7 +37,16 @@ def main() -> None:
                     help="schlanke Mappe: wenige Eingaben, zentrale Annahmen, Empfehlung")
     ap.add_argument("--uebernehmen", metavar="PFAD",
                     help="Eingaben (eingetippte Werte) aus einer älteren Mappe übernehmen")
+    ap.add_argument("--uebersicht", metavar="NAME=KST,KST", action="append", default=[],
+                    help="Übersichtskostenstelle: Blatt NAME mit der Summe der genannten "
+                         "Kostenstellen (ObjektID oder Blattname), z. B. eines Gebäudes; nur "
+                         "Ansicht und Mandanten-Export, nicht in der Rechnung. Mehrfach möglich")
     args = ap.parse_args()
+    for angabe in args.uebersicht:
+        name, _, liste = angabe.partition("=")
+        kennungen = [k.strip() for k in liste.split(",") if k.strip()]
+        if not name.strip() or not kennungen:
+            sys.exit(f"--uebersicht {angabe!r}: bitte als NAME=KST,KST,... angeben.")
 
     leer = args.ohne_testdaten or args.kostenstellen or args.uebernehmen
     modell = Modell() if leer else testmodell()
@@ -82,6 +92,14 @@ def main() -> None:
         hinweis = "" if abs(bw_inventar - bw_kst) < 1 else "  <- weicht ab, Zuordnung prüfen"
         print(f"Abgleich {objekt_id}: Buchwert abnutzbar lt. Anlagenverzeichnis "
               f"{bw_inventar:,.2f}, lt. Kostenstellenblatt {bw_kst:,.2f}{hinweis}")
+    for angabe in args.uebersicht:
+        name, _, liste = angabe.partition("=")
+        kennungen = [k.strip() for k in liste.split(",") if k.strip()]
+        modell.uebersichten[name.strip()] = kennungen
+        gefunden, unbekannt = uebersicht_mitglieder(modell, kennungen)
+        print(f"Übersicht {name.strip()!r}: " + (", ".join(map(str, gefunden)) or "keine")
+              + (f"; unbekannt, nicht enthalten: {', '.join(unbekannt)}" if unbekannt else "")
+              + ("" if gefunden else " – Blatt entfällt"))
     modell.schnellcheck = args.schnellcheck
     standard = Path(ap.get_default("ausgabe"))
     if args.schnellcheck:

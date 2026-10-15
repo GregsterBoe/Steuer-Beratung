@@ -84,6 +84,12 @@ class Wie:
     zeile: int = 0
 
 
+@dataclasses.dataclass(frozen=True)
+class Summe:
+    """Sollwert = Summe der Werte anderer Bereiche derselben Mappe (je ein Wie)."""
+    teile: tuple
+
+
 @dataclasses.dataclass
 class Getippt:
     """Modell, dazu nach dem Generieren eingetippte Zellen {(Blatt, Zelle): Wert}."""
@@ -2202,6 +2208,35 @@ def faelle():
             ("dl_Betrag", 4, 100_000),
             ("pr_Anzahl", pr("neuobjekte"), 4),
         ]),
+        # Übersichtskostenstelle: Blatt „Haus A“ mit der Summe von KSt 1 und KSt 2 (Kennung
+        # ohne Rücksicht auf Groß- und Kleinschreibung, unbekannte entfallen), „Leer“ ohne
+        # bekannte Kostenstelle ohne Blatt. Alle Objekte und die Rechnung zählen sie nicht mit
+        ("BWA: Übersichtskostenstelle nur Ansicht und Export",
+         dataclasses.replace(exp, uebersichten={"Haus A": ["KSt 1", "kst 2", "KSt 99"],
+                                                "Leer": ["KSt 99"]}), [
+            *[(f"BWA:Haus A:{nr}", jahr, Summe((Wie(f"BWA:KSt 1:{nr}", jahr),
+                                                 Wie(f"BWA:KSt 2:{nr}", jahr))))
+              for nr, jahr in ((1020, 2024), (1020, 2026), (1280, 2026), (1020, 2027),
+                               (1310, 2028), (1323, 2028), (1380, 2028), (1380, 2030))],
+            ("Kopf:Haus A:2", 2, "Übersicht"),
+            ("Kopf:Haus A:2", 3, "Haus A"),
+            ("Kopf:Haus A:3", 5, "Kostenstellen: KSt 1, KSt 2"),
+            # Summenblatt ohne Übersicht: nur die Kostenstellen und das Neuobjekt
+            ("BWA:Alle Objekte:1020", 2026, Summe((Wie("BWA:KSt 1:1020", 2026),
+                                                   Wie("BWA:KSt 2:1020", 2026)))),
+            ("bwa_1020", lj(2030), Summe((Wie("BWA:KSt 1:1020", 2030),
+                                          Wie("BWA:KSt 2:1020", 2030),
+                                          Wie("BWA:NEU-001:1020", 2030)))),
+            (EXPORT_BLAETTER, 0, ["Überblick", "Jahresrechnung", "Ergebnisbrücke", "BWA gesamt",
+                                  "BWA halten", "BWA je Objekt", "Verkauf und Kauf",
+                                  "Annahmen"]),
+            ("Export:BWA je Objekt:Übersicht – Haus A (Kostenstellen: KSt 1, KSt 2)/Umsatzerlöse",
+             2027, Wie("BWA:Haus A:1020", 2027)),
+            ("Export:BWA je Objekt:Übersicht – Haus A (Kostenstellen: KSt 1, KSt 2)/Zinsaufwand",
+             2028, Wie("BWA:Haus A:1310", 2028)),
+            ("Export:BWA je Objekt:KSt 1/Umsatzerlöse", 2027, Wie("BWA:KSt 1:1020", 2027)),
+            ("Export:BWA je Objekt:Übersicht – Leer", 2027, "fehlt"),
+        ]),
         # Restschuld des Zweitkredits nach der Laufzeit auf den Hauptkredit. NEU-001: Kredit
         # 1 Mio, Hauptkredit 500.000 zu 4 % Annuität 2 % (Rate 30.000), Zweitkredit 500.000
         # zu 1 % linear 5 % mit 5 Jahren: Tilgung 25.000 in 2029 bis 2033, Ende 2033 gehen
@@ -2960,6 +2995,8 @@ def pruefe(fall: str, wb, pruefungen) -> int:
             ist = None
         if isinstance(soll, Wie):
             soll = wert(wb, soll.name, soll.zeile)
+        elif isinstance(soll, Summe):
+            soll = sum(wert(wb, w.name, w.zeile) or 0 for w in soll.teile)
         if gleich(ist, soll):
             print(f"OK      {fall}: {name}[{zeile}] = {ist!r}")
         else:
