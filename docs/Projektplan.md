@@ -43,7 +43,7 @@ Dreizehn feste Blätter, getrennt nach Eingabe, Rechnung, Ausgabe und Kontrolle.
 | Blatt | Typ | Schlüsselfelder | Zweck |
 | --- | --- | --- | --- |
 | Start | Ausgabe | Handlungsempfehlung, Endvermögen je Option, Datenlage, Anleitung, Farblegende, zentrale Annahmen | erstes Blatt, Einstieg und Ergebnis auf einen Blick (Abschnitt 20) |
-| Parameter | Eingabe | Steuerwelt-Schalter, Grenzsteuersatz, Mietsteigerung, Erhaltungssteigerung, Kostensteigerung, Wertsteigerung, GrESt-Satz, degressive AfA und Wechsel zu linear, Alternativrendite, § 6b-Fristen | alle globalen Annahmen und Schalter |
+| Parameter | Eingabe | Steuerwelt-Schalter, Grenzsteuersatz, Mietsteigerung (Bestand und Neuobjekte), Erhaltungssteigerung, Kostensteigerung, Wertsteigerung, GrESt-Satz, degressive AfA und Wechsel zu linear, Alternativrendite, § 6b-Fristen | alle globalen Annahmen und Schalter |
 | Objekte | Eingabe | ObjektID, AK Gebäude, AK G+B, AfA-Satz, Kaufjahr, Restbuchwert 2026, Miete 2026, Erhaltung 2026 | Stammdaten je Bestandsobjekt |
 | Anlagen | Eingabe | Inventar-Nr., ObjektID, Art, AHK, Buchwert Stand, AfA-Methode, AfA-Satz, AfA p. a.; AfA je Prognosejahr | Anlagenverzeichnis, liefert AK, Buchwert, Kaufjahr und AfA je Objekt (Abschnitt 21) |
 | Verkäufe | Eingabe | ObjektID, weitere Kostenstellen (Paket), Verkaufsjahr, Verkaufspreis oder Faktor, Verkaufskosten, 6b-Nutzung (ja/nein), Neubau begonnen (ja/nein) | ein Datensatz je geplantem Verkauf |
@@ -1511,3 +1511,15 @@ Prüfung: Paket OBJ-001 2030 = −40.115,43 − 36.600 (Sonder-AfA im Kaufjahr 5
 **Mandanten-Export:** im Blatt BWA je Objekt wie jedes BWA-Blatt, Titel „Übersicht – NAME (Kostenstellen: …)“.
 
 **Prüfung im Prüfskript:** „BWA: Übersichtskostenstelle nur Ansicht und Export“: Summe von KSt 1 und KSt 2 in Ist, Basisjahr und Planjahren, Kopf, Alle Objekte ohne Übersicht, unbekannte Kennung, Blatt ohne bekannte Kostenstelle entfällt, Export.
+
+## 34. Mietsteigerung der Neuobjekte
+
+**Wunsch:** Neuobjekte mit eigener Mietsteigerung; bei Neubau bzw. Staffelmiete über dem Mietspiegel steigt die Miete erst, wenn der Mietspiegel aufgeholt hat, z. B. nach 10 Jahren.
+
+**Parameter:** par\_NeuMietsteig „Mietsteigerung Neuobjekte p. a.“ (Kernparameter, Standard 2 %). par\_Mietsteig gilt nur noch für den Bestand.
+
+**Blatt Neuobjekte:** ne\_Mietsteig „Mietsteigerung p. a.“ (leer = par\_NeuMietsteig, verwendet in ne\_MietsteigV) und ne\_MietWarte „Mietsteigerung erst nach Jahren“ (leer = 0).
+
+**Rechnung:** Miete\_t = Anfangsmiete × (1 + ne\_MietsteigV)^MAX(t − Kaufjahr − ne\_MietWarte; 0), Anfangsmiete = Fläche × Mietpreis je m² × 12 bzw. Kaufpreis × Mietrendite. Blatt Neukauf-KSt: Annahme genauso; Fortschreibung von Miete und weiteren Einnahmen mit ne\_MietsteigV des Neuobjekts, das die Kostenstelle wählt (ohne Neuobjekt par\_NeuMietsteig), die Miete in den Jahren Kaufjahr + 1 bis Kaufjahr + ne\_MietWarte ohne Steigerung. Erhaltung und Verwaltung in % der Miete folgen.
+
+**Prüfung im Prüfskript:** „Neuobjekte: eigene Mietsteigerung und Jahre ohne Mietsteigerung“: Parameter Neuobjekte 3 % neben Bestand 5 %, eigener Satz 1 % mit 3 Wartejahren, Neukauf-Kostenstelle mit 2 Wartejahren.

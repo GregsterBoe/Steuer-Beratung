@@ -10,7 +10,7 @@ Spaltenschlüssel abgelegt.
 # Kernparameter: auf dem Parameterblatt hervorgehoben (★, fett); Abschnitte ohne
 # Kernparameter sind eingeklappt
 KERNPARAMETER = {
-    "par_Basisjahr", "par_Prognosejahre", "par_Steuersatz", "par_Mietsteig",
+    "par_Basisjahr", "par_Prognosejahre", "par_Steuersatz", "par_Mietsteig", "par_NeuMietsteig",
     "par_Erhaltsteig", "par_Wertsteig", "par_Alternativrendite", "par_StatusPruefung",
     "par_AnnVervielfaeltiger", "par_AnnGebaeudeanteil",
 }
@@ -33,8 +33,12 @@ PARAMETER_WIRKUNG = {
                       "(Auswertung). Wirkt damit auf Liquidität, Zinsertrag und das "
                       "Endvermögen aller Szenarien.",
     "par_Mietsteig": "Miete und weitere Einnahmen je Jahr = Basiswert × (1 + Satz)^Jahre. "
-                     "Gilt für Bestand, Neuobjekte und Neukauf-Kostenstellen ohne Planwert; "
-                     "ein Bestandsobjekt kann im Blatt Objekte einen eigenen Satz haben.",
+                     "Gilt für den Bestand; ein Bestandsobjekt kann im Blatt Objekte einen "
+                     "eigenen Satz haben. Neuobjekte: Mietsteigerung Neuobjekte.",
+    "par_NeuMietsteig": "Mietsteigerung der Neuobjekte, getrennt vom Bestand: Miete und "
+                        "weitere Einnahmen ab dem Kauf × (1 + Satz)^Jahre, auch Jahre ohne "
+                        "Planwert der Neukauf-Kostenstelle. Ein Neuobjekt kann im Blatt "
+                        "Neuobjekte einen eigenen Satz und Jahre ohne Mietsteigerung haben.",
     "par_Erhaltsteig": "Erhaltung je Jahr wächst mit diesem Satz; auch Großmaßnahmen "
                        "(heutige Preise bis zum Jahr der Maßnahme). Ein Bestandsobjekt kann im "
                        "Blatt Objekte einen eigenen Satz haben.",
@@ -251,6 +255,8 @@ SPALTEN = {
     "ne_MieteQmJahr": "Fläche × Mietpreis je m² × 12, leer ohne beide. Ersetzt Kaufpreis × "
                       "Mietrendite; Erhaltung und Verwaltung dann in % der Miete "
                       "(Parameterblatt).",
+    "ne_MietsteigV": "Mietsteigerung des Neuobjekts, leer die Mietsteigerung Neuobjekte "
+                     "(Parameter). Gilt für Miete und weitere Einnahmen.",
     "ne_Status": "OK oder Fehler. Pflichtfeld fehlt, NeuID doppelt bzw. wie Bestandsobjekt, "
                  "Kaufjahr außerhalb Raster: das Neuobjekt rechnet nicht. Meldungen zu Quellen "
                  "(unbekannt, Verkauf ausgeschaltet, Kauf vor Bildung, nach Fristjahr) und Kredit: "
@@ -265,7 +271,8 @@ SPALTEN = {
                            "Mietsteigerung des Objekts)^Jahre; Neuobjekt 0.",
     "prg_Miete": "Bestand: Miete bei Halten, bis zum Verkaufsjahr. Neuobjekt: Planwert der "
                  "Neukauf-Kostenstelle, sonst Fläche × Mietpreis je m² × 12 bzw. Kaufpreis × "
-                 "Mietrendite, ab dem Kauf mit der Mietsteigerung.",
+                 "Mietrendite, ab dem Kauf mit der Mietsteigerung des Neuobjekts; mit "
+                 "„Mietsteigerung erst nach Jahren“ so lange auf dem Anfangsstand.",
     "prg_Erhaltung": "Erhaltung Basisjahr, fortgeschrieben mit Erhaltungssteigerung, Alterung "
                      "über dem Gebäudealter (nur mit Baujahr), plus Großmaßnahme im Jahr der Maßnahme.",
     "prg_AfA": "AfA laut Blatt Anlagen bzw. AfA-Plan, sonst AfA je Jahr bis der Restbuchwert "

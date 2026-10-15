@@ -539,7 +539,8 @@ def _blatt_afa_plan(wb, modell: Modell) -> None:
 def _blatt_neukauf(wb, modell: Modell) -> None:
     """Neukauf-Kostenstellen (in der Kostenstellen-Datei hinter „KSt 9999“): Planwerte je
     Jahr für Neuobjekte, die im Blatt Neuobjekte auf die Kostenstelle verweisen. Jahre ohne
-    Wert schreibt das Blatt vom letzten Wert mit der Steigerung des Parameterblatts fort."""
+    Wert schreibt das Blatt vom letzten Wert mit der Steigerung fort (Miete und weitere
+    Einnahmen: Mietsteigerung des Neuobjekts)."""
     ws = wb.create_sheet("Neukauf-KSt")
     # Jahresspalten ab E (Basisjahr bis Endjahr), fortgeschrieben (Formeln), ausgeblendete
     # Kopie der eingelesenen Werte; mit eigenem Blatt verknüpft bwa.verknuepfe_neukauf
@@ -572,14 +573,20 @@ def _blatt_neukauf(wb, modell: Modell) -> None:
     for block in range(max_nk):
         ws[f"{liste}{erste + block}"] = f'=IF($A${erste + block * je}="","",$A${erste + block * je})'
     _name(wb, "nk_Liste", f"'Neukauf-KSt'!${liste}${erste}:${liste}${erste + max_nk - 1}")
-    # je Kostenstelle: Jahresmiete aus m² und Kaufjahr des Neuobjekts, das sie wählt
+    # je Kostenstelle: Jahresmiete aus m², Kaufjahr, Mietsteigerung und Jahre ohne
+    # Mietsteigerung des Neuobjekts, das sie wählt
     qm, kj = get_column_letter(import0 + n + 2), get_column_letter(import0 + n + 3)
+    msteig, warte = get_column_letter(import0 + n + 4), get_column_letter(import0 + n + 5)
     for block in range(max_nk):
         kopf = erste + block * je
         nr_ne = f"MATCH($A${kopf},ne_KSt,0)"
         ws[f"{qm}{kopf}"] = f'=IF($A${kopf}="","",IFERROR(INDEX(ne_MieteQmJahr,{nr_ne})*1,""))'
         ws[f"{kj}{kopf}"] = f'=IF($A${kopf}="","",IFERROR(INDEX(ne_Kaufjahr,{nr_ne})*1,""))'
+        ws[f"{msteig}{kopf}"] = f"=IFERROR(INDEX(ne_MietsteigV,{nr_ne})*1,par_NeuMietsteig)"
+        ws[f"{warte}{kopf}"] = f"=IFERROR(N(INDEX(ne_MietWarte,{nr_ne})),0)"
         for k, (key, text, nr, satz) in enumerate(NEUKAUF_POSITIONEN):
+            if key in ("miete", "einnahmen"):
+                satz = f"${msteig}${kopf}"
             zeile = kopf + k
             for spalte in (1, 2):
                 c = ws.cell(row=zeile, column=spalte)
@@ -602,7 +609,8 @@ def _blatt_neukauf(wb, modell: Modell) -> None:
                 miete = f"{get_column_letter(fort0 + i)}{kopf}"
                 annahme = {
                     "miete": f'IF(AND(ISNUMBER(${qm}${kopf}),{jahr}>N(${kj}${kopf})),'
-                             f'${qm}${kopf}*(1+par_Mietsteig)^({jahr}-N(${kj}${kopf})),"")',
+                             f'${qm}${kopf}*(1+{satz})'
+                             f'^MAX({jahr}-N(${kj}${kopf})-${warte}${kopf},0),"")',
                     "erhaltung": f'IF(AND(ISNUMBER(${qm}${kopf}),ISNUMBER({miete})),'
                                  f'{miete}*par_QmErhQuote,"")',
                     "ausgaben": f'IF(AND(ISNUMBER(${qm}${kopf}),ISNUMBER({miete})),'
@@ -615,9 +623,13 @@ def _blatt_neukauf(wb, modell: Modell) -> None:
                           f'{get_column_letter(j0 + i - 1)}{zeile},"<>0",'
                           f'${get_column_letter(j0)}{zeile}:'
                           f'{get_column_letter(j0 + i - 1)}{zeile},"<>")>0')
+                # Miete: in den Jahren ohne Mietsteigerung nach dem Kauf gleich
+                steig = (f"IF(AND({jahr}>N(${kj}${kopf}),"
+                         f"{jahr}<=N(${kj}${kopf})+${warte}${kopf}),0,{satz})"
+                         if key == "miete" else satz)
                 formel = (f'=IF(N({wert})<>0,{wert},{annahme})' if i == 0 else
                           f'=IF(AND(ISNUMBER({wert}),OR(N({wert})<>0,{vorher})),{wert},'
-                          f'IF({vorher},{vor}*(1+{satz}),{annahme}))')
+                          f'IF({vorher},{vor}*(1+{steig}),{annahme}))')
                 c = ws.cell(row=zeile, column=fort0 + i, value=formel)
                 c.fill, c.number_format = FILL_BERECHNET, FMT_EURO
             ws.cell(row=zeile, column=import0 + n,
@@ -638,7 +650,7 @@ def _blatt_neukauf(wb, modell: Modell) -> None:
         f"{a}{erste}:{get_column_letter(j0 + n - 1)}{letzte}",
         FormulaRule(formula=[f"AND(ISNUMBER({a}{erste}),{a}{erste}={imp}{erste})"],
                     fill=FILL_EINGELESEN))
-    for i in range(n + 4):
+    for i in range(n + 6):
         ws.column_dimensions[get_column_letter(import0 + i)].hidden = True
     for i in range(n):
         ws.column_dimensions[get_column_letter(j0 + i)].width = 11
@@ -1549,7 +1561,7 @@ def zentrale_annahmen() -> list:
     """Parameter, die Start und Mandanten-Export als zentrale Annahmen zeigen."""
     return [p for p in PARAMETER
             if p.name.startswith(("par_Ann", "par_ErhAlterung", "par_NeuErh", "par_San"))
-            or p.name in ("par_Steuersatz", "par_Mietsteig", "par_Erhaltsteig",
+            or p.name in ("par_Steuersatz", "par_Mietsteig", "par_NeuMietsteig", "par_Erhaltsteig",
                           "par_Wertsteig", "par_Alternativrendite")]
 
 
