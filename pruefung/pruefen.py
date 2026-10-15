@@ -240,7 +240,10 @@ def export_zelle(ex, name: str, spalte: int):
     oder „Ist <Jahr>“ in der Kopfzeile darüber) oder Spaltennummer. None = nicht gefunden."""
     blatt, beschriftung = name.split(":", 1)
     ws = ex[blatt]
-    block, _, beschriftung = beschriftung.rpartition("/")
+    block, _, rest = beschriftung.partition("/")
+    if not rest:
+        block, rest = "", block
+    beschriftung = rest
     zeile = 1
     if block:
         zeile = next((z for z in range(1, ws.max_row + 1)
@@ -1686,10 +1689,21 @@ def faelle():
         # Jahresrechnung rechnet von oben nach unten, Herkunft der Objektdaten als Farbe
         ("Export: Mandanten-Export mit Verkauf, Kauf und Darlehen",
          Getippt(exp, {("Alle Objekte", "D3"): "ja"}), [
-            (EXPORT_BLAETTER, 0, ["Überblick", "Jahresrechnung", "Ergebnisbrücke", "BWA gesamt",
-                                  "BWA halten", "BWA je Objekt", "Verkauf und Kauf",
-                                  "Annahmen"]),
+            (EXPORT_BLAETTER, 0, ["Überblick", "Jahresrechnung", "Ergebnisbrücke", "Cashflow",
+                                  "BWA gesamt", "BWA halten", "BWA je Objekt",
+                                  "Verkauf und Kauf", "Annahmen"]),
             ("Export:Ergebnisbrücke:Ergebnis vor Steuern Plan A", 2030, Wie("aus_GuV", lj(2030))),
+            # Cashflow: Werte des Blatts (Szenario A), Summe hinter den Jahren, ohne Kontrolle
+            ("Export:Cashflow:Operativer Cashflow", 2030, Wie("cf_Operativ", lj(2030))),
+            ("Export:Cashflow:− planmäßige Tilgung", 2030, Wie("cf_Tilgung", lj(2030))),
+            ("Export:Cashflow:Liquidität Ende", 2046, Wie("liq_Kum", lj(2046))),
+            ("Export:Cashflow:Investitions-Cashflow", 22,   # Summe hinter 20 Jahren
+             Summe(tuple(Wie("cf_Investition", k) for k in range(20)))),
+            ("Export:Cashflow:Kennzahlen/Kapitaldienstdeckung (Einnahmen − Ausgaben) / "
+             "Kapitaldienst", 2030,
+             Wie("cf_Dscr", lj(2030))),
+            ("Export:Cashflow:Kontrolle: Liquidität Ende − Blatt Liquidität (muss 0 sein)", 2030,
+             "fehlt"),
             ("Export:Ergebnisbrücke:Verkauf KSt 1 2028", 2029,
              Wie("BRK:Verkauf KSt 1 2028", 2029)),
             ("Export:Ergebnisbrücke:Verkauf KSt 2 2030 (ausgeschaltet)", 2030, "fehlt"),
@@ -1751,10 +1765,13 @@ def faelle():
         ]),
         # ohne Verkauf und Kauf: kein Blatt Verkauf und Kauf, keine Halten-Blöcke
         ("Export: ohne Verkauf und Kauf", [obj], [
-            (EXPORT_BLAETTER, 0, ["Überblick", "Jahresrechnung", "BWA gesamt", "BWA je Objekt",
-                                  "Annahmen"]),
+            (EXPORT_BLAETTER, 0, ["Überblick", "Jahresrechnung", "Cashflow", "BWA gesamt",
+                                  "BWA je Objekt", "Annahmen"]),
             ("Export:Jahresrechnung:Plan:/Steuer", 2030, Wie("liq_Steuer", lj(2030))),
             ("Export:Jahresrechnung:Halten:/Steuer", 2030, "fehlt"),
+            ("Export:Cashflow:Operativer Cashflow", 2030, Wie("cf_Operativ", lj(2030))),
+            ("Export:Cashflow:Investitions-Cashflow", 2030, 0),   # Summenzeile bleibt
+            ("Export:Cashflow:+ Verkaufserlöse netto", 2030, "fehlt"),
             (f"{EXPORT_KONTROLLE}Plan:", 0, 0),
             ("Export:BWA gesamt:Plan:/Umsatzerlöse", 2026, 60_000),
             ("Export:BWA gesamt:Plan:/Umsatzerlöse", 2025, "fehlt"),   # keine Ist-Vorjahre
@@ -2363,9 +2380,9 @@ def faelle():
             ("bwa_1020", lj(2030), Summe((Wie("BWA:KSt 1:1020", 2030),
                                           Wie("BWA:KSt 2:1020", 2030),
                                           Wie("BWA:NEU-001:1020", 2030)))),
-            (EXPORT_BLAETTER, 0, ["Überblick", "Jahresrechnung", "Ergebnisbrücke", "BWA gesamt",
-                                  "BWA halten", "BWA je Objekt", "Verkauf und Kauf",
-                                  "Annahmen"]),
+            (EXPORT_BLAETTER, 0, ["Überblick", "Jahresrechnung", "Ergebnisbrücke", "Cashflow",
+                                  "BWA gesamt", "BWA halten", "BWA je Objekt",
+                                  "Verkauf und Kauf", "Annahmen"]),
             ("Export:BWA je Objekt:Übersicht – Haus A (Kostenstellen: KSt 1, KSt 2)/Umsatzerlöse",
              2027, Wie("BWA:Haus A:1020", 2027)),
             ("Export:BWA je Objekt:Übersicht – Haus A (Kostenstellen: KSt 1, KSt 2)/Zinsaufwand",
