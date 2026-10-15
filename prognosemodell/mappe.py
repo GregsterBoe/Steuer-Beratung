@@ -869,7 +869,10 @@ def _blatt_darlehen(wb, modell: Modell) -> None:
                 "Auszahlung zum Ende des Kaufjahrs; Zins und Tilgung ab dem Folgejahr auf die "
                 "Restschuld am Vorjahresende. Annuität: gleiche Rate (Zins + anfängliche "
                 "Tilgung); linear: gleiche Tilgung; endfällig: Rückzahlung nach der Laufzeit. "
-                "In den tilgungsfreien Jahren nur Zins. "
+                "In den tilgungsfreien Jahren nur Zins. Zweitkredit mit Restschuld nach "
+                "Laufzeit „auf Hauptkredit“: die Restschuld geht zum Ende des letzten "
+                "Laufzeitjahrs auf den Hauptkredit über, dessen Rate danach entsprechend "
+                "steigt. "
                 "Ist die Restschuld getilgt, entfallen Zins und Tilgung. Die Darlehen der "
                 "Bestandsobjekte rechnet die Prognose je Objekt (Blatt Objekte).")
     ws["A1"].font = Font(italic=True)
@@ -899,7 +902,8 @@ def _blatt_darlehen(wb, modell: Modell) -> None:
     ws.cell(row=letzte + 1, column=1, value="Summe").font = Font(bold=True)
     for zeile in range(erste, letzte + 1):
         neu_nr, zweit = (zeile - erste) % kap + 1, zeile - erste >= kap
-        rechnung = formeln.darlehen_zeile(zeile, neu_nr, zweit)
+        partner = zeile - kap if zweit else zeile + kap
+        rechnung = formeln.darlehen_zeile(zeile, neu_nr, zweit, partner)
         for i, s in enumerate(DARLEHEN_SPALTEN, start=1):
             c = ws.cell(row=zeile, column=i, value=rechnung[s.key])
             c.number_format, c.fill = s.format, FILL_BERECHNET

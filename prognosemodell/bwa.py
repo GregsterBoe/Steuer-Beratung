@@ -27,6 +27,8 @@ from .vorlagen import (BWA_ZEILEN, ERSTE_ZEILE, SPALTE_JAHR, SPALTE_PLAN, SPALTE
 SUMMENBLATT = "Alle Objekte"
 HALTEBLATT = "Alle Objekte halten"
 SONDERBEREICH = "Verkauf und Kauf"
+UEBERSICHT_KST = "Übersicht"   # Kennung in B2 der Übersichtsblätter
+UEBERSICHT_ZELLE = "E3"        # Liste der zusammengefassten Kostenstellen
 ZEILE_JAHR = ERSTE_ZEILE - 1   # Hilfszeile mit dem Planjahr als Zahl, für die Formeln
 ZEILEN = {nr: ERSTE_ZEILE + i for i, (nr, _) in enumerate(BWA_ZEILEN)}   # wie bwa_kopf
 
@@ -633,6 +635,7 @@ def blaetter_bwa(wb, modell: Modell) -> list:
         if obj_zeile is not None:
             verknuepfe_objekt(wb, obj_zeile, t, ZEILEN)
         titel.append(t)
+    uebersichten = _blaetter_uebersicht(wb, modell, eintraege, titel, basisjahr, planjahre)
     neukauf = []
     for block, lw in enumerate(list(modell.neukauf.values())[:modell.kapazitaet.neukauf]):
         t = blattname(lw.blatt or lw.objekt_id, wb.sheetnames)
@@ -667,7 +670,93 @@ def blaetter_bwa(wb, modell: Modell) -> list:
         if bez:
             _name(wb, f"bwb_{nr}", f"'{halten.title}'!${anfang}${z[nr]}:${ende}${z[nr]}")
     zuordnung = blatt_zuordnung(wb, summe, z, planjahre, modell.bwa_zuordnung, halten.title)
-    return [zuordnung, summe.title, halten.title] + titel + neukauf
+    return [zuordnung, summe.title, halten.title] + titel + uebersichten + neukauf
+
+
+def uebersicht_mitglieder(modell: Modell, kennungen) -> tuple:
+    """(gefundene ObjektIDs bzw. NeuIDs, unbekannte Kennungen); Kennung = ObjektID, NeuID
+    oder Blattname der Kostenstelle, ohne Rücksicht auf Groß- und Kleinschreibung."""
+    bekannt = {}
+    for obj in modell.objekte:
+        if obj.objekt_id:
+            bekannt[str(obj.objekt_id).strip().lower()] = obj.objekt_id
+            lw = modell.kostenstellen.get(obj.objekt_id)
+            if lw is not None and lw.blatt:
+                bekannt.setdefault(lw.blatt.strip().lower(), obj.objekt_id)
+    for ne in modell.neuobjekte:
+        if ne.neu_id:
+            bekannt.setdefault(str(ne.neu_id).strip().lower(), ne.neu_id)
+    gefunden, unbekannt = [], []
+    for k in kennungen:
+        oid = bekannt.get(str(k).strip().lower())
+        if oid is None:
+            unbekannt.append(k)
+        elif oid not in gefunden:
+            gefunden.append(oid)
+    return gefunden, unbekannt
+
+
+def _blaetter_uebersicht(wb, modell: Modell, eintraege: list, titel: list, basisjahr: int,
+                         planjahre: int) -> list:
+    """Je Übersichtskostenstelle ein Blatt hinter der letzten ihrer Kostenstellen; liefert
+    die Blattnamen. Ohne gefundene Kostenstelle entfällt das Blatt."""
+    blatt_je_id = {e[1]: t for t, e in zip(titel, eintraege)}
+    ergebnis = []
+    for name, kennungen in modell.uebersichten.items():
+        ids, _ = uebersicht_mitglieder(modell, kennungen)
+        mitglieder = [(oid, blatt_je_id[oid]) for oid in ids if oid in blatt_je_id]
+        if not mitglieder:
+            continue
+        t = blattname(name, wb.sheetnames)
+        nach = max(wb.sheetnames.index(b) for _, b in mitglieder)
+        ws = wb.create_sheet(t, index=nach + 1)
+        _blatt_uebersicht(ws, name, mitglieder, basisjahr, planjahre)
+        ergebnis.append(t)
+    return ergebnis
+
+
+def _blatt_uebersicht(ws, name: str, mitglieder: list, basisjahr: int, planjahre: int) -> None:
+    """Übersichtskostenstelle: Summe der Kostenstellenblätter (Ist, Basisjahr, Plan, Herleitung
+    und Finanzierung). Nur Formeln auf diese Blätter; kein anderes Blatt verweist hierher, die
+    Rechnung und „Alle Objekte“ bleiben daher unberührt."""
+    blaetter = [b for _, b in mitglieder]
+    z = bwa_kopf(ws, UEBERSICHT_KST, name, basisjahr, planjahre, monate_einklappen=True)
+    _jahreszeile(ws, planjahre)
+    plan = list(range(SPALTE_PLAN, SPALTE_PLAN + planjahre))
+
+    def summe(zeile, spalte):
+        sp = get_column_letter(spalte)
+        c = ws.cell(row=zeile, column=spalte,
+                    value="=" + "+".join(f"N('{b}'!{sp}{zeile})" for b in blaetter))
+        c.number_format, c.fill = FMT_BWA, FILL_BERECHNET
+
+    for nr, bez in BWA_ZEILEN:
+        if bez:
+            for spalte in list(range(SPALTE_VORJAHRE, SPALTE_JAHR + 1)) + plan:
+                summe(z[nr], spalte)
+    ws.cell(row=HERLEITUNG_TITEL, column=3, value="Herleitung Sonderposten (+ Ertrag, − Aufwand), "
+            "Summe der Kostenstellen").font = Font(bold=True)
+    ws.cell(row=HERLEITUNG_TITEL, column=SPALTE_ZIEL, value="→ Nr.").font = Font(bold=True)
+    for zeile, (key, text, *_) in zip(range(HERLEITUNG_ERSTE, HERLEITUNG_LETZTE + 1), POSTEN):
+        ws.cell(row=zeile, column=3, value=text).font = FONT_HILFE_GROSS
+        ziel = ws.cell(row=zeile, column=SPALTE_ZIEL, value=f"=zuo_{key}")
+        ziel.font, ziel.fill = FONT_HILFE_GROSS, FILL_BERECHNET
+        for spalte in plan:
+            summe(zeile, spalte)
+            ws.cell(row=zeile, column=spalte).font = FONT_HILFE_GROSS
+    ws.cell(row=FINANZ_TITEL, column=3, value="Finanzierung (nachrichtlich, Zinsen in 1310)"
+            ).font = Font(bold=True)
+    for zeile, (text, _, _) in enumerate(FINANZIERUNG, start=FINANZ_TITEL + 1):
+        ws.cell(row=zeile, column=3, value=text).font = FONT_HILFE_GROSS
+        for spalte in plan:
+            summe(zeile, spalte)
+            ws.cell(row=zeile, column=spalte).font = FONT_HILFE_GROSS
+    ws["E2"] = ("Übersichtskostenstelle: Summe der Kostenstellen eines Gebäudes, nur zur "
+                "Ansicht und für den Mandanten-Export. Sie geht nicht in die Rechnung und nicht "
+                f"in „{SUMMENBLATT}“ ein; die Werte ändert man in den Kostenstellenblättern.")
+    ws["E2"].font = Font(italic=True)
+    ws[UEBERSICHT_ZELLE] = "Kostenstellen: " + ", ".join(str(oid) for oid, _ in mitglieder)
+    ws[UEBERSICHT_ZELLE].font = Font(italic=True)
 
 
 def _ist_summe(ws, z: dict, bestand: list) -> None:

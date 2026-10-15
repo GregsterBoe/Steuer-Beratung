@@ -17,7 +17,7 @@ from .modelle import (AFA_DEGRESSIV, ANL_NICHT_IM_MODELL, ANLAGE_FELDER, ANLAGE_
                       VERKAUF_SPALTEN, WARNUNG, Szenario, aus_spalten, liq_spalten,
                       DARLEHEN_SPALTEN, FIN_KREDIT, KREDIT_HAUPT, KREDIT_ZWEIT, QUELLEN,
                       TILGUNG_ANNUITAET,
-                      TILGUNG_ENDFAELLIG, TILGUNG_LINEAR,
+                      TILGUNG_ENDFAELLIG, TILGUNG_LINEAR, UEBERNAHME_HAUPT,
                       ZUORDNUNG_BEZEICHNUNG, ZUORDNUNG_MEHRDEUTIG, prognosejahre)
 
 
@@ -76,6 +76,7 @@ def nk_spalten() -> tuple:
 
 ISFORMEL = "_xlfn.ISFORMULA"   # Excel 2013+, in der Datei mit Präfix
 MINIFS = "_xlfn.MINIFS"        # Excel 2019+, LibreOffice ab 5.2
+MAXIFS = "_xlfn.MAXIFS"
 
 
 def _groesster(array: str) -> str:
@@ -1217,7 +1218,9 @@ def _hinweis_kredit2(zeile: int) -> str:
         f'IF(AND({art}<>"{TILGUNG_ENDFAELLIG}",{ohne_tilgung}),'
         f'"; Zweitkredit: Tilgung fehlt",'
         f'IF(AND({betrag}<>"",N({betrag})>{_n("kredit", zeile)}+0.005),'
-        f'"; Zweitkredit: Betrag über dem Kredit, gekürzt","")))))'
+        f'"; Zweitkredit: Betrag über dem Kredit, gekürzt",'
+        f'IF(AND({_n("kredit2_uebernahme", zeile)}="{UEBERNAHME_HAUPT}",{ohne_lz}),'
+        f'"; Zweitkredit: Übernahme ohne Laufzeit, keine Übernahme",""))))))'
     )
 
 
@@ -1261,9 +1264,12 @@ def dl_block_spalte(block: int, i: int) -> str:
     return get_column_letter(len(DARLEHEN_SPALTEN) + 2 + block * (prognosejahre() + 1) + i)
 
 
-def darlehen_zeile(zeile: int, neu_nr: int, zweit: bool = False) -> dict:
+def darlehen_zeile(zeile: int, neu_nr: int, zweit: bool = False,
+                   partner: int = None) -> dict:
     """Kreditdaten und Tilgungsplan einer Zeile; leer ohne Kredit. zweit: der Zweitkredit,
-    dessen leere Tilgungsangaben die des Hauptkredits übernehmen."""
+    dessen leere Tilgungsangaben die des Hauptkredits übernehmen. partner: Zeile des anderen
+    Kredits desselben Neuobjekts; mit „auf Hauptkredit“ geht die Restschuld des Zweitkredits
+    zum Ende des letzten Laufzeitjahrs auf den Hauptkredit über, dessen Rate danach steigt."""
     def ne(name):
         return f"INDEX({name},{neu_nr})"
 
@@ -1287,8 +1293,44 @@ def darlehen_zeile(zeile: int, neu_nr: int, zweit: bool = False) -> dict:
     art_ein = eigen("ne_Tilgungsart", "ne_Kredit2Tilgungsart")
     laufzeit = eigen("ne_Laufzeit", "ne_Kredit2Laufzeit")
     art = d("art")
+    n = prognosejahre()
+
+    def p(key):
+        """Zelle des anderen Kredits desselben Neuobjekts."""
+        return f"${dspalte(key)}{partner}"
+
+    def zeilenbereich(block):
+        return f"${dl_block_spalte(block, 0)}{zeile}:${dl_block_spalte(block, n - 1)}{zeile}"
+
+    def jahre(block):
+        return f"${dl_block_spalte(block, 0)}$3:${dl_block_spalte(block, n - 1)}$3"
+
+    ue_jahr, ue_betrag, rate_neu = d("ue_jahr"), d("ue_betrag"), d("rate_neu")
+    if zweit:
+        # Restschuld vor der Übernahme: Betrag − Tilgung bis einschließlich Übernahmejahr
+        uebernahme = {
+            "ue_jahr": wenn(f'IF(AND({ne("ne_Kredit2Uebernahme")}="{UEBERNAHME_HAUPT}",'
+                            f'ISNUMBER({d("laufzeit")})),{d("kaufjahr")}+{d("laufzeit")},"")'),
+            "ue_betrag": wenn(f'IF(AND(ISNUMBER({ue_jahr}),N({ue_jahr})<=par_Endjahr),'
+                              f'MAX({d("betrag")}-SUMIFS({zeilenbereich(1)},{jahre(1)},'
+                              f'"<="&{ue_jahr}),0),"")'),
+            "rate_neu": wenn('""'),
+        }
+        id_bedingung = f"{betrag}>0.005"
+    else:
+        # übernommener Betrag mit den Konditionen des Hauptkredits: Rate steigt um
+        # Betrag × (Zins + Tilgung), linear um Betrag × Tilgung, endfällig nicht
+        faktor = (f'IF({art}="{TILGUNG_ENDFAELLIG}",0,IF({art}="{TILGUNG_LINEAR}",'
+                  f'{d("tilgungssatz")},{d("zinssatz")}+{d("tilgungssatz")}))')
+        uebernahme = {
+            "ue_jahr": wenn(f'IF(ISNUMBER({p("ue_betrag")}),{p("ue_jahr")},"")'),
+            "ue_betrag": wenn(f'IF(ISNUMBER({p("ue_betrag")}),{p("ue_betrag")},"")'),
+            "rate_neu": wenn(f'IF(ISNUMBER({ue_betrag}),{d("rate")}+{ue_betrag}*{faktor},"")'),
+        }
+        # auch ohne eigenen Betrag, wenn der Zweitkredit seine Restschuld abgibt
+        id_bedingung = f"OR({betrag}>0.005,N({p('ue_betrag')})>0.005)"
     formeln = {
-        "id": f'=IF({betrag}>0.005,{ne("ne_ID")},"")',
+        "id": f'=IF({id_bedingung},{ne("ne_ID")},"")',
         "teil": wenn(f'"{KREDIT_ZWEIT if zweit else KREDIT_HAUPT}"'),
         "kaufjahr": wenn(ne("ne_Kaufjahr")),
         "betrag": wenn(betrag),
@@ -1300,28 +1342,37 @@ def darlehen_zeile(zeile: int, neu_nr: int, zweit: bool = False) -> dict:
         "rate": wenn(f'IF({art}="{TILGUNG_ENDFAELLIG}",0,IF({art}="{TILGUNG_LINEAR}",'
                      f'{d("betrag")}*{d("tilgungssatz")},'
                      f'{d("betrag")}*({d("zinssatz")}+{d("tilgungssatz")})))'),
+        **uebernahme,
     }
-    n = prognosejahre()
     rs = [f"{dl_block_spalte(2, i)}{zeile}" for i in range(n)]
+    # Jahr nach der letzten Restschuld; mit Übernahme auch nach einer Lücke
     formeln["getilgt"] = wenn(f'IF({rs[-1]}>0.005,"nach "&par_Endjahr,'
-                              f'{d("kaufjahr")}+COUNTIF({rs[0]}:{rs[-1]},">0.005"))')
+                              f'{MAXIFS}({jahre(2)},{zeilenbereich(2)},">0.005")+1)')
     kj, betrag = d("kaufjahr"), d("betrag")
     lz = d("laufzeit")
     for i in range(n):
         t = f"{dl_block_spalte(0, i)}$3"
         vor = "0" if i == 0 else f"N({rs[i - 1]})"
         zins = f"{dl_block_spalte(0, i)}{zeile}"
-        regulaer = (f'IF({art}="{TILGUNG_ENDFAELLIG}",0,IF({art}="{TILGUNG_LINEAR}",{d("rate")},'
-                    f'MAX({d("rate")}-{zins},0)))')
+        # Hauptkredit: nach dem Übernahmejahr die erhöhte Rate
+        rate = f"IF(AND(ISNUMBER({rate_neu}),{t}>N({ue_jahr})),{rate_neu},{d('rate')})"
+        regulaer = (f'IF({art}="{TILGUNG_ENDFAELLIG}",0,IF({art}="{TILGUNG_LINEAR}",{rate},'
+                    f'MAX({rate}-{zins},0)))')
         formeln[("zins", i)] = wenn(f"{vor}*{d('zinssatz')}")
-        # nach der Laufzeit die ganze Restschuld, nie mehr als die Restschuld; in den
+        # nach der Laufzeit die ganze Restschuld (Zweitkredit mit Übernahme: nur die reguläre
+        # Tilgung, der Rest geht auf den Hauptkredit), nie mehr als die Restschuld; in den
         # tilgungsfreien Jahren nur Zins
+        ende = f"ISNUMBER({lz}),{t}>={kj}+N({lz})"
+        if zweit:
+            ende += f",NOT(ISNUMBER({ue_jahr}))"
         formeln[("tilgung", i)] = wenn(
-            f"IF({t}<={kj},0,MIN({vor},IF(AND(ISNUMBER({lz}),{t}>={kj}+N({lz})),{vor},"
+            f"IF({t}<={kj},0,MIN({vor},IF(AND({ende}),{vor},"
             f"IF({t}<={kj}+{d('tilgungsfrei')},0,{regulaer}))))")
+        tilgung = f"{dl_block_spalte(1, i)}{zeile}"
+        rest = (f"IF({t}=N({ue_jahr}),0,{vor}-{tilgung})" if zweit else
+                f"{vor}-{tilgung}+IF({t}=N({ue_jahr}),N({ue_betrag}),0)")
         formeln[("restschuld", i)] = wenn(
-            f"IF({t}<{kj},0,IF({t}={kj},{betrag},"
-            f"{vor}-{dl_block_spalte(1, i)}{zeile}))")
+            f"IF({t}<{kj},0,IF({t}={kj},{betrag},{rest}))")
     return formeln
 
 

@@ -58,6 +58,7 @@ python -m prognosemodell --schnellcheck --kostenstellen Kostenstellen.xlsx   # s
 python -m prognosemodell --kostenstellen Kostenstellen.xlsx --ausgabe Ordner/Prognose.xlsx   # laufende Werte je Blatt einlesen; nur Ordner = Standardname darin
 python -m prognosemodell --kostenstellen Kostenstellen.xlsx --inventar Inventar_2025.xlsx   # dazu das Anlagenverzeichnis
 python -m prognosemodell --kostenstellen Kostenstellen.xlsx --uebernehmen Alte_Mappe.xlsx --ausgabe Neue_Mappe.xlsx   # eingetippte Werte der alten Mappe übernehmen
+python -m prognosemodell --kostenstellen Kostenstellen.xlsx --uebersicht "Musterstraße 5=KSt 10,KSt 11"   # Übersichtskostenstelle: Summe mehrerer Kostenstellen eines Gebäudes (mehrfach möglich)
 python -m pruefung.pruefen           # rechnet per LibreOffice headless und prüft gegen Sollwerte
 python -m pruefung.pruefen "Etappe 9"  # nur Fälle, deren Name den Text enthält
 python -m pruefung.pruefen -j 2      # höchstens 2 Fälle gleichzeitig (Standard: ein Prozess je Kern)
@@ -195,7 +196,7 @@ Die Ergebnisse stehen auch im **DATEV-BWA-Format** (Projektplan, Abschnitt 18):
 - **Ergebnisbrücke:** vom Ergebnis bei Halten über die Pakete (Verkauf mit seinen Käufen) zum Ergebnis im Plan, ohne leere Pakete und Vorgänge und ohne Kontrollzeile. Ohne Verkauf und Kauf entfällt das Blatt.
 - **BWA gesamt:** Summen-BWA mit Ist-Jahren und Planjahren und der Herleitung der Sonderposten; bei „Vergleich mit Halten = ja“ auch die Differenz zu Halten.
 - **BWA halten:** dieselbe Summen-BWA als Status quo: alle Objekte behalten, ohne Verkäufe und Neuobjekte („Alle Objekte halten“). Gleicht sie der BWA gesamt (ohne Verkauf und Kauf), entfällt das Blatt.
-- **BWA je Objekt:** alle Kostenstellenblätter untereinander, mit Inhaltsverzeichnis.
+- **BWA je Objekt:** alle Kostenstellenblätter untereinander, mit Inhaltsverzeichnis; dazu die Übersichtskostenstellen (`--uebersicht`), je die Summe der Kostenstellen eines Gebäudes.
 - **Verkauf und Kauf:** Verkäufe, Neuobjekte, Ergebnis- und Detailsicht je Vorgang. Ohne Verkauf und Kauf entfällt das Blatt.
 - **Annahmen:** zentrale Annahmen, Daten je Objekt mit Herkunft (blau Annahme, grün Buchhaltung oder Anlagenverzeichnis), auffällige Prüfungen.
 
