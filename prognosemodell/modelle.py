@@ -582,6 +582,9 @@ MAX_NEUOBJEKTE = 50
 FIN_EIGEN, FIN_KREDIT = "Eigenmittel", "Kredit"
 TILGUNG_ANNUITAET, TILGUNG_LINEAR, TILGUNG_ENDFAELLIG = "Annuität", "linear", "endfällig"
 TILGUNGSARTEN = (TILGUNG_ANNUITAET, TILGUNG_LINEAR, TILGUNG_ENDFAELLIG)
+# Restschuld des Zweitkredits nach der Laufzeit: ablösen (leer) oder auf den Hauptkredit
+UEBERNAHME_ABLOESEN, UEBERNAHME_HAUPT = "ablösen", "auf Hauptkredit"
+UEBERNAHME_ARTEN = (UEBERNAHME_ABLOESEN, UEBERNAHME_HAUPT)
 NEU_FELDER = [
     Feld("neu_id", "NeuID", "ne_ID", FMT_TEXT, True, 12,
          hinweis="eindeutige Kennung, nicht gleich einer ObjektID; unter ihr führen Prognose "
@@ -732,6 +735,12 @@ NEU_FELDER = [
     Feld("kredit2_tilgungsfrei", "Tilgungsfreie Jahre Zweitkredit", "ne_Kredit2Tilgungsfrei",
          FMT_ZAHL, False, 9, minimum=0, maximum=100, ganzzahl=True,
          hinweis="leer = wie Hauptkredit; 0 = sofort tilgen"),
+    Feld("kredit2_uebernahme", "Restschuld Zweitkredit nach Laufzeit", "ne_Kredit2Uebernahme",
+         FMT_TEXT, False, 14, auswahl=UEBERNAHME_ARTEN,
+         hinweis="ablösen (leer): die Restschuld wird nach der Laufzeit auf einmal getilgt; "
+                 "auf Hauptkredit: sie geht zum Ende des letzten Laufzeitjahrs auf den "
+                 "Hauptkredit über, dessen Rate um übernommener Betrag × (Zinssatz + Tilgung) "
+                 "bzw. bei linear × Tilgung steigt. Braucht eine Laufzeit des Zweitkredits"),
 ]
 # Quell-Rücklagen je Neuobjekt: (Feld, benannter Bereich, Präfix der Hilfsspalten)
 QUELLEN = [("quelle", "ne_Quelle", "ne_Q1"), ("quelle2", "ne_Quelle2", "ne_Q2"),
@@ -812,6 +821,10 @@ DARLEHEN_SPALTEN = [
     Spalte("laufzeit", "Laufzeit Jahre", "dl_Laufzeit", FMT_ZAHL, 9),
     Spalte("tilgungsfrei", "tilgungsfreie Jahre", "dl_Tilgungsfrei", FMT_ZAHL, 9),
     Spalte("rate", "Rate p. a. (Annuität) bzw. Tilgung (linear)", "dl_Rate", FMT_EURO, 15),
+    # Restschuld des Zweitkredits nach der Laufzeit auf den Hauptkredit (beide Zeilen)
+    Spalte("ue_jahr", "Übernahme Ende Jahr", "dl_UeJahr", FMT_JAHR, 10),
+    Spalte("ue_betrag", "Übernahme Restschuld", "dl_UeBetrag", FMT_EURO),
+    Spalte("rate_neu", "Rate bzw. Tilgung ab Übernahme", "dl_RateNeu", FMT_EURO, 15),
     Spalte("getilgt", "getilgt im Jahr", "dl_Getilgt", FMT_TEXT, 11),
 ]
 DARLEHEN_BLOECKE = [("zins", "Zinsen", "dl_Zins"), ("tilgung", "Tilgung", "dl_Tilgung"),
@@ -1047,6 +1060,7 @@ class Neuobjekt:
     kredit2_tilgung: Optional[float] = None
     kredit2_laufzeit: Optional[int] = None
     kredit2_tilgungsfrei: Optional[int] = None
+    kredit2_uebernahme: Optional[str] = None  # "auf Hauptkredit"; leer = ablösen
 
 
 # Blatt Prüfung: Plausibilitätsprüfungen (Etappe 9, Projektplan Abschnitt 5 und 19)

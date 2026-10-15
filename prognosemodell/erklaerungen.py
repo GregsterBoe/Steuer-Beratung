@@ -308,8 +308,17 @@ SPALTEN = {
                        "Zweitkredit leer = wie Hauptkredit.",
     "dl_Rate": "Annuität: Kredit × (Zinssatz + anfängliche Tilgung), gleich bleibend. Linear: "
                "Kredit × Tilgungssatz je Jahr. Endfällig: keine laufende Tilgung.",
-    "dl_Getilgt": "Jahr, in dem die Restschuld 0 erreicht; „nach …“: am Rasterende nicht "
-                  "getilgt.",
+    "dl_UeJahr": "Restschuld Zweitkredit nach Laufzeit = auf Hauptkredit: Kaufjahr + Laufzeit "
+                 "des Zweitkredits; zum Ende dieses Jahrs geht seine Restschuld auf den "
+                 "Hauptkredit über. In beiden Zeilen, leer ohne Übernahme.",
+    "dl_UeBetrag": "Zweitkredit: Betrag − Tilgung bis einschließlich Übernahmejahr (die "
+                   "reguläre Rate des letzten Jahrs ist gezahlt); Hauptkredit: derselbe Betrag, "
+                   "er erhöht dort die Restschuld. Leer, wenn das Jahr nach dem Raster liegt.",
+    "dl_RateNeu": "Hauptkredit nach der Übernahme: Rate + übernommener Betrag × (Zinssatz + "
+                  "Tilgung), linear Tilgung + Betrag × Tilgungssatz, endfällig 0. Gilt ab dem "
+                  "Jahr nach der Übernahme.",
+    "dl_Getilgt": "Jahr, in dem die Restschuld 0 erreicht (Zweitkredit mit Übernahme: das "
+                  "Übernahmejahr); „nach …“: am Rasterende nicht getilgt.",
 }
 
 # Liquidität: je Szenario dieselbe Tabelle

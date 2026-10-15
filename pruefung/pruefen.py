@@ -2202,6 +2202,65 @@ def faelle():
             ("dl_Betrag", 4, 100_000),
             ("pr_Anzahl", pr("neuobjekte"), 4),
         ]),
+        # Restschuld des Zweitkredits nach der Laufzeit auf den Hauptkredit. NEU-001: Kredit
+        # 1 Mio, Hauptkredit 500.000 zu 4 % Annuität 2 % (Rate 30.000), Zweitkredit 500.000
+        # zu 1 % linear 5 % mit 5 Jahren: Tilgung 25.000 in 2029 bis 2033, Ende 2033 gehen
+        # 375.000 auf den Hauptkredit, dessen Rate ab 2034 um 375.000 × 6 % auf 52.500 steigt.
+        # NEU-002: alles Zweitkredit (100.000, linear 10 %, 3 Jahre), der Hauptkredit (5 %,
+        # 5 %) beginnt erst mit der Übernahme von 70.000 Ende 2033, Rate 7.000. NEU-003:
+        # Übernahme ohne Laufzeit
+        ("Finanzierung: Restschuld Zweitkredit auf Hauptkredit",
+         Modell(objekte=[abnahme4],
+                neuobjekte=[
+                    Neuobjekt("NEU-001", 2028, kaufpreis=1_000_000, anteil_gub=0.3,
+                              afa_satz=0.03, fin_art="Kredit", kredit_zins=0.04, tilgung=0.02,
+                              kredit2_anteil=0.5, kredit2_zins=0.01,
+                              kredit2_tilgungsart="linear", kredit2_tilgung=0.05,
+                              kredit2_laufzeit=5, kredit2_uebernahme="auf Hauptkredit"),
+                    Neuobjekt("NEU-002", 2030, kaufpreis=100_000, anteil_gub=0.3, afa_satz=0.03,
+                              fin_art="Kredit", kredit_zins=0.05, tilgung=0.05,
+                              kredit2_anteil=1, kredit2_zins=0.02,
+                              kredit2_tilgungsart="linear", kredit2_tilgung=0.1,
+                              kredit2_laufzeit=3, kredit2_uebernahme="auf Hauptkredit"),
+                    Neuobjekt("NEU-003", 2030, kaufpreis=100_000, anteil_gub=0.3, afa_satz=0.03,
+                              fin_art="Kredit", kredit_zins=0.04, tilgung=0.02,
+                              kredit2_anteil=0.5, kredit2_zins=0.01,
+                              kredit2_uebernahme="auf Hauptkredit")],
+                parameter=OHNE_ZINS), [
+            ("ne_Status", 0, "OK"),
+            ("dl_UeJahr", 10, 2033),
+            ("dl_UeBetrag", 10, 375_000),
+            ("dl_RateNeu", 10, None),
+            ("dl_Getilgt", 10, 2033),
+            ("dl_UeJahr", 0, 2033),
+            ("dl_UeBetrag", 0, 375_000),
+            ("dl_Rate", 0, 30_000),
+            ("dl_RateNeu", 0, 52_500),
+            ("dl_Getilgt", 0, "nach 2046"),
+            ("prg_KreditZins", prg_neu(1, 2033), 22_301.4144),     # 18.301,41 + 4.000
+            ("prg_Tilgung", prg_neu(1, 2033), 36_698.5856),        # keine Ablösung
+            ("prg_Restschuld", prg_neu(1, 2033), 820_836.7744),    # nur noch Hauptkredit
+            ("prg_KreditZins", prg_neu(1, 2034), 32_833.470976),
+            ("prg_Tilgung", prg_neu(1, 2034), 19_666.529024),
+            ("prg_Restschuld", prg_neu(1, 2034), 801_170.245376),
+            ("ne_Status", 1, "OK"),
+            ("dl_ID", 1, "NEU-002"),
+            ("dl_Betrag", 1, 0),
+            ("dl_UeBetrag", 11, 70_000),
+            ("dl_RateNeu", 1, 7_000),
+            ("dl_Getilgt", 11, 2033),
+            ("prg_KreditZins", prg_neu(2, 2033), 1_600),
+            ("prg_Tilgung", prg_neu(2, 2033), 10_000),
+            ("prg_Restschuld", prg_neu(2, 2033), 70_000),
+            ("prg_KreditZins", prg_neu(2, 2034), 3_500),
+            ("prg_Tilgung", prg_neu(2, 2034), 3_500),
+            ("prg_Restschuld", prg_neu(2, 2034), 66_500),
+            ("ne_Status", 2, "Zweitkredit: Übernahme ohne Laufzeit, keine Übernahme"),
+            ("dl_UeJahr", 12, None),
+            ("dl_ID", 2, "NEU-003"),
+            ("dl_UeBetrag", 2, None),
+            ("dl_RateNeu", 2, None),
+        ]),
         # Darlehen der Bestandsobjekte (Projektplan Abschnitt 28). OBJ-001: Restschuld 500.000,
         # 4 %, Rate 40.000, Verkauf Ende 2029: 2027 Zins 20.000, Tilgung 20.000; 2028 Zins
         # 19.200; 2029 Zins 18.368, Ablösung 459.200, bei Halten Tilgung 21.632, Rest
