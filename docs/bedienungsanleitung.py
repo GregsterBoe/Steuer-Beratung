@@ -124,6 +124,8 @@ tabelle(["Blatt", "Wofür"], [
     ["**Übersicht / Vergleich**", "Ergebnis je Jahr und Szenarien nebeneinander (Abschnitt 5)"],
     ["**Ergebnisbrücke**", "Wirkung jedes Verkaufs und Kaufs auf das Ergebnis vor Steuern, "
                            "von Halten zum Plan (Abschnitt 5)"],
+    ["**Cashflow**", "Kapitalflussrechnung je Jahr für ein wählbares Szenario: operativ, "
+                     "Investition, Finanzierung, Kapitaldienst, Diagramm (Abschnitt 5)"],
     ["**Prüfung**", "Alle Plausibilitätsprüfungen als Fehler, Warnung oder Hinweis"],
     ["**Alle Objekte, KSt-Blätter**", "Ist und Plan im BWA-Format je Kostenstelle und "
                                       "als Summe; Verkauf und Kauf als eigenes Blatt"],
@@ -242,6 +244,13 @@ punkte([
     "Rücklage oder seinem Erlös (Miete − Kosten − AfA − Kreditzinsen), mit Zwischensumme; "
     "Käufe ohne Quelle stehen getrennt, darunter alle Käufe einzeln mit ihrem Paket. Die Kontrollzeile muss 0 sein. Kostenstellen der Art „Unternehmen“ "
     "(Blatt Objekte, keine Immobilie) stehen getrennt im Ergebnis bei Halten.",
+    "**Cashflow:** Kapitalflussrechnung je Jahr; das Szenario wählen Sie in Zelle B3. Der "
+    "operative Cashflow rechnet indirekt vom Jahresüberschuss: plus AfA, minus "
+    "Veräußerungsgewinne, plus Einstellung in die § 6b-Rücklage, minus Auflösung und "
+    "Gewinnzuschlag. Darunter Investition (Verkaufserlöse, Käufe) und Finanzierung "
+    "(Kreditauszahlung, planmäßige Tilgung, Ablösung bei Verkauf), die Liquidität am Jahresende "
+    "und die Kapitaldienstdeckung (Einnahmen − Ausgaben je Euro Zins und Tilgung, unter 1 rot). "
+    "Das Diagramm zeigt die drei Bereiche als Säulen und die Liquidität als Linie.",
     "**Varianten:** mit „Variante festhalten“ gesicherte Stände, etwa verschiedene Verkaufsjahre.",
     "**Alle Objekte halten:** die Summen-BWA, als würden alle Objekte gehalten und nichts "
     "gekauft (Baseline).",

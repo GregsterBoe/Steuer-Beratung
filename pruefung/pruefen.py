@@ -35,7 +35,8 @@ from prognosemodell.uebernahme import uebernehmen
 from prognosemodell.modelle import (FEHLER, HINWEIS, OBJEKT_FELDER, PRUEFUNGEN, Anlage, Kapazitaet,
                                     LIQ_SPALTEN, NEU_FELDER, NEU_SPALTEN, VERKAUF_FELDER,
                                     VERKAUF_SPALTEN,
-                                    STATUS_ANNAHME_GELOESCHT, WARNUNG, Modell, Neuobjekt,
+                                    STATUS_ANNAHME_GELOESCHT, SZ_A, SZ_B, SZ_BASELINE,
+                                    SZENARIEN, WARNUNG, Modell, Neuobjekt,
                                     Objekt, Verkauf, prognosejahre)
 from openpyxl.utils import get_column_letter
 
@@ -79,9 +80,10 @@ def nr(spalten, key: str, versatz: int = 0) -> int:
 
 @dataclasses.dataclass(frozen=True)
 class Wie:
-    """Sollwert = Wert eines anderen Bereichs derselben Mappe."""
+    """Sollwert = Wert eines anderen Bereichs derselben Mappe, mal faktor."""
     name: str
     zeile: int = 0
+    faktor: float = 1
 
 
 @dataclasses.dataclass(frozen=True)
@@ -463,6 +465,71 @@ def faelle():
     firma = Objekt("KSt 90", name="Verwaltung", art="Unternehmen", miete=0,
                    weitere_einnahmen=20_000, weitere_ausgaben=50_000, afa_bwa=1_000,
                    restbuchwert=5_000)
+    cashflow_modell = Modell(
+        objekte=[dataclasses.replace(obj, restschuld=500_000, zinssatz=0.04, rate=40_000),
+                 dataclasses.replace(obj, objekt_id="OBJ-002"), firma],
+        verkaeufe=[Verkauf("OBJ-001", 2029, preis=1_400_000, nutzung_6b="ja"),
+                   Verkauf("OBJ-002", 2031, preis=1_000_000, nutzung_6b="nein")],
+        neuobjekte=[
+            Neuobjekt("NEU-001", 2030, kaufpreis=1_500_000, anteil_gub=0.2, afa_satz=0.03,
+                      mietrendite=0.05, quelle="RL-OBJ-001", fin_art="Kredit",
+                      kredit_zins=0.04, tilgung=0.02),
+            Neuobjekt("NEU-002", 2032, kaufpreis=500_000, anteil_gub=0.2, afa_satz=0.03,
+                      mietrendite=0.05)])
+
+    def cashflow_soll():
+        """Je Szenario: Sollwerte des Blatts Cashflow, gegen Liquidität, Auswertung und
+        Rücklagenspiegel desselben Szenarios."""
+        for sz in SZENARIEN:
+            plan, verkauf = sz == SZ_A, sz != SZ_BASELINE
+            soll = [
+                *[("cf_Jahresueberschuss", lj(j), Wie(f"{sz.aus}_NachSteuer", lj(j)))
+                  for j in (2027, 2029, 2031)],
+                ("cf_Afa", lj(2030), Wie(f"{sz.liq}_AfA", lj(2030))),
+                ("cf_Gewinne", lj(2029), Wie("rls_Gewinne", rls(2029), -1) if verkauf else 0),
+                ("cf_Bildung", lj(2029), Wie("rls_Gewinne", rls(2029)) if plan else 0),
+                ("cf_Gewinne", lj(2031), Wie("vk_Gewinn", 1, -1) if verkauf else 0),
+                ("cf_Bildung", lj(2031), 0),
+                ("cf_Verkaufserloes", lj(2029), Wie("vk_Nettoerloes", 0) if verkauf else 0),
+                ("cf_Kreditzins", lj(2027), -20_000),
+                ("cf_Tilgung", lj(2027), -20_000),
+                ("cf_Tilgung", lj(2029), -21_632),
+                ("cf_Abloesung", lj(2029), -437_568 if verkauf else 0),
+                ("cf_Kapitaldienst", lj(2027), 40_000),
+                ("cf_Kauf", lj(2030), Wie(f"{sz.liq}_Kauf", lj(2030), -1)),
+                ("cf_Kredit", lj(2030), Wie(f"{sz.liq}_Kredit", lj(2030))),
+                *[("cf_Veraenderung", lj(j), Wie(f"{sz.liq}_Zufluss", lj(j)))
+                  for j in (2027, 2029, 2030, 2031, 2032)],
+                ("cf_Anfang", lj(2027), 0),
+                ("cf_Anfang", lj(2030), Wie("cf_Ende", lj(2029))),
+                ("cf_Ende", lj(2046), Wie(f"{sz.liq}_Kum", lj(2046))),
+                *[("cf_Kontrolle", lj(j), 0) for j in range(2027, 2047)],
+                ("pr_Anzahl", pr("cashflow"), 0),
+            ]
+            if sz == SZ_A:
+                soll += [
+                    ("cf_SzNr", 0, 1),
+                    # 6b-Kette: in A nur der Teil der AK nach Übertragung, B und C volle AK
+                    ("cf_Afa", lj(2031), Wie("liq_AfA", lj(2031))),
+                    ("Auswahl:Cashflow", "B3", ("'Cashflow'!$X$1:$X$4", 1)),
+                ]
+            elif sz == SZ_B:
+                # Neuobjekt mit Rücklage entfällt, Kauf und Kredit 2030 nur ohne NEU-001
+                soll += [("cf_SzNr", 0, 2), ("cf_Kauf", lj(2030), 0), ("cf_Kredit", lj(2030), 0)]
+            elif sz == SZ_BASELINE:
+                soll += [("cf_SzNr", 0, 4), ("cf_Tilgung", lj(2030), -22_497.28)]
+            yield sz, soll
+
+    # Jahre mit Kapitaldienstdeckung unter 1: Darlehen 1.000.000, 4 %, Rate 70.000 gegen
+    # Miete 60.000 × 1,02^n − Erhaltung 8.000 × 1,025^n
+    KAPITALDIENST_UNTER_1 = 0
+    rest = 1_000_000
+    for n in range(1, 21):
+        zins = rest * 0.04
+        tilgung = min(70_000 - zins, rest)
+        rest -= tilgung
+        dienst = zins + tilgung
+        KAPITALDIENST_UNTER_1 += dienst > 0.005 and 60_000 * 1.02**n - 8_000 * 1.025**n < dienst
     # Mandanten-Export: Kostenstellen mit Ist-Vorjahren, Verkauf KSt 1 Ende 2028 mit § 6b,
     # Neuobjekt mit Kredit, Bestandsdarlehen KSt 2 (Zinssatz als Annahme), Verkauf KSt 2
     # ausgeschaltet
@@ -1120,6 +1187,31 @@ def faelle():
             *[("brk_Kontrolle", j - 2027, 0) for j in (2029, 2030, 2031, 2046)],
             ("pr_Anzahl", pr("verkauf_unternehmen"), 1),
             ("pr_Ergebnis", pr("verkauf_unternehmen"), WARNUNG),
+        ]),
+        # Cashflow (Projektplan Abschnitt 35): Kapitalflussrechnung des gewählten Szenarios.
+        # OBJ-001 mit Darlehen 500.000, 4 %, Rate 40.000, Ende 2029 mit § 6b verkauft:
+        # 2027 Zins und Tilgung je 20.000; 2029 planmäßig 40.000 − 18.368 = 21.632, Ablösung
+        # 437.568. Gewinn − Einstellung = 0 im Verkaufsjahr. OBJ-002 Ende 2031 ohne § 6b.
+        # NEU-001 2030 aus der Rücklage mit Kredit, NEU-002 2032 aus Eigenmitteln.
+        *[(f"Cashflow: Kapitalflussrechnung {sz.kurz}",
+           Getippt(cashflow_modell, {("Cashflow", "B3"): sz.kurz}), pruefungen)
+          for sz, pruefungen in cashflow_soll()],
+        # Kapitaldienstdeckung: Darlehen 1.000.000, 4 %, Rate 70.000 gegen Einnahmen −
+        # Ausgaben 2027 61.200 − 8.200 = 53.000: DSCR 53.000 / 70.000 = 0,7571
+        ("Cashflow: Kapitaldienstdeckung unter 1",
+         Modell(objekte=[dataclasses.replace(obj, restschuld=1_000_000, zinssatz=0.04,
+                                             rate=70_000)], parameter=OHNE_ZINS), [
+            ("cf_Kapitaldienst", lj(2027), 70_000),
+            ("cf_Kreditzins", lj(2027), -40_000),
+            ("cf_Tilgung", lj(2027), -30_000),
+            ("cf_Dscr", lj(2027), 53_000 / 70_000),
+            ("cf_NachKapitaldienst", lj(2027), Summe((Wie("cf_Operativ", lj(2027)),
+                                                      Wie("cf_Tilgung", lj(2027))))),
+            ("cf_Abloesung", lj(2027), 0),
+            *[("cf_Kontrolle", lj(j), 0) for j in (2027, 2036, 2046)],
+            ("pr_Anzahl", pr("kapitaldienst"), KAPITALDIENST_UNTER_1),
+            ("pr_Ergebnis", pr("kapitaldienst"), "Hinweis"),
+            ("pr_Anzahl", pr("cashflow"), 0),
         ]),
         # Standard ohne Wechsel (par_AfAWechsel = nein): stets 5 % vom Restbuchwert, auch wenn
         # linear höher wäre. AfA-Basis 800.000, Kauf Ende 2027: 2028 40.000, 2029 38.000,
@@ -3049,7 +3141,8 @@ def pruefe(fall: str, wb, pruefungen) -> int:
         if ist == "":
             ist = None
         if isinstance(soll, Wie):
-            soll = wert(wb, soll.name, soll.zeile)
+            soll = (wert(wb, soll.name, soll.zeile) if soll.faktor == 1
+                    else wert(wb, soll.name, soll.zeile) * soll.faktor)
         elif isinstance(soll, Summe):
             soll = sum(wert(wb, w.name, w.zeile) or 0 for w in soll.teile)
         if gleich(ist, soll):

@@ -13,7 +13,7 @@ from .modelle import (AFA_DEGRESSIV, ANL_NICHT_IM_MODELL, ANLAGE_FELDER, ANLAGE_
                       OBJEKT_ERSTE_ANLAGEN_SPALTE,
                       FEHLER, NEU_FELDER, STATUS_ANNAHME_GELOESCHT, NEU_SPALTEN, OBJEKT_FELDER, PROGNOSE_SPALTEN,
                       RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN, STATUS_6B_UNZULAESSIG,
-                      STATUS_AUS, STATUS_OK, SZ_A, SZ_B, SZ_BASELINE, SZENARIEN, VERKAUF_FELDER,
+                      STATUS_AUS, STATUS_OK, SZ_A, SZ_B, SZ_C, SZ_BASELINE, SZENARIEN, VERKAUF_FELDER,
                       VERKAUF_SPALTEN, WARNUNG, Szenario, aus_spalten, liq_spalten,
                       DARLEHEN_SPALTEN, FIN_KREDIT, KREDIT_HAUPT, KREDIT_ZWEIT, QUELLEN,
                       TILGUNG_ANNUITAET,
@@ -569,11 +569,16 @@ def _darlehen_bestand(zeile: int, objekt_nr: int, erstes_jahr: bool) -> dict:
         regulaer = f"MIN(MAX({rate}-{zins},0),{vor})"
         tilgung = f"IF({_p('bestand', zeile)}=0,{vor},{regulaer})" if verkauf else regulaer
         grob_zins = f"{grob}*{_p('aktiv', zeile)}" if verkauf else grob
-        return {
+        formeln = {
             zins_key: _leer_oder(zeile, f"IF({mit},{vor}*{satz},{grob_zins})"),
             tilgung_key: _leer_oder(zeile, f"IF({mit},{tilgung},0)"),
             rs_key: _leer_oder(zeile, f"IF({mit},{vor}-{_p(tilgung_key, zeile)},0)"),
         }
+        if verkauf:
+            # Teil der Tilgung über die planmäßige hinaus: Ablösung im Verkaufsjahr
+            formeln["abloesung"] = _leer_oder(
+                zeile, f"IF({mit},{_p(tilgung_key, zeile)}-{regulaer},0)")
+        return formeln
 
     return {**plan("kredit_zins", "tilgung", "restschuld", verkauf=True),
             **plan("zins_halten", "tilgung_halten", "restschuld_halten", verkauf=False)}
@@ -716,6 +721,7 @@ def prognose_zeile_neu(zeile: int, neu_nr: int, erstes_jahr: bool) -> dict:
         # Tilgungsplan des Kredits, Zeile neu_nr im Blatt Darlehen
         "kredit_zins": _leer_oder(zeile, darlehen("dl_Zins")),
         "tilgung": _leer_oder(zeile, darlehen("dl_Tilgung")),
+        "abloesung": _leer_oder(zeile, "0"),
         "restschuld": _leer_oder(zeile, darlehen("dl_Restschuld")),
         # gehört nicht zur Baseline
         "zins_halten": _leer_oder(zeile, "0"),
@@ -1490,6 +1496,7 @@ def _liq_plan(c, t: str, sz: Szenario) -> dict:
         "kreditzins": f"={_summe_zeilen('prg_KreditZins', t, sz)}",
         "kredit": f"=SUMIFS(ne_Kredit,ne_Kaufjahr,{t},ne_Gueltig,1{neu})",
         "tilgung": f"={_summe_zeilen('prg_Tilgung', t, sz)}",
+        "abloesung": f"={_summe_zeilen('prg_Abloesung', t, sz)}",
         "restschuld": f"={_summe_zeilen('prg_Restschuld', t, sz)}",
     }
 
@@ -1517,6 +1524,7 @@ def _liq_baseline(c, zeile: int, t: str, erstes_jahr: bool) -> dict:
         "kreditzins": f"={_summe_jahr('prg_ZinsHalten', t)}",
         "kredit": "=0",
         "tilgung": f"={_summe_jahr('prg_TilgungHalten', t)}",
+        "abloesung": "=0",
         "restschuld": f"={_summe_jahr('prg_RestschuldHalten', t)}",
     }
 
@@ -1669,6 +1677,49 @@ def bruecke_summen(jahr: str) -> dict:
     }
 
 
+# --- Cashflow (Projektplan Abschnitt 35) ---
+#
+# Kapitalflussrechnung des im Blatt gewählten Szenarios (cf_SzNr, Reihenfolge SZENARIEN):
+# operativer Cashflow indirekt vom Jahresüberschuss, dazu Investition und Finanzierung.
+# Nur eine Umordnung der Blätter Liquidität, Auswertung und Rücklagen; Abflüsse negativ.
+
+
+def cashflow_summen(jahr: str) -> dict:
+    """Formeln der Zeilen, die aus anderen Blättern kommen, im Jahr jahr."""
+    def je_szenario(werte):
+        return f"CHOOSE(cf_SzNr,{','.join(werte)})"
+
+    def liq(name):
+        return je_szenario([f"SUMIFS({sz.liq}_{name},{sz.liq}_Jahr,{jahr})" for sz in SZENARIEN])
+
+    def rls(name, szenarien):
+        return je_szenario([f"SUMIFS(rls_{name},rls_Jahr,{jahr})" if sz in szenarien else "0"
+                            for sz in SZENARIEN])
+
+    # A: Rücklage wie erfasst; B und C: jeder Gewinn sofort versteuert; Baseline: kein Verkauf
+    mit_verkauf, mit_ruecklage = (SZ_A, SZ_B, SZ_C), (SZ_A,)
+    return {
+        "jahresueberschuss": "=" + je_szenario(
+            [f"SUMIFS({sz.aus}_NachSteuer,{sz.aus}_Jahr,{jahr})" for sz in SZENARIEN]),
+        "afa": f"={liq('AfA')}",
+        "gewinne": f"=-{rls('Gewinne', mit_verkauf)}",
+        "bildung": f"={rls('Bildung', mit_ruecklage)}",
+        "aufloesung": f"=-{rls('Aufloesung', mit_ruecklage)}",
+        "zuschlag": f"=-{rls('Zuschlag', mit_ruecklage)}",
+        "einnahmen": f"={liq('Einnahmen')}",
+        "ausgaben": f"=-{liq('Ausgaben')}",
+        "zinsertrag": f"={liq('Zins')}",
+        "kreditzins": f"=-{liq('KreditZins')}",
+        "steuer": f"=-{liq('Steuer')}",
+        "verkaufserloes": f"={liq('Verkaufserloes')}",
+        "kauf": f"=-{liq('Kauf')}",
+        "kredit": f"={liq('Kredit')}",
+        "tilgung": f"=-({liq('Tilgung')}-{liq('Abloesung')})",
+        "abloesung": f"=-{liq('Abloesung')}",
+        "kum": liq("Kum"),
+    }
+
+
 def vergleich_zeile(praefix_art: str, name: str, art: str, sz: Szenario) -> str:
     """Kennzahl eines Szenarios im Blatt Vergleich: Endwert oder Summe über alle Jahre."""
     bereich = f"{sz.liq if praefix_art == 'liq' else sz.aus}_{name}"
@@ -1690,6 +1741,9 @@ def _feldname(key: str) -> str:
 def _nicht_ok(status: str, *ausnahmen: str) -> str:
     weitere = "".join(f'*({status}<>"{a}")' for a in ausnahmen)
     return f'=SUMPRODUCT(({status}<>"")*({status}<>"{STATUS_OK}"){weitere})'
+
+
+_KAPITALDIENST = "(liq_KreditZins+liq_Tilgung-liq_Abloesung)"
 
 
 def pruefung_anzahl() -> dict:
@@ -1729,6 +1783,10 @@ def pruefung_anzahl() -> dict:
         "vorjahr": '=COUNTIF(ne_UeFolge,">0.005")',
         "verkauf_unternehmen": '=COUNTIFS(prg_Unternehmen,1,prg_VerkaufNr,">0",prg_Jahr,par_Startjahr)',
         "bruecke": "=SUMPRODUCT(--(ABS(brk_Kontrolle)>0.5))",
+        "cashflow": "=SUMPRODUCT(--(ABS(cf_Kontrolle)>0.5))",
+        # Kapitaldienst im Plan A ohne Ablösung bei Verkauf
+        "kapitaldienst": (f"=SUMPRODUCT(({_KAPITALDIENST}>0.005)"
+                          f"*((liq_Einnahmen-liq_Ausgaben)<{_KAPITALDIENST}))"),
         "ak_aufteilung": '=COUNTIF(ne_AKAbweichung,">0.5")+COUNTIF(ne_AKAbweichung,"<-0.5")',
         "afa_plan": '=COUNTIF(afp_Anzahl,">0")',
         "anlagen_afa": '=COUNTIF(obj_AnlDiff,">1")+COUNTIF(obj_AnlDiff,"<-1")',

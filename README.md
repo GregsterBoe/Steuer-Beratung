@@ -15,7 +15,7 @@
 
 | Eingabe | Rechnung | Ausgabe | Kontrolle | BWA |
 | --- | --- | --- | --- | --- |
-| Parameter, Objekte, Anlagen, Verkäufe, Neuobjekte | Prognose, Rücklagen, Darlehen, Liquidität | Start, Übersicht, Vergleich, Ergebnisbrücke, Auswertung | Prüfung, Varianten | Alle Objekte, Alle Objekte halten, je Kostenstelle ein Blatt, Verkauf und Kauf |
+| Parameter, Objekte, Anlagen, Verkäufe, Neuobjekte | Prognose, Rücklagen, Darlehen, Liquidität | Start, Übersicht, Vergleich, Ergebnisbrücke, Cashflow, Auswertung | Prüfung, Varianten | Alle Objekte, Alle Objekte halten, je Kostenstelle ein Blatt, Verkauf und Kauf |
 
 ## Etappen
 
@@ -162,6 +162,14 @@ Das Blatt **Ergebnisbrücke** zeigt, wie die Entscheidungen auf das Ergebnis wir
 - **Kontrolle:** Halten + Summe Pakete und Käufe ohne Verkauf + Zinseffekt − Plan, muss 0 sein; sonst meldet das Prüfungsblatt einen Fehler.
 
 Die Steuer steht nachrichtlich darunter (Halten, Plan und die Wirkung nach Steuern), denn mit Verlustvortrag lässt sie sich nicht einzelnen Entscheidungen zuordnen.
+
+Das Blatt **Cashflow** ist eine Kapitalflussrechnung je Jahr für das oben gewählte Szenario (A, B, C oder Baseline). Spalten sind die Planjahre und eine Summe, Abflüsse negativ:
+- **Laufende Geschäftstätigkeit (indirekt):** Jahresüberschuss + AfA − Veräußerungsgewinne + Einstellung in die § 6b-Rücklage − Auflösung − Gewinnzuschlag = **operativer Cashflow**. Die § 6b-Rücklage wirkt wie eine Rückstellung; Forderungen gibt es nicht, alle Zahlungen fallen im Jahr an. Darunter dieselbe Summe direkt: Einnahmen, Ausgaben, Zinsertrag, Zinsen Darlehen, Steuer.
+- **Investitionstätigkeit:** Verkaufserlöse netto − Kauf Neuobjekte inkl. Nebenkosten.
+- **Finanzierungstätigkeit:** Kreditauszahlung − planmäßige Tilgung − Ablösung der Darlehen bei Verkauf.
+- **Veränderung der Liquidität**, Liquidität Anfang und Ende; die Kontrolle gegen das Blatt Liquidität muss 0 sein.
+- **Kennzahlen:** Free Cashflow, Kapitaldienst, Cashflow nach Kapitaldienst und Kapitaldienstdeckung (Einnahmen − Ausgaben) / Kapitaldienst, unter 1 rot. Jahre im Plan A mit Deckung unter 1 meldet das Prüfungsblatt als Hinweis.
+- **Diagramm:** Säulen operativ, Investition, Finanzierung; Linie Liquidität Ende (rechte Achse).
 
 **Kostenstellen ohne Immobilie:** Jede Kostenstelle der Kostenstellen-Datei wird ein Objekt, auch eine für gesonderte Unternehmenseinnahmen und -ausgaben. Solche Kostenstellen bekommen im Blatt Objekte die Art „Unternehmen“ (leer = Immobilie). Sie werden wie ein Objekt aus dem Basisjahr fortgeschrieben (Einnahmen mit der Mietsteigerung, Ausgaben mit der Kostensteigerung, AfA aus den Anlagen) und zählen in Liquidität, Steuer und „Alle Objekte“ mit. Sie haben keinen Verkehrswert, und die Ergebnisbrücke weist sie getrennt aus. Ein Verkauf einer solchen Kostenstelle meldet das Prüfungsblatt als Warnung.
 

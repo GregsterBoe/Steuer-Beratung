@@ -170,6 +170,7 @@ CODENAMEN = {
     "Auswertung": "wsAuswertung", "Prüfung": "wsPruefung", "Varianten": "wsVarianten",
     "BWA-Zuordnung": "wsBWAZuordnung", "Anlagen": "wsAnlagen", "AfA-Plan": "wsAfAPlan",
     "Neukauf-KSt": "wsNeukaufKSt", "Darlehen": "wsDarlehen", "Ergebnisbrücke": "wsBruecke",
+    "Cashflow": "wsCashflow",
 }
 
 
@@ -452,6 +453,7 @@ PROGNOSE_SPALTEN = [
     # Tilgung im Verkaufsjahr enthält die Ablösung der Restschuld
     Spalte("kredit_zins", "Zinsen Darlehen", "prg_KreditZins", FMT_EURO),
     Spalte("tilgung", "Tilgung Darlehen", "prg_Tilgung", FMT_EURO),
+    Spalte("abloesung", "davon Ablösung bei Verkauf", "prg_Abloesung", FMT_EURO),
     Spalte("restschuld", "Restschuld Darlehen Ende", "prg_Restschuld", FMT_EURO, 16),
     # dasselbe, als würde das Bestandsobjekt nie verkauft (Baseline); Neuobjekte 0
     Spalte("zins_halten", "Zinsen bei Halten", "prg_ZinsHalten", FMT_EURO),
@@ -888,6 +890,7 @@ _LIQ = [
     ("kauf", "Kauf Neuobjekte inkl. Nebenkosten", "Kauf", FMT_EURO, 15),
     ("kredit", "Kreditauszahlung", "Kredit", FMT_EURO, 14),
     ("tilgung", "Tilgung Darlehen (mit Ablösung bei Verkauf)", "Tilgung", FMT_EURO, 15),
+    ("abloesung", "davon Ablösung bei Verkauf", "Abloesung", FMT_EURO, 14),
     ("zufluss", "freier Mittelzufluss", "Zufluss", FMT_EURO, 14),
     ("kum", "Liquidität kumuliert Ende", "Kum", FMT_EURO, 15),
     ("restschuld", "Restschuld Darlehen Ende", "Restschuld", FMT_EURO, 15),
@@ -1160,6 +1163,12 @@ PRUEFUNGEN = [
     Pruefung("bruecke", "Ergebnisbrücke geht nicht auf: Ergebnis bei Halten plus Wirkung der "
              "Entscheidungen weicht vom Ergebnis Plan A ab", FEHLER,
              "Blatt Ergebnisbrücke, Zeile Kontrolle"),
+    Pruefung("cashflow", "Kapitalflussrechnung geht nicht auf: Liquidität Ende weicht von der "
+             "kumulierten Liquidität des gewählten Szenarios ab", FEHLER,
+             "Blatt Cashflow, Zeile Kontrolle"),
+    Pruefung("kapitaldienst", "Jahre im Plan A, in denen Einnahmen − Ausgaben den "
+             "Kapitaldienst (Zinsen + planmäßige Tilgung) nicht decken (Kapitaldienstdeckung "
+             "unter 1)", HINWEIS, "Blatt Cashflow, Zeile Kapitaldienstdeckung"),
     Pruefung("afa_plan", "Objekte mit AfA-Plan (Blatt AfA-Plan, meist aus BWA 1240 der "
              "Kostenstellen-Datei): in den Jahren mit Wert ersetzt er die AfA-Fortschreibung",
              HINWEIS, "Blatt AfA-Plan, Spalte Jahre mit Wert"),

@@ -1523,3 +1523,28 @@ Prüfung: Paket OBJ-001 2030 = −40.115,43 − 36.600 (Sonder-AfA im Kaufjahr 5
 **Rechnung:** Miete\_t = Anfangsmiete × (1 + ne\_MietsteigV)^MAX(t − Kaufjahr − ne\_MietWarte; 0), Anfangsmiete = Fläche × Mietpreis je m² × 12 bzw. Kaufpreis × Mietrendite. Blatt Neukauf-KSt: Annahme genauso; Fortschreibung von Miete und weiteren Einnahmen mit ne\_MietsteigV des Neuobjekts, das die Kostenstelle wählt (ohne Neuobjekt par\_NeuMietsteig), die Miete in den Jahren Kaufjahr + 1 bis Kaufjahr + ne\_MietWarte ohne Steigerung. Erhaltung und Verwaltung in % der Miete folgen.
 
 **Prüfung im Prüfskript:** „Neuobjekte: eigene Mietsteigerung und Jahre ohne Mietsteigerung“: Parameter Neuobjekte 3 % neben Bestand 5 %, eigener Satz 1 % mit 3 Wartejahren, Neukauf-Kostenstelle mit 2 Wartejahren.
+
+## 35. Cashflow
+
+**Wunsch:** ein eigenes Blatt, auf dem man je Jahr sieht, wie sich der Cashflow verhält, mit dem operativen Cashflow nach der indirekten Methode als Referenz.
+
+**Blatt Cashflow** (hinter der Ergebnisbrücke): Positionen als Zeilen, Planjahre als Spalten, dazu eine Summe. Szenario per Auswahlliste (cf\_Szenario, Standard A); die Formeln wählen mit CHOOSE(cf\_SzNr; …) aus den Tabellen des Szenarios. Keine neuen Eingaben, nur eine Umordnung von Liquidität, Auswertung und Rücklagenspiegel; Abflüsse negativ.
+
+| Bereich | Zeilen |
+| --- | --- |
+| Laufende Geschäftstätigkeit | Jahresüberschuss (Ergebnis nach Steuern) + AfA − Veräußerungsgewinne + Einstellung § 6b-Rücklage − Auflösung − Gewinnzuschlag = operativer Cashflow; davon Einnahmen, Ausgaben, Zinsertrag, Zinsen Darlehen, Steuer |
+| Investitionstätigkeit | + Verkaufserlöse netto − Kauf Neuobjekte inkl. Nebenkosten |
+| Finanzierungstätigkeit | + Kreditauszahlung − planmäßige Tilgung − Ablösung bei Verkauf |
+| Summe | Veränderung = freier Mittelzufluss; Liquidität Anfang und Ende; Kontrolle Ende − liq\_Kum (muss 0 sein) |
+| Kennzahlen | Free Cashflow, Kapitaldienst (Zinsen + planmäßige Tilgung), Cashflow nach Kapitaldienst, Kapitaldienstdeckung (Einnahmen − Ausgaben) / Kapitaldienst, unter 1 rot |
+
+Übertragung des Schemas: Zuschreibungen gibt es im Modell nicht; die § 6b-Rücklage übernimmt die Rolle der Rückstellungen (Einstellung = Aufwand ohne Auszahlung, Auflösung und Zuschlag = Ertrag ohne Einzahlung). Veräußerungsgewinne sind Ertrag ohne Einzahlung, das Geld steht als Erlös in der Investitionstätigkeit. Forderungen entfallen, alle Zahlungen fallen im Jahr an. Zinsen gehören zum operativen Cashflow. B und C: nur „− Veräußerungsgewinne“; Baseline: keine Verkäufe.
+
+**Ablösung:** neue Spalte prg\_Abloesung (Prognose) und \*\_Abloesung (Liquidität): Tilgung im Verkaufsjahr minus planmäßige Tilgung (Rate − Zins). Die Tilgung insgesamt bleibt unverändert.
+
+**Diagramm:** Säulen operativ, Investition, Finanzierung je Jahr, Linie Liquidität Ende auf der rechten Achse.
+
+**Prüfungen:** „cashflow“ (Fehler, Kontrolle ≠ 0 im gewählten Szenario), „kapitaldienst“ (Hinweis, Jahre im Plan A mit Einnahmen − Ausgaben unter Zinsen + planmäßiger Tilgung).
+
+**Prüfung im Prüfskript:** „Cashflow: Kapitalflussrechnung …“ je Szenario gegen Auswertung, Liquidität und Rücklagenspiegel, mit § 6b-Verkauf, Verkauf ohne § 6b, Ablösung, Kauf mit Kredit; „Cashflow: Kapitaldienstdeckung unter 1“.
+
