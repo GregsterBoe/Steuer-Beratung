@@ -5,11 +5,12 @@ Aufruf: python -m prognosemodell.export MAPPE [--ausgabe PFAD]
 Die Mappe muss durchgerechnet sein, also in Excel gespeichert. Ist sie es nicht (frisch
 erzeugt und nie geöffnet), rechnet LibreOffice sie durch, sofern es installiert ist.
 
-Statt aller Eingabe-, Rechen- und Kontrollblätter enthält der Export bis zu acht Blätter:
+Statt aller Eingabe-, Rechen- und Kontrollblätter enthält der Export bis zu neun Blätter:
 - Überblick: Empfehlung, Endvermögen je Option, Datenlage, Verkehrswert und Vermögen je Jahr
 - Jahresrechnung: je Jahr Ergebnis und Steuer, Geldfluss und Vermögen, Plan und Halten
 - Ergebnisbrücke: vom Ergebnis bei Halten je Verkauf und Kauf zum Ergebnis im Plan
   (entfällt ohne Verkauf und Kauf)
+- Cashflow: Kapitalflussrechnung je Jahr für das in der Mappe gewählte Szenario, mit Diagramm
 - BWA gesamt: Summen-BWA aller Objekte; mit „Vergleich mit Halten = ja“ auch die Differenz
   zu Halten
 - BWA halten: Summen-BWA als Status quo, alle Objekte behalten (entfällt, wenn sie der BWA
@@ -39,7 +40,7 @@ from .bwa import (HALTEBLATT, SONDERBEREICH, SUMMENBLATT, SUMMENZEILEN, UEBERSIC
                   UEBERSICHT_ZELLE)
 from .formeln import deckt_anlagen, hspalte, ispalte
 from .mappe import (FILL_ANNAHME, FILL_EINGELESEN, FILL_KOPF, FONT_KOPF, OPTIONEN, _diagramm,
-                    diagramm_szenarien, zentrale_annahmen)
+                    diagramm_cashflow, diagramm_szenarien, zentrale_annahmen)
 from .modelle import (DARLEHEN_ANNAHMEN, FMT_EURO, KST_VERKNUEPFT, OBJEKT_EINGELESEN,
                       OBJEKT_FELDER, PARAMETER, PRUEFUNGEN, STATUS_AUS, SZ_A, SZ_B, SZ_BASELINE,
                       SZ_C)
@@ -48,6 +49,7 @@ from .vorlagen import ERSTE_ZEILE, SPALTE_JAHR, SPALTE_PLAN, SPALTE_VORJAHRE
 UEBERBLICK = "Überblick"
 JAHRESRECHNUNG = "Jahresrechnung"
 BRUECKE = "Ergebnisbrücke"
+CASHFLOW = "Cashflow"
 BWA_GESAMT = "BWA gesamt"
 BWA_HALTEN = "BWA halten"
 BWA_OBJEKTE = "BWA je Objekt"
@@ -57,6 +59,8 @@ INHALT = [
     (JAHRESRECHNUNG, "je Jahr Ergebnis und Steuer, Geldfluss und Vermögen; Plan und Halten"),
     (BRUECKE, "Wirkung jedes Verkaufs und Kaufs auf das Ergebnis vor Steuern, von Halten "
               "zum Plan"),
+    (CASHFLOW, "Kapitalflussrechnung je Jahr: operativ, Investition, Finanzierung, Liquidität, "
+               "Kapitaldienst, mit Diagramm"),
     (BWA_GESAMT, "Summen-BWA über alle Objekte: Ist-Jahre aus der Buchhaltung, dann die "
                  "Planjahre"),
     (BWA_HALTEN, "Summen-BWA als Status quo: alle Objekte behalten, ohne Verkäufe und "
@@ -453,6 +457,80 @@ def _blatt_bruecke(ex, wb) -> bool:
         ws.column_dimensions[get_column_letter(i)].width = BREITE_ZAHL
     _druck(ws, f"{kopfzeile}:{kopfzeile}")
     return True
+
+
+# --- Blatt Cashflow ---
+
+def _blatt_cashflow(ex, wb) -> None:
+    """Werte des Blatts Cashflow für das dort gewählte Szenario: Jahre, dann die Summe; ohne
+    Kontrollzeile, Zeilen ohne Wert entfallen bis auf die fetten Summen; Diagramm darunter."""
+    quelle = wb[CASHFLOW]
+    blatt, ref = next(iter(wb.defined_names["cf_Jahresueberschuss"].destinations))
+    erste = wb[blatt][ref.replace("$", "").split(":")[0]]
+    spalte = erste.column
+    kopf = next(z for z in range(erste.row, 0, -1)
+                if quelle.cell(row=z, column=1).value == "Position")
+    n = column_index_from_string(ref.replace("$", "").split(":")[-1].rstrip("0123456789")) \
+        - spalte + 1
+    jahre = [quelle.cell(row=kopf, column=spalte + i).value for i in range(n)]
+
+    def zeile_von(name):
+        return int(next(iter(wb.defined_names[name].destinations))[1].split("$")[2].split(":")[0])
+
+    kontrollzeile = zeile_von("cf_Kontrolle")
+    diagramm = {key: zeile_von(f"cf_{name}") for key, name in (
+        ("operativ", "Operativ"), ("investition", "Investition"),
+        ("finanzierung", "Finanzierung"), ("ende", "Ende"))}
+    ws = ex.create_sheet(CASHFLOW)
+    zeile = _titel(ws, f"Cashflow: Kapitalflussrechnung je Jahr ({_wert(wb, 'cf_Szenario')})",
+                   "Operativer Cashflow indirekt: Jahresüberschuss plus Aufwand ohne Auszahlung "
+                   "(AfA, Einstellung in die § 6b-Rücklage) minus Ertrag ohne Einzahlung "
+                   "(Veräußerungsgewinne, Auflösung, Gewinnzuschlag); Zinsen gehören dazu. "
+                   "Zuflüsse positiv, Abflüsse negativ. Kapitaldienstdeckung = (Einnahmen − "
+                   "Ausgaben) / (Zinsen + planmäßige Tilgung). Summe = über alle Jahre.")
+    _kopfzeile(ws, zeile, ["Position"] + jahre + ["Summe"])
+    ws.freeze_panes = ws.cell(row=zeile + 1, column=2)
+    kopfzeile = zeile
+    zeilen = {}
+    zeile += 1
+    for q in range(kopf + 1, quelle.max_row + 1):
+        text = quelle.cell(row=q, column=1).value
+        if text in (None, "") or q == kontrollzeile:
+            continue
+        roh = [quelle.cell(row=q, column=spalte + i).value for i in range(n)]
+        if quelle.cell(row=q, column=spalte).value is None and not any(roh):   # Abschnitt
+            zeile += 1
+            _abschnitt(ws, zeile, text, n + 2)
+            zeile += 1
+            continue
+        fett = bool(quelle.cell(row=q, column=1).font.bold)
+        quote = quelle.cell(row=q, column=spalte).number_format == "0.00"
+        werte = [w if isinstance(w, (int, float)) else None for w in roh] if quote \
+            else [_zahl(w) for w in roh]
+        if not fett and not quote and not _ungleich_null(werte) and q not in diagramm.values():
+            continue
+        if quote and not any(w is not None for w in werte):
+            continue
+        c = ws.cell(row=zeile, column=1, value=text)
+        c.alignment = Alignment(indent=quelle.cell(row=q, column=1).alignment.indent)
+        fmt = "0.00" if quote else FMT_BETRAG
+        for i, wert in enumerate(werte, start=2):
+            ws.cell(row=zeile, column=i, value=wert).number_format = fmt
+        if quelle.cell(row=q, column=2).value is not None:   # Summe nur bei Flussgrößen
+            ws.cell(row=zeile, column=n + 2, value=sum(werte)).number_format = fmt
+        if fett:
+            for i in range(1, n + 3):
+                c = ws.cell(row=zeile, column=i)
+                c.font, c.border = FONT_FETT, RAHMEN_SUMME
+        for key, q_key in diagramm.items():
+            if q == q_key:
+                zeilen[key] = zeile
+        zeile += 1
+    ws.column_dimensions["A"].width = 58
+    for i in range(2, n + 3):
+        ws.column_dimensions[get_column_letter(i)].width = BREITE_ZAHL
+    ws.add_chart(diagramm_cashflow(ws, kopfzeile, zeilen, 2, n + 1), f"A{zeile + 1}")
+    _druck(ws, f"{kopfzeile}:{kopfzeile}")
 
 
 # --- BWA-Blätter ---
@@ -885,6 +963,8 @@ def erstelle_export(wb, formeln_wb=None, quelle: str = "") -> Workbook:
     _blatt_jahresrechnung(ex, wb)
     if _blatt_bruecke(ex, wb):
         blaetter.append(BRUECKE)
+    _blatt_cashflow(ex, wb)
+    blaetter.append(CASHFLOW)
     blaetter.append(BWA_GESAMT)
     _blatt_bwa_gesamt(ex, wb, spalten)
     if _blatt_bwa_halten(ex, wb, spalten):

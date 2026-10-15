@@ -326,7 +326,7 @@ absatz("**Übersichtskostenstelle:** Gehören mehrere Kostenstellen zu einem Geb
        "je Objekt.")
 
 doc.add_heading("10. Mandanten-Export", level=1)
-absatz("Für den Mandanten gibt es eine schlanke Fassung der Mappe mit bis zu acht Blättern, nur "
+absatz("Für den Mandanten gibt es eine schlanke Fassung der Mappe mit bis zu neun Blättern, nur "
        "mit Werten: Mappe in Excel speichern und schließen, dann python -m "
        "prognosemodell.export Prognose.xlsx. Daneben entsteht Prognose_Mandant.xlsx; mit "
        "--ausgabe ein anderer Name. Eine frisch erzeugte, nie geöffnete Mappe rechnet "
@@ -339,6 +339,8 @@ tabelle(["Blatt", "Inhalt"], [
                        "und Halten, Differenz; jede Spalte rechnet von oben nach unten"],
     ["Ergebnisbrücke", "vom Ergebnis bei Halten je Verkauf und Kauf zum Ergebnis im Plan "
                        "(entfällt ohne Verkauf und Kauf)"],
+    ["Cashflow", "Kapitalflussrechnung je Jahr für das im Blatt Cashflow gewählte Szenario: "
+                 "operativ, Investition, Finanzierung, Liquidität, Kennzahlen, Diagramm"],
     ["BWA gesamt", "Summen-BWA aller Objekte, Ist-Jahre und Planjahre, Herleitung der "
                    "Sonderposten; bei „Vergleich mit Halten = ja“ auch die Differenz zu Halten"],
     ["BWA halten", "dieselbe Summen-BWA als Status quo: alle Objekte behalten, ohne Verkäufe "

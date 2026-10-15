@@ -1455,6 +1455,7 @@ Kontrolle im Blatt BWA-Zuordnung: 1353 der Halten-Ansicht gegen lqb\_ZvE je Jahr
 **Blätter:**
 - **Überblick:** start\_Empfehlung, start\_Belastbarkeit, Endvermögen je Option (vg\_\*) mit Differenz zu Halten und Rang, Wert der § 6b-Kette, Steuer gesamt, tiefster Liquiditätsstand, Datenlage (ueb\_\*, pr\_Gesamt), Inhalt mit Links, Tabelle ueb\_\* je Jahr und die beiden Diagramme der Übersicht; darunter das Gesamtvermögen nach latenter Steuer je Jahr für alle Optionen (vgj\_\*, Reihenfolge Halten, Plan, C, B) mit Diagramm wie im Blatt Vergleich (mappe.diagramm\_szenarien).
 - **Jahresrechnung:** Jahre als Spalten, Summe über die Jahre bei Flussgrößen. Je Sicht (Plan = liq/aus, Halten = lqb/asb) drei Abschnitte, Abzüge mit Minus: Ergebnis und Steuer (Einnahmen − Ausgaben − AfA = laufendes Ergebnis; + Verkauf und Rücklage + Zinsertrag − Kreditzins = Ergebnis vor Verlustvortrag; − Verlustvortrag = Bemessungsgrundlage; Steuer), Geldfluss (laufendes Ergebnis + AfA + Zinsertrag − Kreditzins − Steuer + Verkaufserlöse − Kauf + Kredit − Tilgung = freier Mittelzufluss), Vermögen (Verkehrswert + Liquidität − Restschuld = vor latenter Steuer; − latente Steuer = nach latenter Steuer). Danach Differenz Plan − Halten für die Kernzeilen. Gleicht der Plan dem Halten (ohne Verkauf und Kauf), entfallen Halten und Differenz.
+- **Cashflow** (Abschnitt 35): Werte des Blatts Cashflow für das dort gewählte Szenario (cf\_Szenario im Titel), Jahre als Spalten, Summe dahinter; ohne Kontrollzeile, Zeilen ohne Wert entfallen bis auf die Summenzeilen; Diagramm wie in der Mappe (mappe.diagramm\_cashflow).
 - **BWA gesamt:** „Alle Objekte“ ohne Monatsspalten und Hilfszeile; bei bwa\_VglHalten = ja dazu Plan − Halten je BWA-Zeile in den Planjahren.
 - **BWA halten:** „Alle Objekte halten“ (Status quo) wie die BWA gesamt aufbereitet, unabhängig von bwa\_VglHalten. Entfällt, wenn die Planjahre der BWA gesamt gleichen (ohne Verkauf und Kauf).
 - **BWA je Objekt:** alle übrigen BWA-Blätter (B4 „Nr.“, Hilfszeile „Jahr (für Formeln)“) untereinander, Inhaltsverzeichnis mit Links; Übersichtskostenstellen (Abschnitt 33) mit den zusammengefassten Kostenstellen im Titel.
@@ -1463,7 +1464,7 @@ Kontrolle im Blatt BWA-Zuordnung: 1353 der Halten-Ansicht gegen lqb\_ZvE je Jahr
 
 **Regeln:** BWA-Zeilen ohne Wert entfallen, Summenzeilen bleiben; Abschnitte unter der BWA (Herleitung, Finanzierung, Abschreibungen je Anlage) nur mit Zeilen ungleich 0. Ist-Vorjahre nur, wenn „Alle Objekte“ dort Werte hat. Beträge auf volle Euro, negative rot, Differenzen grün bzw. rot. Druck: Querformat A4, eine Seite breit, Fußzeile mit Blattname und Seitenzahl.
 
-**Prüfung im Prüfskript:** „Export: Mandanten-Export mit Verkauf, Kauf und Darlehen“ (Kostenstellen-Vorlage, Verkauf KSt 1 Ende 2028 mit § 6b, Neuobjekt mit Kredit, Restschuld KSt 2, ausgeschalteter Verkauf, Vergleich mit Halten = ja): Blätter (mit BWA halten), Werte gegen die benannten Bereiche und BWA-Blätter (BWA halten gegen bwb\_\*, Ist-Vorjahre, ohne Veräußerungsgewinn), Rechenkontrolle der Jahresrechnung für Plan und Halten (jede „=“-Zeile gleich der Zeilen darüber), Ist-Vorjahre, entfallene Nullzeilen und Vorgänge, Herkunftsfarben. „Export: ohne Verkauf und Kauf“: fünf Blätter (keine BWA halten), keine Halten-Blöcke, keine Ist-Vorjahre.
+**Prüfung im Prüfskript:** „Export: Mandanten-Export mit Verkauf, Kauf und Darlehen“ (Kostenstellen-Vorlage, Verkauf KSt 1 Ende 2028 mit § 6b, Neuobjekt mit Kredit, Restschuld KSt 2, ausgeschalteter Verkauf, Vergleich mit Halten = ja): Blätter (mit BWA halten), Werte gegen die benannten Bereiche und BWA-Blätter (BWA halten gegen bwb\_\*, Ist-Vorjahre, ohne Veräußerungsgewinn), Rechenkontrolle der Jahresrechnung für Plan und Halten (jede „=“-Zeile gleich der Zeilen darüber), Cashflow (Werte, Summe, Kapitaldienstdeckung, ohne Kontrollzeile), Ist-Vorjahre, entfallene Nullzeilen und Vorgänge, Herkunftsfarben. „Export: ohne Verkauf und Kauf“: sechs Blätter (keine BWA halten), keine Halten-Blöcke, keine Ist-Vorjahre.
 
 
 ## 31. Ganze Euro in den Auswertungen
@@ -1543,6 +1544,8 @@ Prüfung: Paket OBJ-001 2030 = −40.115,43 − 36.600 (Sonder-AfA im Kaufjahr 5
 **Ablösung:** neue Spalte prg\_Abloesung (Prognose) und \*\_Abloesung (Liquidität): Tilgung im Verkaufsjahr minus planmäßige Tilgung (Rate − Zins). Die Tilgung insgesamt bleibt unverändert.
 
 **Diagramm:** Säulen operativ, Investition, Finanzierung je Jahr, Linie Liquidität Ende auf der rechten Achse.
+
+**Mandanten-Export:** Blatt Cashflow hinter der Ergebnisbrücke, immer vorhanden (Abschnitt 30).
 
 **Prüfungen:** „cashflow“ (Fehler, Kontrolle ≠ 0 im gewählten Szenario), „kapitaldienst“ (Hinweis, Jahre im Plan A mit Einnahmen − Ausgaben unter Zinsen + planmäßiger Tilgung).
 
