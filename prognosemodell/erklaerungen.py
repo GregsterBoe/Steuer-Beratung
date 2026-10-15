@@ -293,6 +293,8 @@ SPALTEN = {
                       "Basisjahr × (1 + Veränderung)^Jahre bis zum Verkauf.",
     "prg_Tilgung": "Neuobjekt: Blatt Darlehen. Bestand: Rate − Zins, höchstens die Restschuld; "
                    "im Verkaufsjahr die ganze Restschuld (Ablösung aus dem Erlös).",
+    "prg_Abloesung": "Teil der Tilgung über die planmäßige hinaus: im Verkaufsjahr eines "
+                     "Bestandsobjekts die abgelöste Restschuld, sonst 0.",
     "prg_Restschuld": "Restschuld Vorjahresende − Tilgung.",
     "prg_ZinsHalten": "Zinsen, als würde das Bestandsobjekt nie verkauft (Baseline).",
     "prg_TilgungHalten": "Tilgung, als würde das Bestandsobjekt nie verkauft (Baseline).",
@@ -352,6 +354,8 @@ LIQUIDITAET = {
     "kredit": "Kreditauszahlungen der Neuobjekte mit diesem Kaufjahr.",
     "tilgung": "Summe der Tilgungen; im Verkaufsjahr eines Bestandsobjekts mit der Ablösung "
                "seiner Restschuld. Mindert nur die Liquidität, nicht das Ergebnis.",
+    "abloesung": "Teil der Tilgung, der im Verkaufsjahr die Restschuld des verkauften "
+                 "Objekts ablöst; der Rest ist planmäßige Tilgung.",
     "zufluss": "Einnahmen − Ausgaben + Zinsertrag − Zinsen + Verkaufserlöse − Steuer − Kauf "
                "+ Kreditauszahlung − Tilgung. AfA fließt nicht ab.",
     "kum": "Vorjahr + freier Mittelzufluss; negativ = Finanzierungslücke.",
@@ -442,4 +446,47 @@ BRUECKE = {
                  "sonst meldet das Prüfungsblatt einen Fehler.",
     "nach_wirkung": "Ergebnis nach Steuern Plan A minus Halten: Wirkung aller Entscheidungen "
                     "zusammen, nach Steuer mit Verlustvortrag.",
+}
+
+
+# Cashflow: Tooltips der Zeilen; Abflüsse negativ
+CASHFLOW = {
+    "jahresueberschuss": "Ergebnis nach Steuern des gewählten Szenarios (Blatt Auswertung).",
+    "afa": "AfA mindert das Ergebnis, fließt aber nicht ab (Blatt Liquidität).",
+    "gewinne": "Veräußerungsgewinne stehen im Ergebnis, sind aber kein Geldzufluss: das Geld "
+               "kommt als Verkaufserlös im Investitions-Cashflow. Baseline: keine Verkäufe.",
+    "bildung": "Nur A: Einstellung in die § 6b-Rücklage neutralisiert den Gewinn, das Geld "
+               "ist noch da (wie die Zunahme einer Rückstellung).",
+    "aufloesung": "Nur A: Auflösung der Rücklage im Fristjahr erhöht das Ergebnis ohne "
+                  "Einzahlung.",
+    "zuschlag": "Nur A: Gewinnzuschlag § 6b erhöht das Ergebnis ohne Einzahlung.",
+    "operativ": "Geld aus dem laufenden Geschäft nach Zinsen und Steuer: Jahresüberschuss "
+                "plus Aufwand ohne Auszahlung minus Ertrag ohne Einzahlung. Gleich der Summe "
+                "der davon-Zeilen darunter.",
+    "einnahmen": "Mieten und weitere Einnahmen aller Objekte (Blatt Liquidität).",
+    "ausgaben": "Erhaltung und weitere Ausgaben aller Objekte.",
+    "zinsertrag": "Zins auf die Liquidität am Vorjahresende (Rendite Alternativanlage).",
+    "kreditzins": "Zinsen aller Darlehen: Bestandsobjekte und Kredite der Neuobjekte.",
+    "steuer": "Steuer des Jahres mit Verlustvortrag (Blatt Liquidität).",
+    "verkaufserloes": "Nettoerlöse der gültigen Verkäufe dieses Jahres.",
+    "kauf": "Kaufpreis und Nebenkosten der Neuobjekte mit diesem Kaufjahr. Die Übertragung "
+            "der § 6b-Rücklage zahlt nichts und erscheint hier nicht.",
+    "investition": "Verkaufserlöse minus Käufe.",
+    "kredit": "Kreditauszahlungen der Neuobjekte zum Kauf.",
+    "tilgung": "Tilgung nach Tilgungsplan bzw. Rate − Zins, ohne Ablösung bei Verkauf.",
+    "abloesung": "Restschuld eines verkauften Bestandsobjekts, abgelöst im Verkaufsjahr.",
+    "finanzierung": "Kreditauszahlung minus Tilgung und Ablösung.",
+    "veraenderung": "operativ + Investition + Finanzierung = freier Mittelzufluss im Blatt "
+                    "Liquidität.",
+    "anfang": "Liquidität Ende des Vorjahres; das Raster beginnt mit 0.",
+    "ende": "Liquidität Anfang + Veränderung.",
+    "kontrolle": "Liquidität Ende minus Liquidität kumuliert im Blatt Liquidität; muss 0 sein, "
+                 "sonst meldet das Blatt Prüfung einen Fehler.",
+    "free_cashflow": "Operativer Cashflow plus Investitions-Cashflow: was nach Käufen und "
+                     "Verkäufen für Tilgung und Anlage bleibt.",
+    "kapitaldienst": "Zinsen und planmäßige Tilgung der Darlehen, ohne Ablösung bei Verkauf.",
+    "nach_kapitaldienst": "Operativer Cashflow minus planmäßige Tilgung: was nach Bank und "
+                          "Finanzamt aus dem laufenden Geschäft übrig bleibt.",
+    "dscr": "Kapitaldienstdeckung (DSCR) = (Einnahmen − Ausgaben) / Kapitaldienst. Unter 1 "
+            "(rot) decken die Mieten Zins und Tilgung nicht; leer ohne Kapitaldienst.",
 }

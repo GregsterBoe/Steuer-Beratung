@@ -3,7 +3,7 @@
 import dataclasses
 
 from openpyxl import Workbook
-from openpyxl.chart import LineChart, Reference
+from openpyxl.chart import BarChart, LineChart, Reference, Series
 from openpyxl.chart.text import RichText
 from openpyxl.comments import Comment
 from openpyxl.drawing.text import (CharacterProperties, Paragraph, ParagraphProperties,
@@ -1288,6 +1288,216 @@ def _blatt_bruecke(wb, modell: Modell) -> None:
     ws.freeze_panes = f"C{kopf + 1}"
 
 
+def _blatt_cashflow(wb) -> None:
+    """Kapitalflussrechnung je Jahr für ein wählbares Szenario: operativer Cashflow indirekt
+    vom Jahresüberschuss, Investition, Finanzierung, Kennzahlen und Diagramm; Spalten =
+    Planjahre."""
+    ws = wb.create_sheet("Cashflow", 3)
+    ws["A1"] = "Cashflow: Kapitalflussrechnung je Jahr"
+    ws["A1"].font = FONT_TITEL
+    ws["A2"] = ("Operativer Cashflow indirekt: Jahresüberschuss plus Aufwand ohne Auszahlung "
+                "(AfA, Einstellung in die § 6b-Rücklage) minus Ertrag ohne Einzahlung "
+                "(Veräußerungsgewinne, Auflösung, Gewinnzuschlag). Forderungen entfallen: Miete, "
+                "Kosten, Zinsen und Steuer fließen im selben Jahr. Zinsen gehören zum operativen "
+                "Cashflow. Zuflüsse positiv, Abflüsse negativ. Liquidität Ende = Blatt "
+                "Liquidität; die Kontrolle muss 0 sein.")
+    ws["A2"].alignment = Alignment(wrap_text=True, vertical="top")
+    ws.merge_cells("A2:L2")
+    ws.row_dimensions[2].height = 60
+    ws["A3"] = "Szenario (Auswahl)"
+    ws["A3"].font = Font(bold=True)
+
+    kopf, jahre = 5, prognosejahre()
+    erste_sp, letzte_sp = 3, 2 + jahre
+    # Auswahlliste und Nummer des Szenarios in einer ausgeblendeten Spalte hinter den Jahren
+    hilfe = letzte_sp + 2
+    hb = get_column_letter(hilfe)
+    for i, sz in enumerate(SZENARIEN, start=1):
+        ws.cell(row=i, column=hilfe, value=sz.kurz)
+    liste = f"'Cashflow'!${hb}$1:${hb}${len(SZENARIEN)}"
+    ws.column_dimensions[hb].hidden = True
+    c = ws["B3"]
+    c.value, c.fill, c.font = SZ_A.kurz, FILL_EINGABE, Font(bold=True)
+    ws.merge_cells("B3:D3")
+    dv = DataValidation(type="list", formula1=liste, allow_blank=False)
+    dv.error = "Bitte ein Szenario aus der Liste wählen."
+    ws.add_data_validation(dv)
+    dv.add("B3")
+    _name(wb, "cf_Szenario", "'Cashflow'!$B$3")
+    c = ws.cell(row=len(SZENARIEN) + 1, column=hilfe, value=f"=IFERROR(MATCH($B$3,{liste},0),1)")
+    _name(wb, "cf_SzNr", f"'Cashflow'!${hb}${len(SZENARIEN) + 1}")
+
+    _kopf(ws, kopf, ["Position", "Summe"] + [None] * jahre)
+    for k in range(jahre):
+        c = ws.cell(row=kopf, column=erste_sp + k,
+                    value="=par_Startjahr" if k == 0
+                    else f"={get_column_letter(erste_sp + k - 1)}{kopf}+1")
+        c.number_format = FMT_JAHR
+    von, bis = get_column_letter(erste_sp), get_column_letter(letzte_sp)
+    texte = erklaerungen.CASHFLOW
+    zeile = kopf + 1
+    zeilen = {}
+
+    def abschnitt(text):
+        nonlocal zeile
+        ws.cell(row=zeile, column=1, value=text).font = Font(bold=True, italic=True)
+        zeile += 1
+
+    def position(key, text, formel, fett=False, einzug=False, summe=True, fmt=FMT_EURO):
+        """Eine Zeile; formel(spalte, k) liefert die Formel im k-ten Jahr (Spaltenbuchstabe)."""
+        nonlocal zeile
+        c = ws.cell(row=zeile, column=1, value=text)
+        c.font = Font(bold=fett)
+        if einzug:
+            c.alignment = Alignment(indent=1)
+        _tooltip(c, texte.get(key, ""))
+        if summe:
+            c = ws.cell(row=zeile, column=2, value=f"=SUM({von}{zeile}:{bis}{zeile})")
+            c.number_format, c.fill, c.font = fmt, FILL_BERECHNET, Font(bold=True)
+        for k in range(jahre):
+            c = ws.cell(row=zeile, column=erste_sp + k,
+                        value=formel(get_column_letter(erste_sp + k), k))
+            c.number_format, c.fill = fmt, FILL_BERECHNET
+            if fett:
+                c.font = Font(bold=True)
+        name = "".join(teil[:1].upper() + teil[1:] for teil in key.split("_"))
+        _name(wb, f"cf_{name}", f"'Cashflow'!${von}${zeile}:${bis}${zeile}")
+        zeilen[key] = zeile
+        zeile += 1
+
+    def fest(key):
+        return lambda sp, k: formeln.cashflow_summen(f"{sp}${kopf}")[key]
+
+    def summe(*keys):
+        return lambda sp, k: "=" + "+".join(f"{sp}{zeilen[key]}" for key in keys)
+
+    abschnitt("Laufende Geschäftstätigkeit (indirekte Methode)")
+    indirekt = [
+        ("jahresueberschuss", "Jahresüberschuss (Ergebnis nach Steuern)"),
+        ("afa", "+ Abschreibungen (AfA)"),
+        ("gewinne", "− Veräußerungsgewinne"),
+        ("bildung", "+ Einstellung in die § 6b-Rücklage"),
+        ("aufloesung", "− Auflösung der § 6b-Rücklage"),
+        ("zuschlag", "− Gewinnzuschlag § 6b"),
+    ]
+    for key, text in indirekt:
+        position(key, text, fest(key), einzug=key != "jahresueberschuss")
+    position("operativ", "Operativer Cashflow", summe(*(k for k, _ in indirekt)), fett=True)
+    direkt = [
+        ("einnahmen", "davon Mieten und weitere Einnahmen"),
+        ("ausgaben", "davon Erhaltung und weitere Ausgaben"),
+        ("zinsertrag", "davon Zinsertrag Alternativanlage"),
+        ("kreditzins", "davon Zinsen Darlehen"),
+        ("steuer", "davon Steuer"),
+    ]
+    for key, text in direkt:
+        position(key, text, fest(key), einzug=True)
+    zeile += 1
+
+    abschnitt("Investitionstätigkeit")
+    position("verkaufserloes", "+ Verkaufserlöse netto", fest("verkaufserloes"), einzug=True)
+    position("kauf", "− Kauf Neuobjekte inkl. Nebenkosten", fest("kauf"), einzug=True)
+    position("investition", "Investitions-Cashflow", summe("verkaufserloes", "kauf"),
+             fett=True)
+    zeile += 1
+
+    abschnitt("Finanzierungstätigkeit")
+    position("kredit", "+ Kreditauszahlung", fest("kredit"), einzug=True)
+    position("tilgung", "− planmäßige Tilgung", fest("tilgung"), einzug=True)
+    position("abloesung", "− Ablösung Darlehen bei Verkauf", fest("abloesung"), einzug=True)
+    position("finanzierung", "Finanzierungs-Cashflow",
+             summe("kredit", "tilgung", "abloesung"), fett=True)
+    zeile += 1
+
+    position("veraenderung", "Veränderung der Liquidität",
+             summe("operativ", "investition", "finanzierung"), fett=True)
+    position("anfang", "Liquidität Anfang",
+             lambda sp, k: "=0" if k == 0
+             else f"={get_column_letter(erste_sp + k - 1)}{zeile + 1}",   # Ende Vorjahr
+             summe=False)
+    position("ende", "Liquidität Ende", summe("anfang", "veraenderung"), fett=True,
+             summe=False)
+    position("kontrolle", "Kontrolle: Liquidität Ende − Blatt Liquidität (muss 0 sein)",
+             lambda sp, k: (f"=ROUND({sp}{zeilen['ende']}"
+                            f"-{formeln.cashflow_summen(f'{sp}${kopf}')['kum']},2)"))
+    zeile += 1
+
+    abschnitt("Kennzahlen")
+    position("free_cashflow", "Free Cashflow (operativ + Investition)",
+             summe("operativ", "investition"))
+    position("kapitaldienst", "Kapitaldienst (Zinsen + planmäßige Tilgung)",
+             lambda sp, k: f"=-({sp}{zeilen['kreditzins']}+{sp}{zeilen['tilgung']})")
+    position("nach_kapitaldienst", "Cashflow nach Kapitaldienst (operativ − planmäßige Tilgung)",
+             summe("operativ", "tilgung"), fett=True)
+    position("dscr", "Kapitaldienstdeckung (Einnahmen − Ausgaben) / Kapitaldienst",
+             lambda sp, k: (f'=IF({sp}{zeilen["kapitaldienst"]}>0.005,'
+                            f'({sp}{zeilen["einnahmen"]}+{sp}{zeilen["ausgaben"]})'
+                            f'/{sp}{zeilen["kapitaldienst"]},"")'),
+             summe=False, fmt="0.00")
+    dscr = f"{von}{zeilen['dscr']}:{bis}{zeilen['dscr']}"
+    ws.conditional_formatting.add(
+        dscr, FormulaRule(formula=[f'AND(ISNUMBER({von}{zeilen["dscr"]}),'
+                                   f'{von}{zeilen["dscr"]}<1)'], fill=FILL_FEHLER))
+    kontrolle = f"{von}{zeilen['kontrolle']}:{bis}{zeilen['kontrolle']}"
+    ws.conditional_formatting.add(
+        kontrolle, FormulaRule(formula=[f"ABS({von}{zeilen['kontrolle']})>0.5"],
+                               fill=FILL_FEHLER))
+
+    ws.column_dimensions["A"].width = 58
+    ws.column_dimensions["B"].width = 14
+    for k in range(jahre):
+        ws.column_dimensions[get_column_letter(erste_sp + k)].width = 12
+    ws.freeze_panes = f"C{kopf + 1}"
+    ws.add_chart(diagramm_cashflow(ws, kopf, zeilen, erste_sp, letzte_sp), f"A{zeile + 1}")
+
+
+def diagramm_cashflow(ws, kopf: int, zeilen: dict, erste_sp: int, letzte_sp: int) -> BarChart:
+    """Säulen operativ, Investition, Finanzierung je Jahr; Linie Liquidität Ende auf der
+    rechten Achse. Zeilen = Positionen, Spalten = Jahre."""
+    jahre = Reference(ws, min_col=erste_sp, max_col=letzte_sp, min_row=kopf, max_row=kopf)
+    saeulen = BarChart()
+    saeulen.type, saeulen.grouping, saeulen.overlap = "col", "clustered", -10
+    saeulen.title = "Cashflow je Jahr (Tsd. €)"
+    saeulen.title.overlay = False
+    for key, titel, farbe in (("operativ", "operativ", "305496"),
+                              ("investition", "Investition", "ED7D31"),
+                              ("finanzierung", "Finanzierung", "A5A5A5")):
+        serie = Series(Reference(ws, min_col=erste_sp, max_col=letzte_sp,
+                                 min_row=zeilen[key], max_row=zeilen[key]), title=titel)
+        serie.graphicalProperties.solidFill = farbe
+        serie.graphicalProperties.line.solidFill = farbe
+        saeulen.series.append(serie)
+    saeulen.set_categories(jahre)
+    saeulen.y_axis.number_format = '#,##0,'
+    saeulen.y_axis.majorGridlines = None
+    saeulen.y_axis.txPr = _schrift(900)
+    saeulen.x_axis.number_format = "0"
+    saeulen.x_axis.tickLblPos = "low"
+    saeulen.x_axis.txPr = _schrift(800, -2700000)
+    saeulen.x_axis.delete = False
+    saeulen.y_axis.delete = False
+
+    linie = LineChart()
+    serie = Series(Reference(ws, min_col=erste_sp, max_col=letzte_sp, min_row=zeilen["ende"],
+                             max_row=zeilen["ende"]), title="Liquidität Ende (rechte Achse)")
+    serie.smooth = False
+    serie.graphicalProperties.line.solidFill = "70AD47"
+    serie.graphicalProperties.line.width = 28000
+    linie.series.append(serie)
+    linie.y_axis.axId = 200
+    linie.y_axis.crosses = "max"
+    linie.y_axis.number_format = '#,##0,'
+    linie.y_axis.majorGridlines = None
+    linie.y_axis.txPr = _schrift(900)
+    linie.y_axis.delete = False
+    saeulen += linie
+
+    saeulen.legend.position = "b"
+    saeulen.legend.overlay = False
+    saeulen.height, saeulen.width = 12, 26
+    return saeulen
+
+
 def _blatt_uebersicht(wb) -> None:
     """Immobilienwert und Gesamtvermögen je Jahr: Plan mit Verkäufen gegen Halten ohne Verkauf."""
     ws = wb.create_sheet("Übersicht", 0)
@@ -1719,6 +1929,7 @@ def erstelle_mappe(modell: Modell) -> Workbook:
     _blatt_uebersicht(wb)
     _blatt_vergleich(wb)
     _blatt_bruecke(wb, modell)
+    _blatt_cashflow(wb)
     _blatt_pruefung(wb)
     _blatt_varianten(wb)
     bwa_blaetter = bwa.blaetter_bwa(wb, modell)
