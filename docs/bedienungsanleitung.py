@@ -167,6 +167,12 @@ punkte([
     "Objekte sind mit dem Parameter vorbelegt (blau) und lassen sich je Objekt überschreiben; "
     "leer gilt wieder der Parameter. „Miete eingefroren ab Jahr“: ab diesem Jahr bleibt die "
     "Miete auf dem Stand des Vorjahrs (weitere Einnahmen steigen weiter).",
+    "**Mietsteigerung der Neuobjekte:** eigener Parameter „Mietsteigerung Neuobjekte p. a.“, "
+    "getrennt vom Bestand. Im Blatt Neuobjekte kann jedes Neuobjekt einen eigenen Satz haben "
+    "(leer = Parameter). „Mietsteigerung erst nach Jahren“, z. B. 10 bei Neubau oder "
+    "Staffelmiete über dem Mietspiegel: so viele Jahre nach dem Kauf bleibt die Miete auf dem "
+    "Anfangsstand und steigt erst danach. Das gilt auch für die Fortschreibung im Blatt "
+    "Neukauf-KSt.",
 ])
 
 doc.add_heading("Neukauf-Kostenstellen (KSt 31–35)", level=2)

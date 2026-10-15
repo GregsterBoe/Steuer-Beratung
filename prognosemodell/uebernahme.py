@@ -103,6 +103,15 @@ def _parameter(alt, neu, bericht: Bericht, geschuetzt: set) -> None:
             continue
         ws_neu.cell(row=zeile, column=2, value=wert)
         bericht.zaehle("Parameter")
+    # alte Mappe ohne eigene Mietsteigerung der Neuobjekte: sie rechneten mit par_Mietsteig
+    if ("par_NeuMietsteig" not in alte and "par_NeuMietsteig" in neue
+            and "par_NeuMietsteig" not in geschuetzt and "par_Mietsteig" in alte
+            and _ist_eingabe(alte["par_Mietsteig"][1])):
+        wert = alte["par_Mietsteig"][1]
+        ws_neu.cell(row=neue["par_NeuMietsteig"][0], column=2, value=wert)
+        bericht.zaehle("Parameter")
+        bericht.hinweis(f"Parameter par_NeuMietsteig (neu) = Mietsteigerung der alten Mappe "
+                        f"{wert}, wie bisher für die Neuobjekte.")
 
 
 def _spalten(ws_alt, kopfzeile: int, felder, berechnet: list, blatt: str,

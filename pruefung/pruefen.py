@@ -409,6 +409,15 @@ def uebernahme_neu() -> Modell:
     return modell
 
 
+def ohne_neu_mietsteig(wb) -> None:
+    """Ältere Version simulieren: Parameterblatt ohne par_NeuMietsteig."""
+    ws = wb["Parameter"]
+    for zeile in range(1, ws.max_row + 1):
+        if ws.cell(row=zeile, column=3).value == "par_NeuMietsteig":
+            ws.cell(row=zeile, column=2).value = None
+            ws.cell(row=zeile, column=3).value = None
+
+
 def ohne_ak_spalten(wb) -> None:
     """Ältere Version simulieren: Blatt Neuobjekte ohne die Spalten AK G+B und AK Gebäude."""
     wb["Neuobjekte"].delete_cols(nr(NEU_FELDER, "ak_gub_eingabe"), 2)
@@ -1840,6 +1849,41 @@ def faelle():
             ("BWA:KSt 32:1260", 2028, 208.08),
             ("zuo_Differenz", lj(2028), 0),
         ]),
+        # Mietsteigerung der Neuobjekte getrennt vom Bestand (5 %): Parameter Neuobjekte 3 %.
+        # NEU-1 Mietrendite 4 %: 40.000 × 1,03 = 41.200, 2029 42.436. NEU-2 100 m² × 10 € × 12
+        # = 12.000, eigener Satz 1 %, 3 Jahre ohne Steigerung: 2028 bis 2030 12.000, 2031
+        # 12.120, 2032 12.241,20; Instandhaltung 7 % davon. NEU-3 auf KSt 32 (Miete 10.000
+        # im Basisjahr), 2 Jahre ohne Steigerung: 2027 fortgeschrieben × 1,03 = 10.300, 2028
+        # und 2029 gleich, 2030 10.609
+        ("Neuobjekte: eigene Mietsteigerung und Jahre ohne Mietsteigerung",
+         dataclasses.replace(vorlage_eingelesen(
+             neukauf=[("KSt 32", "Neubau Süd", {1020: 10_000})],
+             neuobjekte=[Neuobjekt("NEU-1", 2027, kaufpreis=1_000_000, anteil_gub=0.2,
+                                   afa_satz=0.02, mietrendite=0.04),
+                         Neuobjekt("NEU-2", 2027, kaufpreis=500_000, anteil_gub=0.2,
+                                   afa_satz=0.02, flaeche=100, miete_qm=10, mietsteig=0.01,
+                                   miet_warte=3),
+                         Neuobjekt("NEU-3", 2027, kaufpreis=500_000, anteil_gub=0.2,
+                                   afa_satz=0.02, kst="KSt 32", miet_warte=2)]),
+             parameter={"par_Mietsteig": 0.05, "par_NeuMietsteig": 0.03}), [
+            ("ne_MietsteigV", 0, 0.03),
+            ("ne_MietsteigV", 1, 0.01),
+            ("ne_MietsteigV", 2, 0.03),
+            ("prg_Miete", prg_neu(1, 2028), 41_200),
+            ("prg_Miete", prg_neu(1, 2029), 42_436),
+            ("prg_Miete", prg_neu(2, 2027), 0),
+            ("prg_Miete", prg_neu(2, 2028), 12_000),
+            ("prg_Miete", prg_neu(2, 2030), 12_000),
+            ("prg_Miete", prg_neu(2, 2031), 12_120),
+            ("prg_Miete", prg_neu(2, 2032), 12_241.20),
+            ("prg_Erhaltung", prg_neu(2, 2031), 848.40),
+            ("BWA:NEU-2:1020", 2031, 12_120),
+            ("BWA:KSt 32:1020", 2027, 0),         # vor dem Kauf keine Miete
+            ("prg_Miete", prg_neu(3, 2028), 10_300),
+            ("prg_Miete", prg_neu(3, 2029), 10_300),
+            ("prg_Miete", prg_neu(3, 2030), 10_609),
+            ("BWA:KSt 32:1020", 2030, 10_609),
+        ]),
         # Kauf aktiv = nein: NEU-001 rechnet nicht mit (keine Übertragung, kein Kredit, kein
         # Kauf in der Liquidität), die Rücklage 720.000 wird aufgelöst, kein Fehler in der
         # Prüfung. NEU-002 mit „ja“ rechnet normal: 1 Mio × 5 % × 1,02 = 51.000 Miete 2030
@@ -2397,15 +2441,15 @@ def faelle():
             (f"{KOPF}Liquidität:2", 1, "Jahr"),
             (f"{KOPF}Rücklagen:1", 1, "RücklageID [Tooltip]"),
             (f"{KOPF}Parameter:5", 1, "★ Basisjahr (Ist) [Tooltip]"),
-            (f"{KOPF}Parameter:13", 1, "Steigerung weitere Ausgaben p. a. [Tooltip]"),
+            (f"{KOPF}Parameter:14", 1, "Steigerung weitere Ausgaben p. a. [Tooltip]"),
             # § 6b- und § 7b-Abschnitt eingeklappt, Annahmen bei fehlenden Daten (mit
             # Kernparametern) offen
-            (f"{ZEILE_EINGEKLAPPT}Parameter", 22, (0, False)),
-            (f"{ZEILE_EINGEKLAPPT}Parameter", 23, (1, True)),
-            (f"{ZEILE_EINGEKLAPPT}Parameter", 28, (1, True)),
-            (f"{ZEILE_EINGEKLAPPT}Parameter", 32, (1, True)),
-            (f"{ZEILE_EINGEKLAPPT}Parameter", 38, (1, False)),
-            (f"{ZEILE_EINGEKLAPPT}Parameter", 46, (1, True)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 23, (0, False)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 24, (1, True)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 29, (1, True)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 33, (1, True)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 39, (1, False)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 47, (1, True)),
             ("par_6bFrist", 0, 4),
             ("par_6bFristNeubau", 0, 6),
             # Auswahllisten: je Zelle genau eine Überprüfung, sonst verwirft Excel sie
@@ -2904,6 +2948,17 @@ def faelle():
          Getippt(uebernahme_alt(), ue_zellen), ue_soll),
         ("Übernahme: Eingaben in die neue Mappe",
          Uebernommen(uebernahme_neu(), uebernahme_alt(), ue_zellen, ohne_ak_spalten), ue_soll),
+        # alte Mappe ohne par_NeuMietsteig: die Neuobjekte rechnen weiter mit der
+        # Mietsteigerung der alten Mappe, 3,5 %
+        ("Übernahme: alte Mappe ohne Mietsteigerung Neuobjekte",
+         Uebernommen(uebernahme_neu(),
+                     dataclasses.replace(uebernahme_alt(),
+                                         parameter={"par_Mietsteig": 0.035}),
+                     {}, ohne_neu_mietsteig), [
+            ("par_Mietsteig", 0, 0.035),
+            ("par_NeuMietsteig", 0, 0.035),
+            ("ne_MietsteigV", 0, 0.035),
+        ]),
         ("Etappe 9: Makro Prüfung meldet Fehler und Hinweis", Modell(objekte=[ohne_miete]), [
             ("pr_Gesamt", 0, "1 Fehler"),
         ], [

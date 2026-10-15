@@ -45,6 +45,8 @@ PARAMETER = [
     Parameter("par_Steuersatz", "Grenzsteuersatz", 0.30, FMT_PROZENT,
               "KSt, SolZ und GewSt zusammen; Platzhalter, prüfen"),
     Parameter("par_Mietsteig", "Mietsteigerung p. a.", 0.02, FMT_PROZENT, "Platzhalter"),
+    Parameter("par_NeuMietsteig", "Mietsteigerung Neuobjekte p. a.", 0.02, FMT_PROZENT,
+              "Platzhalter; nur Neuobjekte, eigener Satz je Neuobjekt im Blatt Neuobjekte"),
     Parameter("par_Erhaltsteig", "Erhaltungssteigerung p. a.", 0.025, FMT_PROZENT,
               "Platzhalter"),
     Parameter("par_Kostensteig", "Steigerung weitere Ausgaben p. a.", 0.02, FMT_PROZENT,
@@ -657,6 +659,17 @@ NEU_FELDER = [
     Feld("miete_qm", "Mietpreis je m² mtl.", "ne_MieteQm", '#,##0.00 "€"', False, 10,
          minimum=0, hinweis="Kaltmiete je m² und Monat zum Kaufzeitpunkt; ab dem Folgejahr mit "
                             "der Mietsteigerung. Nur zusammen mit der Fläche"),
+    # Mietsteigerung je Neuobjekt; bei Neubau mit Miete über dem Mietspiegel erst, wenn
+    # dieser aufgeholt hat: so viele Jahre nach dem Kauf bleibt die Miete gleich
+    Feld("mietsteig", "Mietsteigerung p. a.", "ne_Mietsteig", FMT_PROZENT, False, 10,
+         minimum=-0.2, maximum=0.2,
+         hinweis="Steigerung von Miete und weiteren Einnahmen dieses Neuobjekts. Leer = "
+                 "„Mietsteigerung Neuobjekte p. a.“ (Parameter)"),
+    Feld("miet_warte", "Mietsteigerung erst nach Jahren", "ne_MietWarte", FMT_ZAHL, False, 10,
+         minimum=0, maximum=100, ganzzahl=True,
+         hinweis="z. B. 10 bei Neubau oder Staffelmiete über dem Mietspiegel: die Miete bleibt "
+                 "so viele Jahre nach dem Kauf auf dem Anfangsstand und steigt erst danach, "
+                 "sobald der Mietspiegel aufgeholt hat. Gilt nur für die Miete. Leer = 0"),
     # bis zu drei Rücklagen je Neuobjekt, übertragen in dieser Reihenfolge (QUELLEN)
     Feld("quelle", "Quelle 1 RücklageID", "ne_Quelle", FMT_TEXT, False, 16,
          hinweis="Rücklage aus dem Blatt Rücklagen; ihr Gewinn mindert die AK (steuerlich). "
@@ -748,8 +761,8 @@ QUELLEN = [("quelle", "ne_Quelle", "ne_Q1"), ("quelle2", "ne_Quelle2", "ne_Q2"),
 # Blatt Neukauf-KSt: Planwerte der Neukauf-Kostenstellen (hinter „KSt 9999“) je Jahr.
 # (Schlüssel, Bezeichnung, BWA-Nr., Steigerung für Jahre ohne Wert)
 NEUKAUF_POSITIONEN = [
-    ("miete", "Miete", "1020", "par_Mietsteig"),
-    ("einnahmen", "weitere Einnahmen", "1090", "par_Mietsteig"),
+    ("miete", "Miete", "1020", "ne_MietsteigV"),
+    ("einnahmen", "weitere Einnahmen", "1090", "ne_MietsteigV"),
     ("erhaltung", "Erhaltung", "1250", "par_Erhaltsteig"),
     ("ausgaben", "weitere Ausgaben", "1100–1220, 1260", "par_Kostensteig"),
 ]
@@ -794,6 +807,8 @@ NEU_SPALTEN = [
     Spalte("eigen", "Eigenmittel", "ne_Eigen", FMT_EURO),
     # Fläche × Mietpreis je m² × 12, leer ohne beide; Basis der m²-Annahmen
     Spalte("miete_qm_jahr", "Jahresmiete aus m²", "ne_MieteQmJahr", FMT_EURO),
+    # Mietsteigerung des Neuobjekts, leer der Parameter Neuobjekte
+    Spalte("mietsteig_v", "Mietsteigerung verwendet", "ne_MietsteigV", FMT_PROZENT, 11),
 ] + [
     # je Quelle: verfügbare Rücklage, Übertragung, eingesetzter Erlös (Spalten eingeklappt)
     Spalte(f"{k}_{key}", f"Q{n} {text}", f"{praefix}{name}", FMT_EURO)
@@ -1039,6 +1054,8 @@ class Neuobjekt:
     erhaltungsquote: Optional[float] = None
     flaeche: Optional[float] = None      # m²; mit miete_qm statt Mietrendite und Erhaltungsquote
     miete_qm: Optional[float] = None     # € je m² und Monat zum Kaufzeitpunkt
+    mietsteig: Optional[float] = None    # leer = par_NeuMietsteig
+    miet_warte: Optional[int] = None     # Jahre nach dem Kauf ohne Mietsteigerung, leer = 0
     quelle: Optional[str] = None         # RücklageID, z. B. "RL-OBJ-001"
     kst: Optional[str] = None            # Neukauf-Kostenstelle, z. B. "KSt 31"
     quelle2: Optional[str] = None        # weitere Rücklagen, nach quelle übertragen
