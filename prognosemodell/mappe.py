@@ -1468,6 +1468,8 @@ def diagramm_cashflow(ws, kopf: int, zeilen: dict, erste_sp: int, letzte_sp: int
         serie.graphicalProperties.line.solidFill = farbe
         saeulen.series.append(serie)
     saeulen.set_categories(jahre)
+    # Achsentitel, weil die rechte Achse eine eigene Skala und Nulllinie hat
+    saeulen.y_axis.title = "Cashflow (Tsd. €)"
     saeulen.y_axis.number_format = '#,##0,'
     saeulen.y_axis.majorGridlines = None
     saeulen.y_axis.txPr = _schrift(900)
@@ -1486,6 +1488,7 @@ def diagramm_cashflow(ws, kopf: int, zeilen: dict, erste_sp: int, letzte_sp: int
     linie.series.append(serie)
     linie.y_axis.axId = 200
     linie.y_axis.crosses = "max"
+    linie.y_axis.title = "Liquidität Ende (Tsd. €)"
     linie.y_axis.number_format = '#,##0,'
     linie.y_axis.majorGridlines = None
     linie.y_axis.txPr = _schrift(900)
