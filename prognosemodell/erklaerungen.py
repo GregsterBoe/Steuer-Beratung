@@ -171,6 +171,20 @@ SPALTEN = {
     "vk_GewinnGuB": "Erlösanteil G+B − AK G+B. Positiv: Rücklage G+B bei § 6b.",
     "vk_Gewinn": "Gewinn Gebäude + Gewinn G+B. Ohne § 6b sofort steuerpflichtig im "
                  "Verkaufsjahr; mit § 6b gehen die positiven Teile in die Rücklage.",
+    "vk_Miete": "Miete (BWA 1020) im Verkaufsjahr laut Prognose, das letzte Jahr mit Miete; "
+                "mit weiteren Kostenstellen die Summe des Pakets. Ohne weitere Einnahmen.",
+    "vk_Rendite": "Bruttomietrendite = Jahresmiete Verkaufsjahr / Verkaufspreis: die Miete, die "
+                  "je Euro Verkaufspreis wegfällt. Vergleichswert zur Mietrendite der "
+                  "Neuobjekte; liegt sie dort niedriger, kauft der Erlös weniger Miete.",
+    "vk_Faktor": "Kaufpreisfaktor = Verkaufspreis / Jahresmiete, der Kehrwert der "
+                 "Mietrendite (20-fach = 5 %).",
+    "vk_MieteOE": "Miete bei Halten, Durchschnitt der 10 Jahre nach dem Verkaufsjahr (soweit "
+                  "im Raster): die Miete, die mit dem Verkauf entfällt.",
+    "vk_ErhOE": "Erhaltung bei Halten, Durchschnitt der 10 Jahre nach dem Verkaufsjahr, mit "
+                "Alterung und Großsanierung: die Erhaltung, die mit dem Verkauf entfällt.",
+    "vk_ErhAnteil": "Erhaltung Ø / Miete Ø der 10 Jahre bei Halten. Vergleichswert zur "
+                   "Erhaltungsquote der Neuobjekte; liegt sie hier höher, spart der Tausch "
+                   "Erhaltung.",
     "vk_Status": "OK oder der erste Fehler (ObjektID unbekannt, doppelt verkauft, Jahr "
                  "fehlt/außerhalb, Preis fehlt, Aufteilung fehlt). „§ 6b unzulässig“: die Zeile "
                  "rechnet, der Gewinn wird aber sofort versteuert. Andere Fehler: die Zeile "
@@ -257,6 +271,24 @@ SPALTEN = {
                       "(Parameterblatt).",
     "ne_MietsteigV": "Mietsteigerung des Neuobjekts, leer die Mietsteigerung Neuobjekte "
                      "(Parameter). Gilt für Miete und weitere Einnahmen.",
+    "ne_MieteKauf": "Jahresmiete zum Kaufzeitpunkt: Fläche × Mietpreis je m² × 12, sonst "
+                    "Kaufpreis × Mietrendite; mit Kostenstelle Neukauf deren Miete im ersten "
+                    "Jahr nach dem Kauf. Ohne weitere Einnahmen.",
+    "ne_Rendite": "Bruttomietrendite = Jahresmiete bei Kauf / Kaufpreis (ohne Nebenkosten): "
+                  "die Miete je Euro Kaufpreis. Vergleichswert zur Mietrendite der Verkäufe.",
+    "ne_Faktor": "Kaufpreisfaktor = Kaufpreis / Jahresmiete bei Kauf, der Kehrwert der "
+                 "Mietrendite (20-fach = 5 %).",
+    "ne_RenditeQuelle": "Bruttomietrendite der Verkäufe, deren Rücklage die Quellen nennen: "
+                        "Summe Jahresmiete Verkaufsjahr / Summe Verkaufspreis. Höher als die "
+                        "Mietrendite des Neuobjekts: der Tausch bringt weniger Miete je Euro.",
+    "ne_MieteOE": "Miete laut Prognose, Durchschnitt der 10 Jahre nach dem Kaufjahr (soweit im "
+                  "Raster); leer, solange das Neuobjekt nicht im Modell ist.",
+    "ne_ErhOE": "Erhaltung laut Prognose, Durchschnitt der 10 Jahre nach dem Kaufjahr, mit den "
+                "geminderten Anlaufjahren.",
+    "ne_ErhAnteil": "Erhaltung Ø / Miete Ø der 10 Jahre nach dem Kauf. Vergleichswert zur "
+                   "Erhaltungsquote der Verkäufe.",
+    "ne_ErhAnteilQuelle": "Erhaltung in % der Miete der Verkäufe, deren Rücklage die Quellen "
+                         "nennen: Summe Erhaltung Ø / Summe Miete Ø bei Halten.",
     "ne_Status": "OK oder Fehler. Pflichtfeld fehlt, NeuID doppelt bzw. wie Bestandsobjekt, "
                  "Kaufjahr außerhalb Raster: das Neuobjekt rechnet nicht. Meldungen zu Quellen "
                  "(unbekannt, Verkauf ausgeschaltet, Kauf vor Bildung, nach Fristjahr) und Kredit: "

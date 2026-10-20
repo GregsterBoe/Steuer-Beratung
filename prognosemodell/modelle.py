@@ -13,6 +13,8 @@ FMT_PROZENT = "0.00%"
 FMT_JAHR = "0"
 FMT_ZAHL = "0"
 FMT_TEXT = "@"
+FMT_RENDITE = "0.0%"
+FMT_FAKTOR = '0.0"-fach"'
 
 # Feste Zeilenzahl des Objektblatts; benannte Bereiche laufen über alle Zeilen.
 MAX_OBJEKTE = 200
@@ -527,6 +529,8 @@ VERKAUF_FELDER = [
          hinweis="ja: Kauf eines Neuobjekts nach den Annahmen auf dem Parameterblatt, in "
                  "derselben Zeile des Blatts Neuobjekte (blau, überschreibbar). Leer = nein"),
 ]
+# Jahre nach Verkauf bzw. Kauf, über die Miete und Erhaltung gemittelt werden (im Raster)
+VERGLEICH_JAHRE = 10
 VERKAUF_SPALTEN = [
     Spalte("umfang", "Kostenstellen im Verkauf", "vk_Umfang", FMT_TEXT, 18),
     Spalte("vorbesitz", "Vorbesitzzeit Jahre", "vk_Vorbesitz", FMT_ZAHL, 11),
@@ -539,7 +543,16 @@ VERKAUF_SPALTEN = [
     Spalte("gewinn_geb", "Gewinn Gebäude", "vk_GewinnGeb", FMT_EURO),
     Spalte("gewinn_gub", "Gewinn G+B", "vk_GewinnGuB", FMT_EURO),
     Spalte("gewinn", "Veräußerungsgewinn", "vk_Gewinn", FMT_EURO, 16),
+    # Vergleichswert zu den Neuobjekten: Jahresmiete (BWA 1020) im Verkaufsjahr zum Preis
+    Spalte("miete", "Jahresmiete Verkaufsjahr", "vk_Miete", FMT_EURO),
+    Spalte("rendite", "Mietrendite brutto", "vk_Rendite", FMT_RENDITE, 10),
+    Spalte("faktor", "Kaufpreisfaktor", "vk_Faktor", FMT_FAKTOR, 10),
+    # zu erwartende Erhaltung: Durchschnitt der VERGLEICH_JAHRE nach dem Verkauf bei Halten
+    Spalte("miete_oe", f"Miete Ø {VERGLEICH_JAHRE} Jahre bei Halten", "vk_MieteOE", FMT_EURO),
+    Spalte("erh_oe", f"Erhaltung Ø {VERGLEICH_JAHRE} Jahre bei Halten", "vk_ErhOE", FMT_EURO),
+    Spalte("erh_quote", "Erhaltung in % der Miete", "vk_ErhAnteil", FMT_RENDITE, 10),
 ]
+
 VERKAUF_STATUS_NAME = "vk_Status"
 # Statustexte, auf die der Rücklagenspiegel zugreift
 STATUS_OK = "OK"
@@ -811,6 +824,17 @@ NEU_SPALTEN = [
     Spalte("miete_qm_jahr", "Jahresmiete aus m²", "ne_MieteQmJahr", FMT_EURO),
     # Mietsteigerung des Neuobjekts, leer der Parameter Neuobjekte
     Spalte("mietsteig_v", "Mietsteigerung verwendet", "ne_MietsteigV", FMT_PROZENT, 11),
+    # Vergleichswert zu den Verkäufen: Jahresmiete zum Kaufzeitpunkt zum Kaufpreis
+    Spalte("miete_kauf", "Jahresmiete bei Kauf", "ne_MieteKauf", FMT_EURO),
+    Spalte("rendite", "Mietrendite brutto", "ne_Rendite", FMT_RENDITE, 10),
+    Spalte("faktor", "Kaufpreisfaktor", "ne_Faktor", FMT_FAKTOR, 10),
+    Spalte("rendite_quelle", "Mietrendite brutto der Quell-Verkäufe", "ne_RenditeQuelle",
+           FMT_RENDITE, 12),
+    Spalte("miete_oe", f"Miete Ø {VERGLEICH_JAHRE} Jahre nach Kauf", "ne_MieteOE", FMT_EURO),
+    Spalte("erh_oe", f"Erhaltung Ø {VERGLEICH_JAHRE} Jahre nach Kauf", "ne_ErhOE", FMT_EURO),
+    Spalte("erh_quote", "Erhaltung in % der Miete", "ne_ErhAnteil", FMT_RENDITE, 10),
+    Spalte("erh_quote_quelle", "Erhaltung in % der Miete der Quell-Verkäufe",
+           "ne_ErhAnteilQuelle", FMT_RENDITE, 12),
 ] + [
     # je Quelle: verfügbare Rücklage, Übertragung, eingesetzter Erlös (Spalten eingeklappt)
     Spalte(f"{k}_{key}", f"Q{n} {text}", f"{praefix}{name}", FMT_EURO)

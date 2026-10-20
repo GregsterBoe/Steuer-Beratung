@@ -46,7 +46,8 @@ from .bwa import (HALTEBLATT, SONDERBEREICH, SUMMENBLATT, SUMMENZEILEN, UEBERSIC
 from .formeln import deckt_anlagen, hspalte, ispalte
 from .mappe import (FILL_ANNAHME, FILL_EINGELESEN, FILL_KOPF, FONT_KOPF, OPTIONEN, _diagramm,
                     diagramm_cashflow, diagramm_szenarien, zentrale_annahmen)
-from .modelle import (DARLEHEN_ANNAHMEN, FMT_EURO, FMT_JAHR, FMT_PROZENT, FMT_ZAHL,
+from .modelle import (DARLEHEN_ANNAHMEN, FMT_EURO, FMT_FAKTOR, FMT_JAHR, FMT_PROZENT,
+                      FMT_RENDITE, FMT_ZAHL, VERGLEICH_JAHRE,
                       KST_VERKNUEPFT, OBJEKT_EINGELESEN, OBJEKT_FELDER, PARAMETER, PRUEFUNGEN,
                       QUELLEN, STATUS_AUS, SZ_A, SZ_B, SZ_BASELINE, SZ_C)
 from .vorlagen import ERSTE_ZEILE, SPALTE_JAHR, SPALTE_PLAN, SPALTE_VORJAHRE
@@ -1059,6 +1060,12 @@ VERKAUF_ANGABEN = [
     Angabe("Miete im Verkaufsjahr", "#miete", FMT_BETRAG, ebene=1),
     Angabe("Zinssatz Darlehen", "#zinssatz", FMT_PROZENT, ebene=1),
     Angabe("Ablösung Darlehen bei Verkauf (Restschuld)", "#abloesung", FMT_BETRAG, ebene=1),
+    Angabe("Vergleichswerte zum Kauf", kopf=True),
+    Angabe("Mietrendite brutto (Miete im Verkaufsjahr / Verkaufspreis)", "vk_Rendite",
+           FMT_RENDITE, ebene=1),
+    Angabe("Kaufpreisfaktor (Verkaufspreis / Miete)", "vk_Faktor", FMT_FAKTOR, ebene=1),
+    Angabe(f"Erhaltung in % der Miete (Ø {VERGLEICH_JAHRE} Jahre bei Halten)", "vk_ErhAnteil",
+           FMT_RENDITE, ebene=1),
 ]
 # Tilgungsplan im Blatt Darlehen: #dl_… Hauptkredit, #dl2_… Zweitkredit
 KREDIT_ANGABEN = [("Zinssatz", "Zinssatz", FMT_PROZENT), ("Tilgungsart", "Art", None),
@@ -1100,6 +1107,16 @@ NEU_ANGABEN = [
     Angabe("Mietsteigerung erst nach Jahren", "ne_MietWarte", FMT_ZAHL, ebene=1),
     Angabe("Kostenstelle Neukauf", "ne_KSt", ebene=1),
     Angabe("Miete im ersten vollen Jahr", "#miete", FMT_BETRAG, ebene=1),
+    Angabe("Vergleichswerte zum Verkauf", kopf=True),
+    Angabe("Jahresmiete bei Kauf", "ne_MieteKauf", FMT_BETRAG, ebene=1),
+    Angabe("Mietrendite brutto (Jahresmiete bei Kauf / Kaufpreis)", "ne_Rendite", FMT_RENDITE,
+           ebene=1),
+    Angabe("Kaufpreisfaktor (Kaufpreis / Jahresmiete)", "ne_Faktor", FMT_FAKTOR, ebene=1),
+    Angabe("Mietrendite brutto der Quell-Verkäufe", "ne_RenditeQuelle", FMT_RENDITE, ebene=1),
+    Angabe(f"Erhaltung in % der Miete (Ø {VERGLEICH_JAHRE} Jahre nach Kauf)", "ne_ErhAnteil",
+           FMT_RENDITE, ebene=1),
+    Angabe("Erhaltung in % der Miete der Quell-Verkäufe", "ne_ErhAnteilQuelle", FMT_RENDITE,
+           ebene=1),
     Angabe("Finanzierung", kopf=True),
     Angabe("Kaufpreis + Nebenkosten", "ne_AKGesamt", FMT_BETRAG, "ak_fin", "{ak}"),
     Angabe("./. Einsatz Verkaufserlös (Quell-Verkäufe)", "ne_Erloes", FMT_BETRAG, "erloes",

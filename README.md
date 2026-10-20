@@ -103,6 +103,13 @@ Kostenstellen, die zusammen zu einem Gesamtpreis verkauft werden, stehen als **V
 - **Prognose:** Alle Kostenstellen des Pakets enden mit dem Verkauf.
 - **Rücklage, Neuobjekt und Verkaufsergebnis:** Rücklage und Neuobjekt entstehen einmal für das Paket. Das Verkaufsergebnis erscheint im BWA-Blatt der ersten Kostenstelle.
 
+**Vergleichswerte Verkauf gegen Kauf:** Verkäufe und Neuobjekte zeigen dieselben Kennzahlen, damit man die Optionen direkt nebeneinanderlegen kann. Sie stehen auch im Vorgangsblock des Blatts „Verkauf und Kauf“ und im Mandanten-Export.
+- **Mietrendite brutto** = Jahresmiete / Preis. Verkauf: Miete (BWA 1020) im Verkaufsjahr / Verkaufspreis, also die Miete, die je Euro Erlös wegfällt. Kauf: Jahresmiete zum Kaufzeitpunkt (Fläche × Preis je m² × 12, sonst Kaufpreis × Mietrendite, mit Kostenstelle Neukauf deren Miete im ersten Jahr) / Kaufpreis ohne Nebenkosten. Liegt die Rendite des Kaufs unter der des Verkaufs, kauft der Erlös weniger Miete.
+- **Kaufpreisfaktor** = Preis / Jahresmiete, der Kehrwert (20-fach = 5 %).
+- **Erhaltung in % der Miete:** Erhaltung Ø / Miete Ø der 10 Jahre nach dem Geschäft, soweit im Raster. Beim Verkauf die Werte bei Halten, mit Alterung und Großsanierung; beim Kauf die Prognose des Neuobjekts mit den geminderten Anlaufjahren. Ist die Quote beim Verkauf höher, spart der Tausch Erhaltung.
+- Je Neuobjekt stehen Mietrendite und Erhaltungsquote der Quell-Verkäufe daneben (Summe der Verkäufe, deren Rücklage die Quellen nennen).
+- Weitere Einnahmen (BWA 1090) zählen nicht mit; die Werte sind brutto, ohne Nebenkosten des Kaufs.
+
 Das Blatt **Rücklagen** bildet bei § 6b ja und Status OK eine Rücklage aus den positiven Teilgewinnen, getrennt nach Gebäude und G+B. Die Frist beträgt vier Jahre, mit „§ 6b Neubau begonnen = ja“ sechs Jahre. Was bis zum Fristjahr nicht auf Neuobjekte übertragen ist, wird dort aufgelöst, mit 6 % Zuschlag je Jahr. Der Spiegel je Jahr zeigt Gewinne, Einstellung, Übertragung, Auflösung, Zuschlag, Bestand und den steuerwirksamen Betrag, der in Etappe 7 die Steuer ergibt.
 
 Im Blatt **Neuobjekte** stehen je Reinvestition Kaufjahr, Kaufpreis, Anteil G+B (oder AK G+B in Euro: dann darf der Anteil leer bleiben, die Spalte „Anteil G+B verwendet“ zeigt den daraus berechneten Anteil), Nebenkosten, AfA-Satz, AfA-Methode (linear oder degressiv 5 % nach § 7 Abs. 5a EStG; Wechsel zur linearen AfA nur mit Parameter „Wechsel degressiv → linear“ = ja), Mietrendite, Erhaltungsquote und bis zu drei Quell-Rücklagen (Auswahl aus dem Blatt Rücklagen). Gekauft wird zum Jahresende, Miete und AfA laufen ab dem Folgejahr. Die Rücklagen werden in fester Reihenfolge übertragen, über alle Quellen:

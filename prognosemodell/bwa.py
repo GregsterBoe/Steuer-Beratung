@@ -18,7 +18,8 @@ import re
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-from .modelle import (ARTEN_ABNUTZBAR, FMT_EURO, FMT_JAHR, FMT_PROZENT, QUELLEN,
+from .modelle import (ARTEN_ABNUTZBAR, FMT_EURO, FMT_JAHR, FMT_PROZENT, FMT_RENDITE, QUELLEN,
+                      VERGLEICH_JAHRE,
                       PARAMETER, STATUS_6B_UNZULAESSIG, STATUS_AUS, STATUS_OK, Modell,
                       prognosejahre)
 from .vorlagen import (BWA_ZEILEN, ERSTE_ZEILE, SPALTE_JAHR, SPALTE_PLAN, SPALTE_VORJAHRE,
@@ -1069,6 +1070,21 @@ def _vorgang(b: _Block, n: int) -> None:
              ok(f"N({vk('vk_Nettoerloes')})-{{reinvest}}+{{kredit}}+{{steuer}}+{{abloesung}}"))
     b.zeile_(None, "Restschuld Kredite der Neuobjekte im Vergleichsjahr",
              ok(alt("prg_Restschuld")))
+
+    def neu_quote(zaehler, nenner):
+        """Quote über die Neuobjekte dieser Rücklage; leer ohne Neuobjekt."""
+        def summe(name):
+            return f'SUMIFS({name},ne_Quelle,{{rl}},ne_Status,"{STATUS_OK}")'
+        return ok(f'IF({{rl}}="","",IFERROR({summe(zaehler)}/{summe(nenner)},""))')
+
+    b.zeile_(None, "Mietrendite brutto Verkauf (Jahresmiete Verkaufsjahr / Verkaufspreis)",
+             ok(vk("vk_Rendite")), fmt=FMT_RENDITE)
+    b.zeile_(None, "Mietrendite brutto Kauf (Jahresmiete bei Kauf / Kaufpreis der Neuobjekte)",
+             neu_quote("ne_MieteKauf", "ne_Kaufpreis"), fmt=FMT_RENDITE)
+    b.zeile_(None, f"Erhaltung in % der Miete, Verkauf: Ø {VERGLEICH_JAHRE} Jahre bei Halten",
+             ok(vk("vk_ErhAnteil")), fmt=FMT_RENDITE)
+    b.zeile_(None, f"Erhaltung in % der Miete, Kauf: Ø {VERGLEICH_JAHRE} Jahre nach Kauf",
+             neu_quote("ne_ErhOE", "ne_MieteOE"), fmt=FMT_RENDITE)
     b.leer()
     b.kopf(f'=IF({{ok}}=1,"Vergleich im Jahr "&{{x}},"Vergleich")', "Ausgangsfall (halten)",
            "Alternative (Verkauf, Kauf, Anlage)", "Differenz")

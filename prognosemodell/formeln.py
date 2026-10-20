@@ -14,7 +14,7 @@ from .modelle import (AFA_DEGRESSIV, ANL_NICHT_IM_MODELL, ANLAGE_FELDER, ANLAGE_
                       FEHLER, NEU_FELDER, STATUS_ANNAHME_GELOESCHT, NEU_SPALTEN, OBJEKT_FELDER, PROGNOSE_SPALTEN,
                       RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN, STATUS_6B_UNZULAESSIG,
                       STATUS_AUS, STATUS_OK, SZ_A, SZ_B, SZ_C, SZ_BASELINE, SZENARIEN, VERKAUF_FELDER,
-                      VERKAUF_SPALTEN, WARNUNG, Szenario, aus_spalten, liq_spalten,
+                      VERGLEICH_JAHRE, VERKAUF_SPALTEN, WARNUNG, Szenario, aus_spalten, liq_spalten,
                       DARLEHEN_SPALTEN, FIN_KREDIT, KREDIT_HAUPT, KREDIT_ZWEIT, QUELLEN,
                       TILGUNG_ANNUITAET,
                       TILGUNG_ENDFAELLIG, TILGUNG_LINEAR, UEBERNAHME_HAUPT,
@@ -825,7 +825,43 @@ def verkauf_zeile(zeile: int) -> dict:
                            f'{_v("erloes_gub", zeile)}-{_v("ak_gub", zeile)})'),
         "gewinn": wenn(f'IF({_v("quote_gub", zeile)}="","",'
                        f'{_v("gewinn_geb", zeile)}+{_v("gewinn_gub", zeile)})'),
+        # Miete (BWA 1020) im Verkaufsjahr, das letzte Jahr mit Miete; mit weiteren
+        # Kostenstellen die Summe des Pakets
+        "miete": wenn(f'IF(OR({jahr}="",{jahr}<par_Startjahr,{jahr}>par_Endjahr),"",'
+                      + _mit_weiteren(
+                          zeile, f"SUMIFS(prg_Miete,prg_ID,{id_},prg_Jahr,{jahr})",
+                          f"SUMPRODUCT(SUMIFS(prg_Miete,prg_ID,obj_ID,prg_Jahr,{jahr})*{im})")
+                      + ")"),
+        **_rendite(_v("miete", zeile), _v("preis", zeile)),
+        # Durchschnitt der Jahre nach dem Verkauf, wenn das Objekt gehalten würde
+        **{key: wenn(_mit_weiteren(zeile, _durchschnitt(name, f"prg_ID,{id_}", jahr),
+                                   _durchschnitt(name, "prg_ID,obj_ID", jahr, im)))
+           for key, name in (("miete_oe", "prg_MieteHalten"),
+                             ("erh_oe", "prg_ErhaltungHalten"))},
+        "erh_quote": _erh_quote(_v("erh_oe", zeile), _v("miete_oe", zeile)),
     }
+
+
+def _rendite(miete: str, preis: str) -> dict:
+    """Bruttomietrendite (Jahresmiete / Preis) und Kaufpreisfaktor (Preis / Jahresmiete)."""
+    return {
+        "rendite": f'=IF(OR({miete}="",N({preis})<=0),"",{miete}/{preis})',
+        "faktor": f'=IF(OR(N({miete})<=0,N({preis})<=0),"",{preis}/{miete})',
+    }
+
+
+def _durchschnitt(name: str, filter_: str, jahr: str, im: str = None) -> str:
+    """Jahresdurchschnitt von name über die VERGLEICH_JAHRE nach jahr, soweit im Raster;
+    mit im (Paket) die Summe über die Objekte, für die im wahr ist. "" ohne Jahr danach."""
+    bis = f"MIN({jahr}+{VERGLEICH_JAHRE},par_Endjahr)"
+    summe = f'SUMIFS({name},{filter_},prg_Jahr,">"&{jahr},prg_Jahr,"<="&{bis})'
+    if im:
+        summe = f"SUMPRODUCT({summe}*{im})"
+    return f'IF(OR({jahr}="",{bis}<={jahr}),"",{summe}/({bis}-{jahr}))'
+
+
+def _erh_quote(erhaltung: str, miete: str) -> str:
+    return f'=IF(OR({erhaltung}="",N({miete})<=0),"",{erhaltung}/{miete})'
 
 
 def status_verkauf(zeile: int) -> str:
@@ -1031,6 +1067,15 @@ def neu_zeile(zeile: int) -> dict:
     def wenn(ausdruck):
         return f'=IF({id_}="","",{ausdruck})'
 
+    miete_kst = (f'IFERROR(INDEX(nk_Fort,MATCH({_n("kst", zeile)}&"|miete",nk_Schluessel,0),'
+                 f'{kj}+1-par_Basisjahr+1),"")')
+
+    def quelle_summe(name):
+        return "(" + "+".join(f"IFERROR(N(INDEX({name},MATCH({_n(feld, zeile)},rl_ID,0))),0)"
+                              for feld, _, _ in QUELLEN) + ")"
+
+    quell_miete, quell_preis = quelle_summe("vk_Miete"), quelle_summe("vk_Preis")
+
     def darueber(key):
         """Spalte key in den Zeilen über dieser (Kopfzeile zählt als Text nicht mit)."""
         bst = nspalte(key)
@@ -1116,6 +1161,23 @@ def neu_zeile(zeile: int) -> dict:
                               f'{_n("flaeche", zeile)}*{_n("miete_qm", zeile)}*12,"")'),
         "mietsteig_v": wenn(f'IF({_n("mietsteig", zeile)}="",par_NeuMietsteig,'
                             f'N({_n("mietsteig", zeile)}))'),
+        # Jahresmiete zum Kaufzeitpunkt: Fläche × Preis je m² oder Kaufpreis × Mietrendite;
+        # mit Kostenstelle Neukauf deren Miete im ersten Jahr nach dem Kauf
+        "miete_kauf": wenn(f'IF(ISNUMBER({miete_kst}),{miete_kst},'
+                           f'IF(ISNUMBER({_n("miete_qm_jahr", zeile)}),{_n("miete_qm_jahr", zeile)},'
+                           f'N({_n("kaufpreis", zeile)})*N({_n("mietrendite", zeile)})))'),
+        **{k: wenn(f[1:]) for k, f in _rendite(_n("miete_kauf", zeile),
+                                                _n("kaufpreis", zeile)).items()},
+        # Miete und Preis der Verkäufe, deren Rücklage die Quellen nennen (Zeile im Blatt
+        # Rücklagen = Zeile im Blatt Verkäufe)
+        "rendite_quelle": wenn(f'IF({quell_preis}>0,{quell_miete}/{quell_preis},"")'),
+        # Durchschnitt der Jahre nach dem Kauf (Miete und Erhaltung ab dem Folgejahr)
+        **{key: wenn(f'IF({_n("gueltig", zeile)}<>1,"",'
+                     f'{_durchschnitt(name, f"prg_ID,{id_}", kj)})')
+           for key, name in (("miete_oe", "prg_Miete"), ("erh_oe", "prg_Erhaltung"))},
+        "erh_quote": wenn(_erh_quote(_n("erh_oe", zeile), _n("miete_oe", zeile))[1:]),
+        "erh_quote_quelle": wenn(f'IF({quelle_summe("vk_MieteOE")}>0,'
+                                 f'{quelle_summe("vk_ErhOE")}/{quelle_summe("vk_MieteOE")},"")'),
     }
     for k, (feld, _, _) in enumerate(QUELLEN):
         q = _n(feld, zeile)

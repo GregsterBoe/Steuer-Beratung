@@ -332,6 +332,13 @@ Die berechnete Spalte vk\_Umfang normalisiert das zu „;KSt 1;KSt 4;“.
 
 Ohne weitere Kostenstellen rechnet die Zeile unverändert wie bisher.
 
+**Vergleichswerte Verkauf gegen Kauf (umgesetzt):** Nachrichtliche Spalten in Verkäufe und Neuobjekte, ohne Wirkung auf die Rechnung; dazu vier Zeilen im Vorgangsblock (Blatt Verkauf und Kauf) und im Mandanten-Export je Vorgang die Gruppe „Vergleichswerte zum Kauf“ bzw. „zum Verkauf“.
+- vk\_Miete: prg\_Miete im Verkaufsjahr, beim Paket summiert. vk\_Rendite = vk\_Miete / vk\_Preis, vk\_Faktor = Kehrwert.
+- ne\_MieteKauf: Miete der Kostenstelle Neukauf im Jahr nach dem Kauf, sonst ne\_MieteQmJahr, sonst Kaufpreis × Mietrendite. ne\_Rendite und ne\_Faktor auf den Kaufpreis ohne Nebenkosten.
+- Erhaltung: Ø der VERGLEICH\_JAHRE = 10 Jahre nach dem Geschäft im Raster. Verkauf aus prg\_MieteHalten und prg\_ErhaltungHalten (vk\_MieteOE, vk\_ErhOE), Kauf aus prg\_Miete und prg\_Erhaltung des Neuobjekts (ne\_MieteOE, ne\_ErhOE); Quote = Erhaltung Ø / Miete Ø.
+- ne\_RenditeQuelle und ne\_ErhAnteilQuelle: Summen der Verkäufe, deren Rücklage die drei Quellen nennen (Zeile im Blatt Rücklagen = Zeile im Blatt Verkäufe).
+- Der Name ne\_ErhQuote bleibt der Eingabe „Erhaltung auf Kaufpreis“; die berechnete Quote heißt ne\_ErhAnteil.
+
 **Verknüpfung zur Prognose:** Das aktiv-Flag liest das Verkaufsjahr per MINIFS aus vk\_Jahr, nur aus Verkäufen mit „Verkauf aktiv“ ≠ nein; prg\_Bestand ist schon im Verkaufsjahr 0.
 
 **Verkauf ausschalten:** „Verkauf aktiv = nein“ nimmt die Zeile aus dem Modell, ohne Fehler (Status „ausgeschaltet“, Zeile grau). Das Objekt wird weiter gehalten, die § 6b-Rücklage entsteht nicht. Neuobjekte, die sie als Quelle nennen, melden „Verkauf ausgeschaltet, Rücklage entfällt“ und übertragen nichts. Die Quelle zählt dann auch nicht für Szenario B. Ausgeschaltete Zeilen zählen bei „Objekt mehrfach verkauft“ nicht mit, so lassen sich zwei Varianten eines Verkaufs nebeneinander halten. Der Veräußerungsgewinn Q fließt in den Rücklagenspiegel (Abschnitt 12): bei § 6b ja in die Rücklage, sonst als sofort steuerwirksam. Noch nicht umgesetzt ist ein Verkaufspreis als Faktor × Jahresmiete.
