@@ -88,7 +88,7 @@ class Wie:
 
 @dataclasses.dataclass(frozen=True)
 class Summe:
-    """Sollwert = Summe der Werte anderer Bereiche derselben Mappe (je ein Wie)."""
+    """Sollwert = Summe der Werte anderer Bereiche derselben Mappe (je ein Wie, mal faktor)."""
     teile: tuple
 
 
@@ -877,6 +877,34 @@ def faelle():
             ("prg_Verkehrswert", prg_neu(1, 2028), 1_200_000),
             ("prg_Verkehrswert", prg_neu(1, 2029), 1_224_000),
             ("prg_Buchwert", prg_neu(1, 2046), 480_000 - 18 * 14_400),  # AfA 2029 bis 2046
+            # Vergleichswerte: Miete 2027 61.200 zu 1,4 Mio, Neuobjekt 60.000 zu 1,2 Mio
+            ("vk_Miete", 0, 61_200),
+            ("vk_Rendite", 0, 61_200 / 1_400_000),
+            ("vk_Faktor", 0, 1_400_000 / 61_200),
+            ("vk_Miete", 1, None),
+            ("ne_MieteKauf", 0, 60_000),
+            ("ne_Rendite", 0, 0.05),
+            ("ne_Faktor", 0, 20),
+            ("ne_RenditeQuelle", 0, 61_200 / 1_400_000),
+            ("ne_Rendite", 1, None),
+            # Ø der 10 Jahre nach Verkauf (2028–2037, bei Halten) bzw. Kauf (2029–2038)
+            ("vk_MieteOE", 0, Summe(tuple(Wie("prg_MieteHalten", prg(1, j), 0.1)
+                                          for j in range(2028, 2038)))),
+            ("vk_ErhOE", 0, Summe(tuple(Wie("prg_ErhaltungHalten", prg(1, j), 0.1)
+                                        for j in range(2028, 2038)))),
+            ("vk_MieteOE", 0, 60_000 * sum(1.02 ** k for k in range(2, 12)) / 10),
+            ("ne_MieteOE", 0, 60_000 * sum(1.02 ** k for k in range(1, 11)) / 10),
+            ("ne_ErhOE", 0, 12_000 * sum(1.025 ** k for k in range(1, 11)) / 10),
+            ("ne_ErhAnteil", 0, 12_000 * sum(1.025 ** k for k in range(1, 11))
+             / (60_000 * sum(1.02 ** k for k in range(1, 11)))),
+            ("ne_ErhAnteilQuelle", 0, Wie("vk_ErhAnteil")),
+            ("SB1:Mietrendite brutto Verkauf (Jahresmiete Verkaufsjahr / Verkaufspreis)", 1,
+             61_200 / 1_400_000),
+            ("SB1:Mietrendite brutto Kauf (Jahresmiete bei Kauf / Kaufpreis der Neuobjekte)", 1,
+             0.05),
+            ("SB1:Erhaltung in % der Miete, Verkauf: Ø 10 Jahre bei Halten", 1,
+             Wie("vk_ErhAnteil")),
+            ("SB1:Erhaltung in % der Miete, Kauf: Ø 10 Jahre nach Kauf", 1, Wie("ne_ErhAnteil")),
             # Übersicht: Neuobjekt nur im Plan
             ("ueb_Neuobjekte", 0, 1),
             ("ueb_Plan", ueb(2027), 0),
@@ -1748,6 +1776,10 @@ def faelle():
             ("Export:Verkauf und Kauf:Verkäufe/KSt 1", 10, Wie("vk_Gewinn")),
             ("Export:Verkauf und Kauf:Verkäufe/KSt 2", 3, "nein"),
             ("Export:Verkauf und Kauf:Neuobjekte/NEU-001", 9, Wie("ne_Kredit")),
+            ("Export:Verkauf und Kauf:Verkäufe/KSt 1", 12, Wie("vk_Rendite")),
+            ("Export:Verkauf und Kauf:Verkäufe/KSt 1", 14, Wie("vk_ErhAnteil")),
+            ("Export:Verkauf und Kauf:Neuobjekte/NEU-001", 12, Wie("ne_Rendite")),
+            ("Export:Verkauf und Kauf:Neuobjekte/NEU-001", 15, Wie("ne_ErhAnteil")),
             ("Export:Verkauf und Kauf:Vorgang 1:/Veräußerungspreis", 2, 1_400_000),
             ("Export:Verkauf und Kauf:Vorgang 2:/Veräußerungspreis", 2, "fehlt"),
             ("Export:Verkauf und Kauf:Detailsicht Kauf/NeuID (Kostenstelle)", 2, "NEU-001"),
@@ -3161,7 +3193,7 @@ def pruefe(fall: str, wb, pruefungen) -> int:
             soll = (wert(wb, soll.name, soll.zeile) if soll.faktor == 1
                     else wert(wb, soll.name, soll.zeile) * soll.faktor)
         elif isinstance(soll, Summe):
-            soll = sum(wert(wb, w.name, w.zeile) or 0 for w in soll.teile)
+            soll = sum((wert(wb, w.name, w.zeile) or 0) * w.faktor for w in soll.teile)
         if gleich(ist, soll):
             print(f"OK      {fall}: {name}[{zeile}] = {ist!r}")
         else:

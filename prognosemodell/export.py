@@ -41,7 +41,7 @@ from .bwa import (HALTEBLATT, SONDERBEREICH, SUMMENBLATT, SUMMENZEILEN, UEBERSIC
 from .formeln import deckt_anlagen, hspalte, ispalte
 from .mappe import (FILL_ANNAHME, FILL_EINGELESEN, FILL_KOPF, FONT_KOPF, OPTIONEN, _diagramm,
                     diagramm_cashflow, diagramm_szenarien, zentrale_annahmen)
-from .modelle import (DARLEHEN_ANNAHMEN, FMT_EURO, KST_VERKNUEPFT, OBJEKT_EINGELESEN,
+from .modelle import (DARLEHEN_ANNAHMEN, FMT_EURO, FMT_FAKTOR, FMT_RENDITE, KST_VERKNUEPFT, OBJEKT_EINGELESEN,
                       OBJEKT_FELDER, PARAMETER, PRUEFUNGEN, STATUS_AUS, SZ_A, SZ_B, SZ_BASELINE,
                       SZ_C)
 from .vorlagen import ERSTE_ZEILE, SPALTE_JAHR, SPALTE_PLAN, SPALTE_VORJAHRE
@@ -726,6 +726,11 @@ VERKAUF_SPALTEN = [("ObjektID", "vk_ID", None), ("weitere Kostenstellen", "vk_We
                    ("Buchwert Gebäude Ende Verkaufsjahr", "vk_BuchwertGeb", FMT_BETRAG),
                    ("AK G+B", "vk_AKGuB", FMT_BETRAG),
                    ("Veräußerungsgewinn", "vk_Gewinn", FMT_BETRAG),
+                   ("Jahresmiete Verkaufsjahr", "vk_Miete", FMT_BETRAG),
+                   ("Mietrendite brutto", "vk_Rendite", FMT_RENDITE),
+                   ("Kaufpreisfaktor", "vk_Faktor", FMT_FAKTOR),
+                   ("Erhaltung in % der Miete (Ø 10 Jahre bei Halten)", "vk_ErhAnteil",
+                    FMT_RENDITE),
                    ("§ 6b nutzen", "vk_6b", None), ("reinvestieren", "vk_Reinvest", None),
                    ("Status", "vk_Status", None)]
 NEU_SPALTEN = [("NeuID", "ne_ID", None), ("Kauf aktiv", "ne_Aktiv", None),
@@ -735,6 +740,13 @@ NEU_SPALTEN = [("NeuID", "ne_ID", None), ("Kauf aktiv", "ne_Aktiv", None),
                ("Übertrag § 6b", "ne_UeGesamt", FMT_BETRAG),
                ("AfA-Basis Gebäude", "ne_AfABasis", FMT_BETRAG),
                ("Kredit", "ne_Kredit", FMT_BETRAG), ("Eigenmittel", "ne_Eigen", FMT_BETRAG),
+               ("Jahresmiete bei Kauf", "ne_MieteKauf", FMT_BETRAG),
+               ("Mietrendite brutto", "ne_Rendite", FMT_RENDITE),
+               ("Kaufpreisfaktor", "ne_Faktor", FMT_FAKTOR),
+               ("Mietrendite brutto der Quell-Verkäufe", "ne_RenditeQuelle", FMT_RENDITE),
+               ("Erhaltung in % der Miete (Ø 10 Jahre nach Kauf)", "ne_ErhAnteil", FMT_RENDITE),
+               ("Erhaltung in % der Miete der Quell-Verkäufe", "ne_ErhAnteilQuelle",
+                FMT_RENDITE),
                ("Status", "ne_Status", None)]
 SB_AUSLASSEN = ("rechnet mit (1 = ja)",)
 GRAU = "E7E6E6"   # FILL_BERECHNET der Mappe
@@ -818,14 +830,14 @@ def _blatt_verkauf_kauf(ex, wb) -> bool:
     _abschnitt(ws, zeile, "Verkäufe", len(VERKAUF_SPALTEN))
     zeile, verkaeufe = _tabelle(ws, zeile + 1, wb, VERKAUF_SPALTEN)
     zeile += 1
-    _abschnitt(ws, zeile, "Neuobjekte", len(VERKAUF_SPALTEN))
+    _abschnitt(ws, zeile, "Neuobjekte", len(NEU_SPALTEN))
     zeile, neu = _tabelle(ws, zeile + 1, wb, NEU_SPALTEN)
     if not verkaeufe and not neu:
         ex.remove(ws)
         return False
     _sonderbereich(ws, zeile + 1, wb[SONDERBEREICH])
     ws.column_dimensions["A"].width = 66
-    for spalte in range(2, len(VERKAUF_SPALTEN) + 1):
+    for spalte in range(2, max(len(VERKAUF_SPALTEN), len(NEU_SPALTEN)) + 1):
         ws.column_dimensions[get_column_letter(spalte)].width = 16
     _druck(ws)
     return True
