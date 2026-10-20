@@ -71,6 +71,8 @@ EXPORT = "Export:"
 EXPORT_FARBE = "Export-Farbe:"   # wie EXPORT, Soll: Füllfarbe (RGB) oder None
 EXPORT_BLAETTER = "Export-Blätter"   # Zeile 0, Soll: Liste der Blattnamen
 EXPORT_KONTROLLE = "Export-Kontrolle:"   # + Block der Jahresrechnung, Soll: größte Abweichung
+EXPORT_FORMEL = "Export-Formel:"   # wie EXPORT, Soll: Formel der Zelle oder None (Wert)
+EXPORT_EBENE = "Export-Ebene:"   # wie EXPORT, Soll: Gliederungsebene der Zeile
 
 
 def nr(spalten, key: str, versatz: int = 0) -> int:
@@ -225,13 +227,22 @@ def sonderbereich(wb, start: str, beschriftung: str, spalte: int):
     raise KeyError(f"{start} / {beschriftung} nicht im Blatt Verkauf und Kauf")
 
 
-def export(wb):
-    """Mandanten-Export der gerechneten Mappe, gespeichert und wieder geladen (einmal je Fall)."""
+def export(wb, formeln: bool = False):
+    """Mandanten-Export der gerechneten Mappe, einmal je Fall gespeichert und per LibreOffice
+    durchgerechnet: mit Werten (die Formeln des Exports gerechnet) bzw. mit formeln=True wie
+    geschrieben."""
     if not hasattr(wb, "export"):
         pfad = wb.pfad.with_name("export.xlsx")
         erstelle_export(wb, wb.erzeugt, wb.pfad.name).save(pfad)
-        wb.export = load_workbook(pfad)
-    return wb.export
+        wb.export_formeln = load_workbook(pfad)
+        aus = pfad.parent / "export_gerechnet"
+        subprocess.run(
+            [shutil.which("soffice") or shutil.which("libreoffice"),
+             f"-env:UserInstallation={(pfad.parent / 'lo-export').as_uri()}", "--headless",
+             "--calc", "--convert-to", "xlsx", "--outdir", str(aus), str(pfad)],
+            check=True, capture_output=True, timeout=120)
+        wb.export = load_workbook(aus / pfad.name, data_only=True)
+    return wb.export_formeln if formeln else wb.export
 
 
 def export_zelle(ex, name: str, spalte: int):
@@ -534,11 +545,12 @@ def faelle():
         dienst = zins + tilgung
         KAPITALDIENST_UNTER_1 += dienst > 0.005 and 60_000 * 1.02**n - 8_000 * 1.025**n < dienst
     # Mandanten-Export: Kostenstellen mit Ist-Vorjahren, Verkauf KSt 1 Ende 2028 mit § 6b,
-    # Neuobjekt mit Kredit, Bestandsdarlehen KSt 2 (Zinssatz als Annahme), Verkauf KSt 2
-    # ausgeschaltet
+    # Neuobjekt mit Fläche und Mietpreis, Kreditquote 80 % (1,2 Mio), davon 25 % Zweitkredit
+    # zu 1 %, Bestandsdarlehen KSt 2 (Zinssatz als Annahme), Verkauf KSt 2 ausgeschaltet
     exp = vorlage_eingelesen(neuobjekte=[Neuobjekt(
-        "NEU-001", 2029, kaufpreis=1_500_000, anteil_gub=0.25, afa_satz=0.03, mietrendite=0.05,
-        quelle="RL-KSt 1", fin_art="Kredit", kredit_zins=0.04, tilgung=0.02)])
+        "NEU-001", 2029, kaufpreis=1_500_000, anteil_gub=0.25, afa_satz=0.03, flaeche=1_000,
+        miete_qm=6.5, quelle="RL-KSt 1", fin_art="Kredit", kredit_quote=0.8, kredit_zins=0.04,
+        tilgung=0.02, kredit2_anteil=0.25, kredit2_zins=0.01)])
     exp.objekte[1] = dataclasses.replace(exp.objekte[1], restschuld=300_000)
     exp.verkaeufe = [Verkauf("KSt 1", 2028, preis=1_400_000, nutzung_6b="ja"),
                      Verkauf("KSt 2", 2030, preis=2_000_000, aktiv="nein")]
@@ -1730,6 +1742,19 @@ def faelle():
              Wie("ueb_VermDifferenz", ueb(2046))),
             (f"{EXPORT_KONTROLLE}Plan:", 0, 0),
             (f"{EXPORT_KONTROLLE}Halten:", 0, 0),
+            # Zwischensummen als Formel über die Zeilen darüber, Werte aus anderen Blättern
+            ("Export-Formel:Jahresrechnung:Plan:/= laufendes Ergebnis", 2027, "=B8+B9+B10"),
+            ("Export-Formel:Jahresrechnung:Plan:/+ Abschreibungen (nicht zahlungswirksam)",
+             2027, "=-B10"),
+            ("Export-Formel:Jahresrechnung:Plan:/Mieten und weitere Einnahmen", 2027, None),
+            ("Export-Formel:Jahresrechnung:Differenz/Steuer", 2027, "=B18-B55"),
+            ("Export-Formel:Cashflow:Liquidität Anfang", 2028, "=B29"),
+            ("Export-Formel:Cashflow:Operativer Cashflow", 2027, "=B7+B8+B9+B10"),
+            ("Export-Formel:Ergebnisbrücke:Paket KSt 1 2028", 2029, "=D11+D12"),
+            ("Export-Formel:Überblick:Ergebnis/Verkaufen, sofort versteuern, Erlös anlegen", 4,
+             "=RANK(B12,B$9:B$12)"),
+            ("Export-Formel:BWA gesamt:Plan:/Gesamtkosten", 2027, "=F11+F12+F13+F14+F15+F16"),
+            ("Export-Formel:BWA gesamt:Plan:/Umsatzerlöse", 2027, None),
             ("Export:BWA gesamt:Plan:/Umsatzerlöse", 2027, Wie("bwa_1020", lj(2027))),
             ("Export:BWA gesamt:Plan:/Umsatzerlöse", 2024, Wie("BWA:Alle Objekte:1020", 2024)),
             ("Export:BWA gesamt:Plan:/Gesamtkosten", 2026, Wie("BWA:Alle Objekte:1280", 2026)),
@@ -1745,10 +1770,46 @@ def faelle():
             ("Export:BWA je Objekt:KSt 1/Umsatzerlöse", 2029, 0),   # verkauft, leer dargestellt
             ("Export:BWA je Objekt:KSt 2/Zinsaufwand", 2028, Wie("BWA:KSt 2:1310", 2028)),
             ("Export:BWA je Objekt:NEU-001/Umsatzerlöse", 2030, Wie("BWA:NEU-001:1020", 2030)),
-            ("Export:Verkauf und Kauf:Verkäufe/KSt 1", 10, Wie("vk_Gewinn")),
-            ("Export:Verkauf und Kauf:Verkäufe/KSt 2", 3, "nein"),
-            ("Export:Verkauf und Kauf:Neuobjekte/NEU-001", 9, Wie("ne_Kredit")),
+            # je Vorgang eine Spalte, Herleitungen als Formel, Gruppen einklappbar
+            ("Export:Verkauf und Kauf:Verkäufe/ObjektID", 2, "KSt 1"),
+            ("Export:Verkauf und Kauf:Verkäufe/= Veräußerungsgewinn", 2, Wie("vk_Gewinn")),
+            ("Export-Formel:Verkauf und Kauf:Verkäufe/= Veräußerungsgewinn", 2,
+             "=B13+B14+B15"),
+            ("Export:Verkauf und Kauf:Verkäufe/./. Buchwert Gebäude Ende Verkaufsjahr", 2,
+             -448_000),
+            ("Export:Verkauf und Kauf:Verkäufe/Gewinn Gebäude", 2, Wie("vk_GewinnGeb")),
+            ("Export-Ebene:Verkauf und Kauf:Verkäufe/Gewinn Gebäude", 2, 1),
+            ("Export:Verkauf und Kauf:Verkäufe/Verkauf aktiv", 3, "nein"),
+            ("Export:Verkauf und Kauf:Verkäufe/Zinssatz Darlehen", 3, 0.03),
+            ("Export:Verkauf und Kauf:Verkäufe/Zinssatz Darlehen", 2, None),   # ohne Darlehen
+            ("Export:Verkauf und Kauf:Neuobjekte/NeuID", 2, "NEU-001"),
+            ("Export:Verkauf und Kauf:Neuobjekte/AfA-Basis Gebäude (Gebäude − ü1 − ü3)", 2,
+             Wie("ne_AfABasis")),
+            ("Export:Verkauf und Kauf:Neuobjekte/Fläche m²", 2, 1_000),
+            ("Export:Verkauf und Kauf:Neuobjekte/Jahresmiete aus m² (Fläche × Mietpreis × 12)",
+             2, 78_000),
+            ("Export-Formel:Verkauf und Kauf:Neuobjekte/Jahresmiete aus m² (Fläche × Mietpreis "
+             "× 12)", 2, "=B55*B56*12"),
+            ("Export-Ebene:Verkauf und Kauf:Neuobjekte/Fläche m²", 2, 1),
+            ("Export:Verkauf und Kauf:Neuobjekte/Mietrendite auf Kaufpreis", 2, "fehlt"),
+            ("Export:Verkauf und Kauf:Neuobjekte/davon Kredit", 2, 1_200_000),
+            ("Export:Verkauf und Kauf:Neuobjekte/davon Eigenmittel", 2, Wie("ne_Eigen")),
+            ("Export:Verkauf und Kauf:Neuobjekte/Kreditquote (Kredit / Kaufpreis + "
+             "Nebenkosten)", 2, 0.8),
+            ("Export:Verkauf und Kauf:Neuobjekte/Hauptkredit (Kredit − Zweitkredit)", 2, 900_000),
+            ("Export-Formel:Verkauf und Kauf:Neuobjekte/Hauptkredit (Kredit − Zweitkredit)", 2,
+             "=B67-B75"),
+            ("Export:Verkauf und Kauf:Neuobjekte/Zinssatz", 2, 0.04),
+            ("Export-Ebene:Verkauf und Kauf:Neuobjekte/Zinssatz", 2, 1),
+            ("Export:Verkauf und Kauf:Neuobjekte/Zweitkredit", 2, 300_000),
+            ("Export:Verkauf und Kauf:Neuobjekte/Anteil am Kredit", 2, 0.25),
+            ("Export-Ebene:Verkauf und Kauf:Neuobjekte/Anteil am Kredit", 2, 2),
+            ("Export:Verkauf und Kauf:Neuobjekte/Rate p. a. (Annuität) bzw. Tilgung p. a. "
+             "(linear)", 2, 900_000 * 0.06),
             ("Export:Verkauf und Kauf:Vorgang 1:/Veräußerungspreis", 2, 1_400_000),
+            ("Export:Verkauf und Kauf:Vorgang 1:/= Cash Flow", 3, Wie("SB1:= Cash Flow", 2)),
+            ("Export-Formel:Verkauf und Kauf:Vorgang 1:/Kapitalanlage (Nettoerlös − "
+             "Reinvestition + Kredit − Steuer ca. − Ablösung)", 2, None),   # mit Namen
             ("Export:Verkauf und Kauf:Vorgang 2:/Veräußerungspreis", 2, "fehlt"),
             ("Export:Verkauf und Kauf:Detailsicht Kauf/NeuID (Kostenstelle)", 2, "NEU-001"),
             ("Export:Verkauf und Kauf:Detailsicht Kauf/NeuID (Kostenstelle)", 3, None),
@@ -3145,6 +3206,12 @@ def pruefe(fall: str, wb, pruefungen) -> int:
         elif name.startswith(EXPORT):
             c = export_zelle(export(wb), name[len(EXPORT):], zeile)
             ist = c.value if c is not None else "fehlt"
+        elif name.startswith(EXPORT_FORMEL):
+            c = export_zelle(export(wb, formeln=True), name[len(EXPORT_FORMEL):], zeile)
+            ist = "fehlt" if c is None else c.value if c.data_type == "f" else None
+        elif name.startswith(EXPORT_EBENE):
+            c = export_zelle(export(wb, formeln=True), name[len(EXPORT_EBENE):], zeile)
+            ist = "fehlt" if c is None else c.parent.row_dimensions[c.row].outline_level
         elif name.startswith(EXPORT_FARBE):
             c = export_zelle(export(wb), name[len(EXPORT_FARBE):], zeile)
             ist = ("fehlt" if c is None else
