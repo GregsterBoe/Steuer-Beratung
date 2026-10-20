@@ -332,7 +332,7 @@ Die berechnete Spalte vk\_Umfang normalisiert das zu „;KSt 1;KSt 4;“.
 
 Ohne weitere Kostenstellen rechnet die Zeile unverändert wie bisher.
 
-**Vergleichswerte Verkauf gegen Kauf (umgesetzt):** Nachrichtliche Spalten in Verkäufe und Neuobjekte, ohne Wirkung auf die Rechnung; dazu vier Zeilen im Vorgangsblock (Blatt Verkauf und Kauf) und Spalten im Mandanten-Export.
+**Vergleichswerte Verkauf gegen Kauf (umgesetzt):** Nachrichtliche Spalten in Verkäufe und Neuobjekte, ohne Wirkung auf die Rechnung; dazu vier Zeilen im Vorgangsblock (Blatt Verkauf und Kauf) und im Mandanten-Export je Vorgang die Gruppe „Vergleichswerte zum Kauf“ bzw. „zum Verkauf“.
 - vk\_Miete: prg\_Miete im Verkaufsjahr, beim Paket summiert. vk\_Rendite = vk\_Miete / vk\_Preis, vk\_Faktor = Kehrwert.
 - ne\_MieteKauf: Miete der Kostenstelle Neukauf im Jahr nach dem Kauf, sonst ne\_MieteQmJahr, sonst Kaufpreis × Mietrendite. ne\_Rendite und ne\_Faktor auf den Kaufpreis ohne Nebenkosten.
 - Erhaltung: Ø der VERGLEICH\_JAHRE = 10 Jahre nach dem Geschäft im Raster. Verkauf aus prg\_MieteHalten und prg\_ErhaltungHalten (vk\_MieteOE, vk\_ErhOE), Kauf aus prg\_Miete und prg\_Erhaltung des Neuobjekts (ne\_MieteOE, ne\_ErhOE); Quote = Erhaltung Ø / Miete Ø.
@@ -1457,7 +1457,7 @@ Kontrolle im Blatt BWA-Zuordnung: 1353 der Halten-Ansicht gegen lqb\_ZvE je Jahr
 
 **Wunsch:** ein gut verständlicher Export der ganzen Mappe für den Mandanten, kompakter und schlanker: Projektionen nachvollziehen, BWAs plausibilisieren, Gesamtübersicht mit wenigen Blättern.
 
-**Aufruf:** `python -m prognosemodell.export MAPPE [--ausgabe PFAD]`, Standard `<Mappe>_Mandant.xlsx` daneben. Gelesen werden die gespeicherten Werte (openpyxl, data\_only) über die benannten Bereiche und die BWA-Blätter; die Formeln der Mappe nur für die Herkunft der Objektdaten. Ohne berechnete Werte (frisch erzeugt, nie geöffnet) rechnet LibreOffice headless, sonst Abbruch mit Hinweis. Der Export enthält keine Formeln, Namen, Prüfungen oder Makros.
+**Aufruf:** `python -m prognosemodell.export MAPPE [--ausgabe PFAD]`, Standard `<Mappe>_Mandant.xlsx` daneben. Gelesen werden die gespeicherten Werte (openpyxl, data\_only) über die benannten Bereiche und die BWA-Blätter; die Formeln der Mappe nur für die Herkunft der Objektdaten. Ohne berechnete Werte (frisch erzeugt, nie geöffnet) rechnet LibreOffice headless, sonst Abbruch mit Hinweis. Der Export enthält keine Namen, Prüfungen oder Makros; Formeln nur innerhalb eines Blatts (Abschnitt 36).
 
 **Blätter:**
 - **Überblick:** start\_Empfehlung, start\_Belastbarkeit, Endvermögen je Option (vg\_\*) mit Differenz zu Halten und Rang, Wert der § 6b-Kette, Steuer gesamt, tiefster Liquiditätsstand, Datenlage (ueb\_\*, pr\_Gesamt), Inhalt mit Links, Tabelle ueb\_\* je Jahr und die beiden Diagramme der Übersicht; darunter das Gesamtvermögen nach latenter Steuer je Jahr für alle Optionen (vgj\_\*, Reihenfolge Halten, Plan, C, B) mit Diagramm wie im Blatt Vergleich (mappe.diagramm\_szenarien).
@@ -1466,7 +1466,7 @@ Kontrolle im Blatt BWA-Zuordnung: 1353 der Halten-Ansicht gegen lqb\_ZvE je Jahr
 - **BWA gesamt:** „Alle Objekte“ ohne Monatsspalten und Hilfszeile; bei bwa\_VglHalten = ja dazu Plan − Halten je BWA-Zeile in den Planjahren.
 - **BWA halten:** „Alle Objekte halten“ (Status quo) wie die BWA gesamt aufbereitet, unabhängig von bwa\_VglHalten. Entfällt, wenn die Planjahre der BWA gesamt gleichen (ohne Verkauf und Kauf).
 - **BWA je Objekt:** alle übrigen BWA-Blätter (B4 „Nr.“, Hilfszeile „Jahr (für Formeln)“) untereinander, Inhaltsverzeichnis mit Links; Übersichtskostenstellen (Abschnitt 33) mit den zusammengefassten Kostenstellen im Titel.
-- **Verkauf und Kauf:** Tabellen der Verkäufe und Neuobjekte (ausgeschaltete grau durchgestrichen), darunter aus dem Sonderbereich die Vorgänge mit „rechnet mit = 1“ und die Detailsicht Kauf nur mit den Spalten erfasster Neuobjekte. Ohne Verkauf und Neuobjekt entfällt das Blatt.
+- **Verkauf und Kauf:** Tabellen der Verkäufe und Neuobjekte je Vorgang eine Spalte (Abschnitt 36, ausgeschaltete grau durchgestrichen), darunter aus dem Sonderbereich die Vorgänge mit „rechnet mit = 1“ und die Detailsicht Kauf nur mit den Spalten erfasster Neuobjekte. Ohne Verkauf und Neuobjekt entfällt das Blatt.
 - **Annahmen:** Basisjahr, Prognosejahre und die zentralen Annahmen des Startblatts (mappe.zentrale\_annahmen), Daten je Objekt mit Herkunft als Farbe nach der Farblogik des Blatts Objekte (Formel der Auffülllogik blau; Verknüpfung zum Kostenstellenblatt, eingelesener Wert oder Deckung aus dem Blatt Anlagen grün, formeln.deckt\_anlagen; Zinssatz und Rate nur mit Restschuld), Prüfungen mit Anzahl > 0.
 
 **Regeln:** BWA-Zeilen ohne Wert entfallen, Summenzeilen bleiben; Abschnitte unter der BWA (Herleitung, Finanzierung, Abschreibungen je Anlage) nur mit Zeilen ungleich 0. Ist-Vorjahre nur, wenn „Alle Objekte“ dort Werte hat. Beträge auf volle Euro, negative rot, Differenzen grün bzw. rot. Druck: Querformat A4, eine Seite breit, Fußzeile mit Blattname und Seitenzahl.
@@ -1558,3 +1558,18 @@ Prüfung: Paket OBJ-001 2030 = −40.115,43 − 36.600 (Sonder-AfA im Kaufjahr 5
 
 **Prüfung im Prüfskript:** „Cashflow: Kapitalflussrechnung …“ je Szenario gegen Auswertung, Liquidität und Rücklagenspiegel, mit § 6b-Verkauf, Verkauf ohne § 6b, Ablösung, Kauf mit Kredit; „Cashflow: Kapitaldienstdeckung unter 1“.
 
+
+## 36. Mandanten-Export: Verständnisformeln und Verkauf und Kauf ausführlicher
+
+**Wunsch:** Käufe und Verkäufe im Export nachvollziehbarer machen, vor allem mit Kreditquote, Zinssatz, Fläche und Mietpreis. Kredit, Zweitkredit und die weiteren Gebäudedaten sollen sich ein- und ausblenden lassen. Statt reiner Werte soll der Mandant die Zusammensetzung sehen: Werte aus anderen Blättern als Zahl, innerhalb eines Blatts als Formel.
+
+**Formeln im Export:** Eine Zelle wird nur Formel, wenn ihre Teile im selben Blatt des Exports stehen und die Formel den Wert der Mappe ergibt. Sonst bleibt der Wert. Excel rechnet beim Öffnen (fullCalcOnLoad).
+- **Überblick:** Differenz zu Halten und Rang (RANK) im Ergebnis; Differenz Plan − Halten je Jahr.
+- **Jahresrechnung:** jede „=“-Zeile summiert die letzte „=“-Zeile des Abschnitts und die Zeilen dazwischen. Ein Posten, der weiter oben schon steht, verweist darauf (laufendes Ergebnis, AfA, Zinsen, Steuer, Liquidität). Differenz Plan − Halten aus den beiden Zeilen. Summe = SUM über die Jahre.
+- **Cashflow, Ergebnisbrücke, BWA-Blätter, Sonderbereich:** Die Formeln der Mappe werden auf die Zeilen im Export übertragen (`export.uebersetze`). Bezüge auf ausgelassene Zeilen werden ihr Wert, Summanden 0 entfallen. Formeln mit Namen oder Bezügen auf andere Blätter bleiben Werte. Beispiele: operativer Cashflow, Liquidität Anfang = Ende des Vorjahrs, Kapitaldienstdeckung, Paket = Verkauf + Käufe, Gesamtkosten und Betriebsergebnis der BWA, Ergebnis- und Detailsicht je Vorgang. In der Differenz Plan − Halten der BWA gilt das nur für Grundrechenarten und SUM.
+
+**Blatt Verkauf und Kauf:** Verkäufe und Neuobjekte je Vorgang eine Spalte, je Angabe eine Zeile (`export.VERKAUF_ANGABEN`, `export.NEU_ANGABEN`). Leere Angaben entfallen, Gruppen (Zeilen der Ebene 1 und 2, Überschrift darüber) sind aufgeklappt.
+- **Verkäufe:** ObjektID, Bezeichnung, weitere Kostenstellen, aktiv, Status, Verkaufsjahr, Vorbesitzzeit; Verkaufspreis − Kosten = Nettoerlös − Buchwert Gebäude − AK G+B = Veräußerungsgewinn; § 6b nutzen, Neubau, Rücklage und Fristjahr, reinvestieren. Gruppe Aufteilung: Anteil G+B, Erlösanteile, Gewinn Gebäude und G+B. Gruppe Miete und Darlehen des Objekts: Miete im Verkaufsjahr, Zinssatz des Darlehens, Ablösung bei Verkauf (aus Prognose und Objekten, beim Paket summiert).
+- **Neuobjekte:** NeuID, Name, aktiv, Status, Kaufjahr, RücklageIDs; Kaufpreis + Nebenkosten, davon G+B und Gebäude, Anteil G+B; Übertrag § 6b = ü1 + ü2 + ü3 (Gruppe); AfA-Basis = Gebäude − ü1 − ü3, steuerliche AK G+B = G+B − ü2, AfA-Satz. Gruppe Gebäude und Miete: AfA-Methode, Sonder-AfA, Fläche, Mietpreis je m², Jahresmiete aus m² = Fläche × Preis × 12, Mietrendite, Erhaltung, Mietsteigerung, Wartejahre, Kostenstelle Neukauf, Miete im ersten vollen Jahr. Finanzierung: Kaufpreis + Nebenkosten − Einsatz Verkaufserlös = Finanzierungsbedarf, Eigenmittel = Bedarf − Kredit, Kredit. Gruppe Kredit (nur mit Kredit): Kreditquote = Kredit / (Kaufpreis + Nebenkosten), Hauptkredit = Kredit − Zweitkredit, Zinssatz, Tilgungsart, Tilgung, Laufzeit, tilgungsfreie Jahre, Rate aus dem Blatt Darlehen. Darin Gruppe Zweitkredit (Ebene 2, nur mit Zweitkredit): Betrag, Anteil am Kredit, Konditionen wie beim Hauptkredit, Restschuld nach der Laufzeit.
+
+**Prüfung im Prüfskript:** Der Export wird in LibreOffice durchgerechnet; alle Werte im Fall „Export: Mandanten-Export …“ sind damit Ergebnisse der Formeln. Das Neuobjekt hat jetzt Fläche 1.000 m² zu 6,50 €, Kreditquote 80 % und 25 % Zweitkredit zu 1 %. Neu: Formeltexte (Export-Formel), Gliederungsebenen (Export-Ebene), Werte der neuen Angaben (Kredit 1,2 Mio, Hauptkredit 900.000, Rate 54.000, Jahresmiete 78.000, Zinssatz des Bestandsdarlehens KSt 2).

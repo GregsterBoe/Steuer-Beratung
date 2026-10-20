@@ -64,7 +64,7 @@ python -m pruefung.pruefen "Etappe 9"  # nur Fälle, deren Name den Text enthäl
 python -m pruefung.pruefen -j 2      # höchstens 2 Fälle gleichzeitig (Standard: ein Prozess je Kern)
 python -m pruefung.pruefen_einlesen  # prüft die Einleseschicht, ohne LibreOffice
 python -m pruefung.zirkelbezug      # sucht Zirkelbezüge, wie Excel sie sieht, ohne LibreOffice
-python -m prognosemodell.export Prognose.xlsx   # Mandanten-Export Prognose_Mandant.xlsx: kompakt, nur Werte
+python -m prognosemodell.export Prognose.xlsx   # Mandanten-Export Prognose_Mandant.xlsx: kompakt, mit Verständnisformeln
 python -m prognosemodell.vorlagen    # schreibt vorlagen/Kostenstellen_BWA_Vorlage.xlsx und vorlagen/Inventar_Vorlage.xlsx
 ```
 
@@ -207,7 +207,7 @@ Die Ergebnisse stehen auch im **DATEV-BWA-Format** (Projektplan, Abschnitt 18):
 - **Vergleich mit Halten:** In „Alle Objekte“ steht in D3 der Schalter „Vergleich mit Halten“ (ja/nein). Bei „ja“ zeigen die Spalten rechts neben den Planjahren je Position und Jahr die Differenz Plan − Halten (grün mehr, rot weniger), auch für Herleitung und Finanzierung; bei „nein“ bleiben sie leer. `--uebernehmen` übernimmt den Schalter.
 - **Blatt Verkauf und Kauf:** je Verkauf eine Ergebnissicht für die Berichterstattung und eine Detailsicht. Die Ergebnissicht zeigt Erlös, Reinvestition, Kapitalanlage, Übertrag § 6b und den Vergleich Halten gegen Alternative im ersten vollen Jahr. Die Detailsicht zeigt die Einzelauflistung nach G+B und Gebäude und die Planung. Dazu kommt je Neuobjekt die Detailsicht des Kaufs.
 
-**Mandanten-Export:** `python -m prognosemodell.export Prognose.xlsx` schreibt daneben `Prognose_Mandant.xlsx` (anderer Name mit `--ausgabe`), eine schlanke Fassung für den Mandanten, nur mit Werten. Die Mappe muss in Excel gespeichert sein; eine frisch erzeugte, nie geöffnete Mappe rechnet LibreOffice vorher durch. Bis zu neun Blätter:
+**Mandanten-Export:** `python -m prognosemodell.export Prognose.xlsx` schreibt daneben `Prognose_Mandant.xlsx` (anderer Name mit `--ausgabe`), eine schlanke Fassung für den Mandanten. Summen und Herleitungen, deren Teile im selben Blatt stehen, sind Formeln (z. B. „= laufendes Ergebnis“ = Einnahmen − Ausgaben − AfA, Summe über die Jahre, Gesamtkosten der BWA); Werte aus anderen Blättern stehen als Zahl. Die Mappe muss in Excel gespeichert sein; eine frisch erzeugte, nie geöffnete Mappe rechnet LibreOffice vorher durch. Bis zu neun Blätter:
 - **Überblick:** Empfehlung, Endvermögen je Option, Datenlage, Verkehrswert und Gesamtvermögen je Jahr mit Diagrammen (Halten gegen Plan), dazu das Gesamtvermögen je Jahr für alle vier Optionen mit einem gemeinsamen Diagramm.
 - **Jahresrechnung:** je Jahr vom Ergebnis über Steuer und Geldfluss zum Vermögen, für Plan und Halten, dazu die Differenz. Jede Spalte rechnet von oben nach unten.
 - **Ergebnisbrücke:** vom Ergebnis bei Halten über die Pakete (Verkauf mit seinen Käufen) zum Ergebnis im Plan, ohne leere Pakete und Vorgänge und ohne Kontrollzeile. Ohne Verkauf und Kauf entfällt das Blatt.
@@ -215,7 +215,7 @@ Die Ergebnisse stehen auch im **DATEV-BWA-Format** (Projektplan, Abschnitt 18):
 - **BWA gesamt:** Summen-BWA mit Ist-Jahren und Planjahren und der Herleitung der Sonderposten; bei „Vergleich mit Halten = ja“ auch die Differenz zu Halten.
 - **BWA halten:** dieselbe Summen-BWA als Status quo: alle Objekte behalten, ohne Verkäufe und Neuobjekte („Alle Objekte halten“). Gleicht sie der BWA gesamt (ohne Verkauf und Kauf), entfällt das Blatt.
 - **BWA je Objekt:** alle Kostenstellenblätter untereinander, mit Inhaltsverzeichnis; dazu die Übersichtskostenstellen (`--uebersicht`), je die Summe der Kostenstellen eines Gebäudes.
-- **Verkauf und Kauf:** Verkäufe, Neuobjekte, Ergebnis- und Detailsicht je Vorgang. Ohne Verkauf und Kauf entfällt das Blatt.
+- **Verkauf und Kauf:** Verkäufe und Neuobjekte je Vorgang eine Spalte: Erlös, Buchwert und Gewinn, § 6b-Rücklage, Miete und Darlehen des verkauften Objekts; beim Kauf Anschaffungskosten, Übertrag § 6b, AfA-Basis, Fläche und Mietpreis, Finanzierung mit Kreditquote, Zinssatz, Tilgung und Rate von Kredit und Zweitkredit. Aufteilung, Gebäude und Miete, Kredit und Zweitkredit sind Gruppen zum Ein- und Ausblenden (+/− am linken Rand). Darunter Ergebnis- und Detailsicht je Vorgang. Ohne Verkauf und Kauf entfällt das Blatt.
 - **Annahmen:** zentrale Annahmen, Daten je Objekt mit Herkunft (blau Annahme, grün Buchhaltung oder Anlagenverzeichnis), auffällige Prüfungen.
 
 Zeilen ohne Wert, Monatsspalten, Hilfszeilen und ausgeschaltete Vorgänge entfallen; Ist-Vorjahre erscheinen nur, wenn sie eingelesen sind. Alle Blätter sind für den Druck im Querformat eingerichtet.
