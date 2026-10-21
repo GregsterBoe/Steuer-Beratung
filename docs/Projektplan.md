@@ -967,7 +967,7 @@ Je Prüfung eine Zeile mit Art, Anzahl betroffener Zeilen (pr\_Anzahl) und Ergeb
 | Objekte mit Status ungleich OK | Fehler | Statusspalte Objekte |
 | Verkäufe mit Status ungleich OK | Fehler | Statusspalte Verkäufe, ohne „§ 6b unzulässig“ |
 | Neuobjekte mit Status ungleich OK, darunter Fristverstoß | Fehler | Statusspalte Neuobjekte |
-| Steuerwelt außerhalb des MVP | Fehler | par\_Steuerwelt ≠ GmbH |
+| Steuerwelt unbekannt | Fehler | par\_Steuerwelt weder GmbH noch GmbH & Co. KG (Abschnitt 37) |
 | Vorbesitzzeit für § 6b zu kurz | Warnung | Status „§ 6b unzulässig: Vorbesitzzeit zu kurz“ |
 | Rücklage nur teilweise übertragen | Warnung | Auflösung > 0 und ein Neuobjekt nennt die Rücklage |
 | Rücklage ohne Neuobjekt | Warnung | Auflösung > 0 und kein Neuobjekt nennt sie |
@@ -1573,3 +1573,31 @@ Prüfung: Paket OBJ-001 2030 = −40.115,43 − 36.600 (Sonder-AfA im Kaufjahr 5
 - **Neuobjekte:** NeuID, Name, aktiv, Status, Kaufjahr, RücklageIDs; Kaufpreis + Nebenkosten, davon G+B und Gebäude, Anteil G+B; Übertrag § 6b = ü1 + ü2 + ü3 (Gruppe); AfA-Basis = Gebäude − ü1 − ü3, steuerliche AK G+B = G+B − ü2, AfA-Satz. Gruppe Gebäude und Miete: AfA-Methode, Sonder-AfA, Fläche, Mietpreis je m², Jahresmiete aus m² = Fläche × Preis × 12, Mietrendite, Erhaltung, Mietsteigerung, Wartejahre, Kostenstelle Neukauf, Miete im ersten vollen Jahr. Finanzierung: Kaufpreis + Nebenkosten − Einsatz Verkaufserlös = Finanzierungsbedarf, Eigenmittel = Bedarf − Kredit, Kredit. Gruppe Kredit (nur mit Kredit): Kreditquote = Kredit / (Kaufpreis + Nebenkosten), Hauptkredit = Kredit − Zweitkredit, Zinssatz, Tilgungsart, Tilgung, Laufzeit, tilgungsfreie Jahre, Rate aus dem Blatt Darlehen. Darin Gruppe Zweitkredit (Ebene 2, nur mit Zweitkredit): Betrag, Anteil am Kredit, Konditionen wie beim Hauptkredit, Restschuld nach der Laufzeit.
 
 **Prüfung im Prüfskript:** Der Export wird in LibreOffice durchgerechnet; alle Werte im Fall „Export: Mandanten-Export …“ sind damit Ergebnisse der Formeln. Das Neuobjekt hat jetzt Fläche 1.000 m² zu 6,50 €, Kreditquote 80 % und 25 % Zweitkredit zu 1 %. Neu: Formeltexte (Export-Formel), Gliederungsebenen (Export-Ebene), Werte der neuen Angaben (Kredit 1,2 Mio, Hauptkredit 900.000, Rate 54.000, Jahresmiete 78.000, Zinssatz des Bestandsdarlehens KSt 2).
+
+## 37. Steuerwelt GmbH & Co. KG (ein Gesellschafter, vereinfacht)
+
+**Wunsch:** statt der GmbH eine gewerblich geprägte GmbH & Co. KG rechnen können, vereinfacht mit einem Gesellschafter.
+
+**Parameter.** par\_Steuerwelt hat die Auswahl GmbH und GmbH & Co. KG (modelle.STEUERWELTEN). par\_Steuersatz heißt jetzt „Steuersatz GmbH“ und gilt nur für die GmbH. Alle Steuerformeln (Liquidität, Auswertung, Übersicht Basisjahr, Sonderbereich Verkauf und Kauf) rechnen mit dem berechneten par\_SteuersatzEff. Neuer Abschnitt „GmbH & Co. KG“, eingeklappt:
+
+| Name | Bedeutung | Wert |
+| --- | --- | --- |
+| par\_KGESt | ESt-Grenzsteuersatz des Gesellschafters | 42 % (Platzhalter) |
+| par\_KGSoli | SolZ auf die ESt nach Anrechnung | 5,5 % |
+| par\_KGHebesatz | GewSt-Hebesatz | 400 % |
+| par\_KGMesszahl | Steuermesszahl | 3,5 % |
+| par\_KGAnrechnung | Faktor § 35 EStG | 4,0 |
+| par\_KGKuerzung | erweiterte Kürzung, ja = keine GewSt | nein |
+| par\_KGVerlustausgleich | Verluste sofort mit anderen Einkünften verrechnen | ja |
+| par\_KGGewSt | berechnet: IF(Kürzung; 0; Messzahl × Hebesatz) | 14 % |
+| par\_VerlustSatz | berechnet: KG mit Verlustausgleich ESt × (1 + SolZ), sonst 0 | 44,31 % |
+
+par\_SteuersatzEff = KG: par\_KGGewSt + (par\_KGESt − MIN(Anrechnung × Messzahl; GewSt; ESt)) × (1 + SolZ), sonst par\_Steuersatz. Mit den Platzhaltern 14 % + 28 % × 1,055 = 43,54 %.
+
+**Steuer und Verlust.** Liquidität: Steuer = Bemessungsgrundlage × par\_SteuersatzEff + (Ergebnis vor Verlustvortrag − Bemessungsgrundlage) × par\_VerlustSatz. Für die GmbH ist par\_VerlustSatz 0, die Formel also wie bisher. Bei der KG mit Verlustausgleich rechnet die ESt ohne Vortrag auf das ganze Ergebnis: Ein Verlust ergibt eine Erstattung, ein vom Vortrag gedeckter Gewinn trägt nur ESt und SolZ, weil die Spalte Verlustvortrag dann nur noch den gewerbesteuerlichen Vortrag führt. Die latente Steuer folgt derselben Regel (formeln.latente\_steuer): MAX(x − Vortrag; 0) × par\_SteuersatzEff + (x − MAX(x − Vortrag; 0)) × par\_VerlustSatz mit x = stille Reserven + Rücklage.
+
+**Prüfung.** „steuerwelt“ (Fehler) meldet nur noch unbekannte Werte. Neu „kg\_vereinfacht“ (Hinweis), solange die KG gewählt ist: ein Gesellschafter, ohne § 15a EStG, GewSt-Freibetrag (§ 11 Abs. 1 GewStG), § 34a EStG und Sonderbetriebsvermögen.
+
+**Unverändert:** AfA, Verkauf, § 6b (bei einem Gesellschafter deckt sich die gesellschafterbezogene Betrachtung mit der KG), Darlehen, BWA, Drei-Objekt-Grenze (die KG ist gewerblich geprägt). Die Alternativanlage bleibt voll steuerpflichtig mit dem angewandten Satz.
+
+**Testfälle:** „GmbH & Co. KG: Steuersatz und Verlustausgleich“ (Verlustvortragsfall aus Etappe 7: Steuer 2030 = −95.884,57 × 44,31 % = −42.486,45; 2034 = 1.044.915,43 × 43,54 % + 95.884,57 × 44,31 % = 497.442,63) und „GmbH & Co. KG: erweiterte Kürzung, Verluste vortragen“ (Satz 44,31 %, Steuer 2030 = 0).

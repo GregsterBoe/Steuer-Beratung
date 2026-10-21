@@ -1061,7 +1061,7 @@ def _vorgang(b: _Block, n: int) -> None:
     b.zeile_("uebertrag", "Übertrag § 6b EStG", ok(f"-({rl('rl_UebGeb')}+{rl('rl_UebGuB')})"))
     b.zeile_("steuer", "Steuer auf den Gewinn ca. (Verkaufsjahr, Auflösung im Fristjahr)",
              ok(f"-(N({vk('vk_Gewinn')})-{rl('rl_Betrag')}+{rl('rl_Aufloesung')}"
-                f"+{rl('rl_Zuschlag')})*par_Steuersatz"))
+                f"+{rl('rl_Zuschlag')})*par_SteuersatzEff"))
     # Verkauf zum Jahresende: Restschuld nach der Rate des Verkaufsjahrs
     b.zeile_("abloesung", "Ablösung Darlehen des Objekts (Restschuld Ende Verkaufsjahr)",
              ok("-SUMIFS(prg_RestschuldHalten,prg_ID,{id},prg_Jahr,{jahr})"))
@@ -1095,7 +1095,7 @@ def _vorgang(b: _Block, n: int) -> None:
            ("e_zinsen", "Zinsen Darlehen", "{p_zinsen}"),
            ("e_ergebnis", "vorläufiges Ergebnis", "{p_ergebnis}"),
            ("e_vor", "liquider Überschuss vor Steuern", "{p_cashflow}"),
-           ("e_steuer", "Steuern ca.", "-{p_ergebnis}*par_Steuersatz"),
+           ("e_steuer", "Steuern ca.", "-{p_ergebnis}*par_SteuersatzEff"),
            ("e_nach", "liquider Überschuss nach Steuern ca.", "{e_vor}+{e_steuer}")]
     ergebnis_zeile = b.zeile
     b.leer(len(zus) + 1)   # Platz; gefüllt, sobald die Planung steht
@@ -1239,7 +1239,7 @@ def blatt_sonderbereich(wb, modell: Modell) -> None:
                 "Objekts wird aus dem Erlös abgelöst. Neuobjekte "
                 "zählen beim Verkauf ihrer Quelle 1. Je Verkauf "
                 "eine Ergebnissicht und eine Detailsicht; Steuern ca. = Ergebnis × "
-                "Grenzsteuersatz, ohne Verlustvortrag. Die genaue Steuer je Jahr steht im "
+                "angewandter Steuersatz, ohne Verlustvortrag. Die genaue Steuer je Jahr steht im "
                 "Blatt Liquidität.")
     b = _Block(ws, 4)
     b.kopf("Endvermögen nach latenter Steuer am Ende des Rasters", "A Plan (§ 6b)",

@@ -10,7 +10,7 @@ Spaltenschlüssel abgelegt.
 # Kernparameter: auf dem Parameterblatt hervorgehoben (★, fett); Abschnitte ohne
 # Kernparameter sind eingeklappt
 KERNPARAMETER = {
-    "par_Basisjahr", "par_Prognosejahre", "par_Steuersatz", "par_Mietsteig", "par_NeuMietsteig",
+    "par_Basisjahr", "par_Prognosejahre", "par_Steuerwelt", "par_Steuersatz", "par_Mietsteig", "par_NeuMietsteig",
     "par_Erhaltsteig", "par_Wertsteig", "par_Alternativrendite", "par_StatusPruefung",
     "par_AnnVervielfaeltiger", "par_AnnGebaeudeanteil",
 }
@@ -26,12 +26,35 @@ PARAMETER_WIRKUNG = {
     "par_Startjahr": "Berechnet. Erstes Jahr in Prognose, Liquidität, Auswertung, BWA-Blättern.",
     "par_Endjahr": "Berechnet. Verkaufs- und Kaufjahre müssen bis hier liegen; danach "
                    "endende § 6b-Fristen meldet die Prüfung.",
-    "par_Steuerwelt": "Nur GmbH ist gerechnet; jeder andere Wert ergibt einen Fehler in der "
-                      "Prüfung.",
-    "par_Steuersatz": "Steuer je Jahr = Bemessungsgrundlage × Satz (Liquidität) und latente "
-                      "Steuer = stille Reserven + Rücklage − Verlustvortrag, × Satz "
-                      "(Auswertung). Wirkt damit auf Liquidität, Zinsertrag und das "
-                      "Endvermögen aller Szenarien.",
+    "par_Steuerwelt": "GmbH: Steuersatz GmbH, Verluste nur vorgetragen. GmbH & Co. KG: Satz "
+                      "aus ESt, SolZ und GewSt mit Anrechnung § 35 (Abschnitt GmbH & Co. KG), "
+                      "Verluste wahlweise sofort mit anderen Einkünften verrechnet. Andere "
+                      "Werte ergeben einen Fehler in der Prüfung.",
+    "par_Steuersatz": "Nur GmbH: wird zum angewandten Steuersatz. Steuer je Jahr = "
+                      "Bemessungsgrundlage × Satz (Liquidität) und latente Steuer = stille "
+                      "Reserven + Rücklage − Verlustvortrag, × Satz (Auswertung). Wirkt damit "
+                      "auf Liquidität, Zinsertrag und das Endvermögen aller Szenarien.",
+    "par_SteuersatzEff": "Berechnet: der Satz, mit dem Liquidität, Auswertung und BWA rechnen. "
+                         "GmbH = Steuersatz GmbH. KG = GewSt je € + (ESt − Anrechnung) × "
+                         "(1 + SolZ); Anrechnung = MIN(Faktor × Messzahl, GewSt, ESt).",
+    "par_KGESt": "Nur GmbH & Co. KG: Grenzsteuersatz des Gesellschafters auf den Gewinnanteil "
+                 "(100 %). Bestimmt den angewandten Satz und die Erstattung bei Verlusten.",
+    "par_KGSoli": "Nur GmbH & Co. KG: SolZ auf die ESt nach Anrechnung der GewSt.",
+    "par_KGHebesatz": "Nur GmbH & Co. KG: GewSt je € Gewinn = Messzahl × Hebesatz. Bis zum "
+                      "Hebesatz Anrechnungsfaktor × 100 % (400 %) neutralisiert § 35 die GewSt.",
+    "par_KGMesszahl": "Nur GmbH & Co. KG: Steuermesszahl, gesetzlich 3,5 %.",
+    "par_KGAnrechnung": "Nur GmbH & Co. KG: Anrechnung auf die ESt = Faktor × Messbetrag, "
+                        "höchstens die gezahlte GewSt.",
+    "par_KGKuerzung": "Nur GmbH & Co. KG: ja = keine GewSt und keine Anrechnung; der Satz "
+                      "ist dann ESt × (1 + SolZ). Vereinfacht: gilt auch für die "
+                      "Veräußerungsgewinne.",
+    "par_KGVerlustausgleich": "Nur GmbH & Co. KG: ja = Verluste mindern die ESt im selben Jahr "
+                              "(Steuer negativ), der Verlustvortrag gilt nur für die GewSt; "
+                              "nein = Verluste werden wie bei der GmbH vorgetragen.",
+    "par_KGGewSt": "Berechnet: Messzahl × Hebesatz, mit erweiterter Kürzung 0.",
+    "par_VerlustSatz": "Berechnet: Steuer je € Verlust bzw. je € Gewinn, der nur "
+                       "gewerbesteuerlich vom Vortrag gedeckt ist. GmbH und KG ohne "
+                       "Verlustausgleich: 0.",
     "par_Mietsteig": "Miete und weitere Einnahmen je Jahr = Basiswert × (1 + Satz)^Jahre. "
                      "Gilt für den Bestand; ein Bestandsobjekt kann im Blatt Objekte einen "
                      "eigenen Satz haben. Neuobjekte: Mietsteigerung Neuobjekte.",
@@ -378,7 +401,8 @@ LIQUIDITAET = {
     "vortrag_genutzt": "MIN(Verlustvortrag Vorjahr, positives Ergebnis).",
     "bemessung": "positives Ergebnis − genutzter Verlustvortrag.",
     "vortrag": "Vorjahr − genutzt + neuer Verlust.",
-    "steuer": "Bemessungsgrundlage × Grenzsteuersatz.",
+    "steuer": "Bemessungsgrundlage × angewandter Steuersatz; KG mit Verlustausgleich + "
+              "(Ergebnis − Bemessungsgrundlage) × Satz auf Verluste.",
     "verkaufserloes": "Nettoerlöse der gültigen Verkäufe dieses Jahres.",
     "rueckfluss": "Nettoerlös − Veräußerungsgewinn = steuerneutral zurückfließender Buchwert.",
     "kauf": "Kaufpreis + Nebenkosten der Neuobjekte mit diesem Kaufjahr (B: ohne Neuobjekte mit "
@@ -412,8 +436,10 @@ AUSWERTUNG = {
     "liquiditaet": "Liquidität kumuliert aus der Liquidität.",
     "restschuld": "Restschuld aller Darlehen am Jahresende.",
     "vermoegen": "Verkehrswert + Liquidität − Restschuld.",
-    "latente_steuer": "(stille Reserven + Rücklage − Verlustvortrag) × Grenzsteuersatz, "
-                      "mindestens 0: Steuer bei Verkauf aller Objekte zum Verkehrswert.",
+    "latente_steuer": "(stille Reserven + Rücklage − Verlustvortrag) × angewandter "
+                      "Steuersatz, mindestens 0: Steuer bei Verkauf aller Objekte zum "
+                      "Verkehrswert. KG mit Verlustausgleich: der Teil bis zum Vortrag × "
+                      "Satz auf Verluste.",
     "vermoegen_netto": "Gesamtvermögen − latente Steuer: die Vergleichsgröße der Szenarien.",
 }
 

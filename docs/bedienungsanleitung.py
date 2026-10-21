@@ -95,7 +95,8 @@ punkte([
     "**Blatt Start öffnen:** Handlungsempfehlung, Belastbarkeit der Daten und Farblegende ansehen.",
     "**Kostenstellen prüfen:** Werte des Basisjahrs in den Kostenstellenblättern kontrollieren "
     "und dort korrigieren.",
-    "**Annahmen prüfen:** im Blatt Parameter zuerst die Kernparameter (★, fett: Steuersatz, "
+    "**Annahmen prüfen:** im Blatt Parameter zuerst die Steuerwelt (GmbH oder GmbH & Co. KG; "
+    "für die KG die Sätze im Abschnitt GmbH & Co. KG) und die Kernparameter (★, fett: Steuersatz, "
     "Steigerungen, Alternativrendite), dann die blauen Zellen im Blatt Objekte. Wo bessere "
     "Werte bekannt sind, eintippen.",
     "**Planung erfassen:** geplante Verkäufe im Blatt Verkäufe, Käufe im Blatt Neuobjekte.",

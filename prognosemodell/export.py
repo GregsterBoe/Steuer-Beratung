@@ -328,7 +328,7 @@ def _blatt_ueberblick(ex, wb, quelle: str, blaetter: list) -> None:
                    f"Basisjahr {basis} (Ist), Prognose {jahre[0]}–{jahre[-1]}. Erstellt am "
                    f"{datetime.date.today():%d.%m.%Y}" + (f" aus {quelle}" if quelle else "")
                    + ". Alle Werte beruhen auf den Annahmen im Blatt Annahmen; die Steuer ist "
-                   "mit dem Grenzsteuersatz gerechnet.")
+                   "mit dem angewandten Steuersatz gerechnet.")
 
     _abschnitt(ws, zeile, "Ergebnis", 4)
     zeile += 1

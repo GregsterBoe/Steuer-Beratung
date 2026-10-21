@@ -1,6 +1,6 @@
 # Prognosemodell V+V
 
-20-Jahres-Prognose (2027–2046, Basis 2026) für Immobilien im Betriebsvermögen einer GmbH: AfA-Fortschreibung, Verkauf, § 6b-Rücklage und Reinvestition. Am Ende werden Szenarien verglichen: 6b-Kette, sofort versteuern und das Kapital anlegen, oder sofort versteuern und trotzdem reinvestieren.
+20-Jahres-Prognose (2027–2046, Basis 2026) für Immobilien im Betriebsvermögen einer GmbH oder einer gewerblich geprägten GmbH & Co. KG mit einem Gesellschafter: AfA-Fortschreibung, Verkauf, § 6b-Rücklage und Reinvestition. Am Ende werden Szenarien verglichen: 6b-Kette, sofort versteuern und das Kapital anlegen, oder sofort versteuern und trotzdem reinvestieren.
 
 ## Prinzipien
 
@@ -181,12 +181,18 @@ Das Blatt **Cashflow** ist eine Kapitalflussrechnung je Jahr für das oben gewä
 **Kostenstellen ohne Immobilie:** Jede Kostenstelle der Kostenstellen-Datei wird ein Objekt, auch eine für gesonderte Unternehmenseinnahmen und -ausgaben. Solche Kostenstellen bekommen im Blatt Objekte die Art „Unternehmen“ (leer = Immobilie). Sie werden wie ein Objekt aus dem Basisjahr fortgeschrieben (Einnahmen mit der Mietsteigerung, Ausgaben mit der Kostensteigerung, AfA aus den Anlagen) und zählen in Liquidität, Steuer und „Alle Objekte“ mit. Sie haben keinen Verkehrswert, und die Ergebnisbrücke weist sie getrennt aus. Ein Verkauf einer solchen Kostenstelle meldet das Prüfungsblatt als Warnung.
 
 Das Blatt **Prüfung** rechnet alle Plausibilitätsprüfungen als Formeln, je mit Art und Anzahl betroffener Zeilen:
-- **Fehler:** Status ungleich OK in Objekten, Verkäufen oder Neuobjekten (darunter Fristverstoß), Steuerwelt nicht GmbH
+- **Fehler:** Status ungleich OK in Objekten, Verkäufen oder Neuobjekten (darunter Fristverstoß), Steuerwelt weder GmbH noch GmbH & Co. KG
 - **Warnung:** Vorbesitzzeit für § 6b zu kurz, Rücklage nur teilweise oder gar nicht übertragen, Drei-Objekt-Grenze überschritten
 - **Warnung** außerdem: verkauftes Objekt mit Zinsaufwand, aber ohne Restschuld (Ablösung fehlt)
-- **Hinweis:** Frist nach Prognoseende, Liquidität negativ (Finanzierungsbedarf), Kredit am Ende des Rasters nicht getilgt, Zinsaufwand ohne Restschuld grob fortgeschrieben, Verkehrswert fehlt
+- **Hinweis:** GmbH & Co. KG vereinfacht gerechnet, Frist nach Prognoseende, Liquidität negativ (Finanzierungsbedarf), Kredit am Ende des Rasters nicht getilgt, Zinsaufwand ohne Restschuld grob fortgeschrieben, Verkehrswert fehlt
 
 Das Gesamtergebnis steht auch auf dem Parameterblatt und in der Übersicht.
+
+**Steuerwelt GmbH oder GmbH & Co. KG:** Der Parameter „Steuerwelt“ wählt die Rechtsform. Liquidität, Auswertung, Übersicht und BWA rechnen mit dem berechneten „angewandten Steuersatz“.
+- **GmbH:** angewandter Satz = „Steuersatz GmbH“ (KSt, SolZ und GewSt zusammen). Verluste werden vorgetragen.
+- **GmbH & Co. KG, ein Gesellschafter (vereinfacht):** Der Gewinn wird dem Gesellschafter voll zugerechnet. Angewandter Satz = GewSt + (ESt − Anrechnung § 35) × (1 + SolZ), mit GewSt = Messzahl × Hebesatz (0 bei erweiterter Kürzung) und Anrechnung = MIN(Faktor × Messzahl; GewSt; ESt). Mit den Platzhaltern (ESt 42 %, SolZ 5,5 %, Hebesatz 400 %) sind das 43,54 %. Die Sätze stehen im Abschnitt „GmbH & Co. KG“ des Parameterblatts.
+- **Verlustausgleich (KG):** Mit „Verluste mit anderen Einkünften verrechnen = ja“ mindert ein Verlust die ESt des Gesellschafters im selben Jahr (Steuer negativ, Satz auf Verluste = ESt × (1 + SolZ)). Der Verlustvortrag gilt dann nur für die GewSt: Steuer = Bemessungsgrundlage × angewandter Satz + (Ergebnis − Bemessungsgrundlage) × Satz auf Verluste. Die latente Steuer rechnet genauso. Mit „nein“ wird wie bei der GmbH vorgetragen.
+- **Nicht abgebildet:** § 15a EStG, GewSt-Freibetrag, § 34a EStG, Sonder- und Ergänzungsbilanzen, mehrere Gesellschafter. Eine Steuer auf Ausschüttungen fehlt bei der GmbH weiter; bei der KG sind Entnahmen steuerfrei, das Endvermögen ist also nach allen Steuern.
 
 Mit `--makros` entsteht eine .xlsm mit VBA-Steuerung, die Schaltflächen liegen auf dem Parameterblatt:
 - Plausibilität prüfen
