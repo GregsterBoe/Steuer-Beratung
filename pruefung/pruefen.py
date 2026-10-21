@@ -2685,15 +2685,16 @@ def faelle():
             (f"{KOPF}Liquidität:2", 1, "Jahr"),
             (f"{KOPF}Rücklagen:1", 1, "RücklageID [Tooltip]"),
             (f"{KOPF}Parameter:5", 1, "★ Basisjahr (Ist) [Tooltip]"),
-            (f"{KOPF}Parameter:14", 1, "Steigerung weitere Ausgaben p. a. [Tooltip]"),
-            # § 6b- und § 7b-Abschnitt eingeklappt, Annahmen bei fehlenden Daten (mit
-            # Kernparametern) offen
-            (f"{ZEILE_EINGEKLAPPT}Parameter", 23, (0, False)),
-            (f"{ZEILE_EINGEKLAPPT}Parameter", 24, (1, True)),
-            (f"{ZEILE_EINGEKLAPPT}Parameter", 29, (1, True)),
-            (f"{ZEILE_EINGEKLAPPT}Parameter", 33, (1, True)),
-            (f"{ZEILE_EINGEKLAPPT}Parameter", 39, (1, False)),
-            (f"{ZEILE_EINGEKLAPPT}Parameter", 47, (1, True)),
+            (f"{KOPF}Parameter:15", 1, "Steigerung weitere Ausgaben p. a. [Tooltip]"),
+            # § 6b-, GmbH & Co. KG- und § 7b-Abschnitt eingeklappt, Annahmen bei fehlenden
+            # Daten (mit Kernparametern) offen
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 24, (0, False)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 25, (1, True)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 30, (1, True)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 34, (1, True)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 45, (1, True)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 51, (1, False)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 59, (1, True)),
             ("par_6bFrist", 0, 4),
             ("par_6bFristNeubau", 0, 6),
             # Auswahllisten: je Zelle genau eine Überprüfung, sonst verwirft Excel sie
