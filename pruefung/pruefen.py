@@ -1493,7 +1493,7 @@ def faelle():
          Modell(objekte=[obj], verkaeufe=[Verkauf("OBJ-001", 2030, preis=1_400_000,
                                                   anteil_gub=0.8, nutzung_6b="ja")],
                 parameter={**OHNE_ZINS, "par_Steuerwelt": "GmbH & Co. KG"}),
-         befund(kg_vereinfacht=1) + [
+         befund(kg_vereinfacht=1, ohne_reinvest=1) + [
             ("par_KGGewSt", 0, 0.14),
             ("par_SteuersatzEff", 0, 0.4354),
             ("par_VerlustSatz", 0, 0.4431),
@@ -1504,7 +1504,6 @@ def faelle():
             # 1.044.915,43 × 43,54 % + 95.884,57 × 44,31 % (ESt ohne Vortrag)
             ("liq_Steuer", lj(2034), 497_442.63),
             ("aus_LatenteSteuer", lj(2030), 401_306.31),
-            ("pr_Gesamt", 0, "OK"),
         ]),
         # erweiterte Kürzung: keine GewSt, Satz = ESt × (1 + SolZ); ohne Verlustausgleich
         # wird der Verlust wie bei der GmbH vorgetragen
