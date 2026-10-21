@@ -7,8 +7,10 @@ alten Version noch nicht gab, behalten ihre Vorbelegung.
 
 Werte, die beim Einlesen aus der Kostenstellen-Datei entstanden sind (gleich der
 ausgeblendeten Kopie „eingelesen“), übernimmt die Mappe nicht, sobald die neue Mappe dafür
-selbst einen eingelesenen Wert hat: dann gilt der neue Stand der Kostenstellen-Datei. Die
-Kostenstellenblätter selbst werden nicht übernommen, sie kommen aus der Kostenstellen-Datei.
+selbst einen eingelesenen Wert hat: dann gilt der neue Stand der Kostenstellen-Datei. In
+AfA-Plan und Neukauf-KSt gilt das für die ganze Zeile, sobald die Kostenstelle in der neuen
+Datei steht: ein dort gelöschter Planwert bleibt leer. Die Kostenstellenblätter selbst
+werden nicht übernommen, sie kommen aus der Kostenstellen-Datei.
 """
 
 from datetime import date, datetime
@@ -274,8 +276,11 @@ def _anlagen(alt, neu, bericht: Bericht) -> None:
 
 
 def _jahreswerte(ws_alt, ws_neu, alt_zeile: int, neu_zeile: int, j0_alt: int, imp_alt: int,
-                 j0_neu: int, imp_neu: int, n_alt: int, n_neu: int, versatz: int) -> int:
-    """Eingetippte Jahreswerte einer Zeile; versatz = Basisjahr alt − Basisjahr neu."""
+                 j0_neu: int, imp_neu: int, n_alt: int, n_neu: int, versatz: int,
+                 aus_datei: bool = False) -> int:
+    """Eingetippte Jahreswerte einer Zeile; versatz = Basisjahr alt − Basisjahr neu.
+    aus_datei: die Zeile steht in der neuen Kostenstellen-Datei; deren Stand gilt dann auch
+    für Jahre, die dort inzwischen leer sind."""
     anzahl = 0
     for i in range(n_alt):
         k = i + versatz
@@ -286,7 +291,7 @@ def _jahreswerte(ws_alt, ws_neu, alt_zeile: int, neu_zeile: int, j0_alt: int, im
             continue
         eingelesen = ws_alt.cell(row=alt_zeile, column=imp_alt + i).value
         frisch = ws_neu.cell(row=neu_zeile, column=imp_neu + k).value
-        if wert == eingelesen and frisch is not None:
+        if wert == eingelesen and (frisch is not None or aus_datei):
             continue
         ws_neu.cell(row=neu_zeile, column=j0_neu + k, value=wert)
         anzahl += 1
@@ -300,6 +305,10 @@ def _afa_plan(alt, neu, bericht: Bericht, versatz: int, jahre_alt: int,
     ws_alt, ws_neu = alt["AfA-Plan"], neu["AfA-Plan"]
     jahre, j0 = prognosejahre(), 4
     belegt, frei = _id_zeilen(ws_neu, 1, 3, kapazitaet + 2)
+    # Objekte mit Kostenstellenblatt in der neuen Mappe, also aus der neuen Datei
+    ws_obj, blatt = neu["Objekte"], formeln.kst_blatt_spalte()
+    aus_datei = {str(ws_obj.cell(row=z, column=1).value).strip()
+                 for z in range(2, kapazitaet + 2) if ws_obj[f"{blatt}{z}"].value}
     for zeile in _zeilen(alt, "afp_ID", 3, ws_alt.max_row):
         oid = ws_alt.cell(row=zeile, column=1).value
         if not _ist_eingabe(oid):
@@ -309,7 +318,7 @@ def _afa_plan(alt, neu, bericht: Bericht, versatz: int, jahre_alt: int,
             continue
         bericht.zaehle("AfA-Plan", _jahreswerte(
             ws_alt, ws_neu, zeile, ziel, j0, j0 + jahre_alt + 1, j0, j0 + jahre + 1,
-            jahre_alt, jahre, versatz))
+            jahre_alt, jahre, versatz, str(oid).strip() in aus_datei))
 
 
 def _neukauf(alt, neu, bericht: Bericht, versatz: int, jahre_alt: int,
@@ -329,6 +338,7 @@ def _neukauf(alt, neu, bericht: Bericht, versatz: int, jahre_alt: int,
             belegt[str(wert).strip()] = kopf
         else:
             frei.append(kopf)
+    aus_datei = set(belegt)   # Kostenstellen der neuen Datei
     kopf_alt = erste
     ende = _zeilen(alt, "nk_ID", erste, ws_alt.max_row).stop
     while kopf_alt < ende:
@@ -342,7 +352,7 @@ def _neukauf(alt, neu, bericht: Bericht, versatz: int, jahre_alt: int,
                 for k in range(je):
                     bericht.zaehle("Neukauf-KSt", _jahreswerte(
                         ws_alt, ws_neu, kopf_alt + k, ziel + k, j0, imp_alt, j0, imp,
-                        n_alt, n, versatz))
+                        n_alt, n, versatz, str(kst).strip() in aus_datei))
         kopf_alt += je
 
 

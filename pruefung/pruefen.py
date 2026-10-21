@@ -443,6 +443,8 @@ def faelle():
     obj = testobjekt()
     ue_zellen = {("Objekte", f"{get_column_letter(nr(OBJEKT_FELDER, 'miete'))}2"): 77_777,
                  ("AfA-Plan", "D3"): 12_000, ("Alle Objekte", "D3"): "ja"}
+    ue_neu = Neuobjekt("NEU-1", 2027, kaufpreis=1_000_000, anteil_gub=0.2, afa_satz=0.02,
+                       mietrendite=0.04, erhaltungsquote=0.005, kst="KSt 31")
     ue_soll = [
         ("bwa_VglHalten", 0, "ja"),
         ("obj_ID", 1, "KSt 2"),
@@ -3155,6 +3157,21 @@ def faelle():
          Getippt(uebernahme_alt(), ue_zellen), ue_soll),
         ("Übernahme: Eingaben in die neue Mappe",
          Uebernommen(uebernahme_neu(), uebernahme_alt(), ue_zellen, ohne_ak_spalten), ue_soll),
+        # Planwert der Neukauf-Kostenstelle in der Datei gelöscht: Miete 2028 52.000 der alten
+        # Datei geht nicht mit, das Modell schreibt 50.000 × 1,02² = 52.020 fort; die 2030 im
+        # Blatt Neukauf-KSt getippten 60.000 gehen mit
+        ("Übernahme: gelöschter Planwert der Neukauf-Kostenstelle bleibt leer",
+         Uebernommen(
+             vorlage_eingelesen(neukauf=[("KSt 31", "Neubau Nord", {1020: 50_000})],
+                                neuobjekte=[ue_neu]),
+             vorlage_eingelesen(neukauf=[("KSt 31", "Neubau Nord", {1020: 50_000})],
+                                plan={"KSt 31": {1020: {2028: 52_000}}},
+                                neuobjekte=[ue_neu]),
+             {("Neukauf-KSt", f"{get_column_letter(nk_spalten()[0] + 4)}{NK_ERSTE}"): 60_000}), [
+            ("prg_Miete", prg_neu(1, 2028), 52_020),
+            ("prg_Miete", prg_neu(1, 2029), 53_060.40),
+            ("prg_Miete", prg_neu(1, 2030), 60_000),
+        ]),
         # alte Mappe ohne par_NeuMietsteig: die Neuobjekte rechnen weiter mit der
         # Mietsteigerung der alten Mappe, 3,5 %
         ("Übernahme: alte Mappe ohne Mietsteigerung Neuobjekte",
