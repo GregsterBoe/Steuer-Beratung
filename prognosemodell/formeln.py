@@ -13,7 +13,7 @@ from .modelle import (AFA_DEGRESSIV, ANL_NICHT_IM_MODELL, ANLAGE_FELDER, ANLAGE_
                       OBJEKT_ERSTE_ANLAGEN_SPALTE,
                       FEHLER, NEU_FELDER, STATUS_ANNAHME_GELOESCHT, NEU_SPALTEN, OBJEKT_FELDER, PROGNOSE_SPALTEN,
                       RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN, STATUS_6B_UNZULAESSIG,
-                      STATUS_AUS, STATUS_OK, SZ_A, SZ_B, SZ_C, SZ_BASELINE, SZENARIEN, VERKAUF_FELDER,
+                      STATUS_AUS, STATUS_OK, STEUERWELT_KG, STEUERWELTEN, SZ_A, SZ_B, SZ_C, SZ_BASELINE, SZENARIEN, VERKAUF_FELDER,
                       VERGLEICH_JAHRE, VERKAUF_SPALTEN, WARNUNG, Szenario, aus_spalten, liq_spalten,
                       DARLEHEN_SPALTEN, FIN_KREDIT, KREDIT_HAUPT, KREDIT_ZWEIT, QUELLEN,
                       TILGUNG_ANNUITAET,
@@ -1483,15 +1483,25 @@ def _vor(c, key: str, zeile: int, erstes_jahr: bool) -> str:
 
 
 def _steuer(c, zeile: int, erstes_jahr: bool, zve: str) -> dict:
-    """Steuer mit Verlustvortrag: Verluste mindern spätere Gewinne, ein Rücktrag entfällt."""
+    """Steuer mit Verlustvortrag: Verluste mindern spätere Gewinne, ein Rücktrag entfällt.
+    GmbH & Co. KG mit Verlustausgleich: die ESt rechnet ohne Vortrag auf das ganze Ergebnis
+    (Verlust = Erstattung), der Vortrag gilt nur noch für die GewSt (par_VerlustSatz)."""
     vor = _vor(c, "vortrag", zeile, erstes_jahr)
     genutzt = c("vortrag_genutzt", zeile)
+    bemessung = c("bemessung", zeile)
     return {
         "vortrag_genutzt": f"=MIN({vor},MAX({zve},0))",
         "bemessung": f"=MAX({zve},0)-{genutzt}",
         "vortrag": f"={vor}-{genutzt}+MAX(-{zve},0)",
-        "steuer": f"={c('bemessung', zeile)}*par_Steuersatz",
+        "steuer": f"={bemessung}*par_SteuersatzEff+({zve}-{bemessung})*par_VerlustSatz",
     }
+
+
+def latente_steuer(betrag: str, vortrag: str = "0") -> str:
+    """Steuer auf betrag (stille Reserven + Rücklage) nach Verlustvortrag, wie _steuer:
+    über dem Vortrag der angewandte Satz, der Rest mit dem Satz auf Verluste."""
+    nach_vortrag = f"MAX({betrag}-{vortrag},0)"
+    return f"{nach_vortrag}*par_SteuersatzEff+({betrag}-{nach_vortrag})*par_VerlustSatz"
 
 
 def _summe_jahr(name: str, jahr: str, *bedingungen: str) -> str:
@@ -1631,8 +1641,8 @@ def auswertung_zeile(sz: Szenario):
             "vermoegen": (f"={c('verkehrswert', zeile)}+{c('liquiditaet', zeile)}"
                           f"-{c('restschuld', zeile)}"),
             # Steuer, wenn alle Objekte zum Verkehrswert verkauft und die Rücklage aufgelöst würde
-            "latente_steuer": (f"=MAX({c('stille_reserven', zeile)}+{c('ruecklage', zeile)}"
-                               f"-{c('vortrag', zeile)},0)*par_Steuersatz"),
+            "latente_steuer": "=" + latente_steuer(
+                f"{c('stille_reserven', zeile)}+{c('ruecklage', zeile)}", c("vortrag", zeile)),
             "vermoegen_netto": f"={c('vermoegen', zeile)}-{c('latente_steuer', zeile)}",
         }
     return zeile_formeln
@@ -1820,7 +1830,9 @@ def pruefung_anzahl() -> dict:
         "objekte": _nicht_ok("obj_Status"),
         "verkaeufe": _nicht_ok("vk_Status", STATUS_6B_UNZULAESSIG, STATUS_AUS),
         "neuobjekte": _nicht_ok("ne_Status", STATUS_AUS),
-        "steuerwelt": '=IF(par_Steuerwelt="GmbH",0,1)',
+        "steuerwelt": "=IF(OR(" + ",".join(f'par_Steuerwelt="{w}"' for w in STEUERWELTEN)
+                      + "),0,1)",
+        "kg_vereinfacht": f'=IF(par_Steuerwelt="{STEUERWELT_KG}",1,0)',
         "vorbesitz": f'=SUMPRODUCT(--(vk_Status="{STATUS_6B_UNZULAESSIG}"))',
         "teiluebertrag": f"=SUMPRODUCT({rest}*({genannt}>0))",
         "ohne_reinvest": f"=SUMPRODUCT({rest}*({genannt}=0))",

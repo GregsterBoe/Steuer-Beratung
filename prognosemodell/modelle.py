@@ -31,6 +31,10 @@ class Parameter:
     abschnitt: Optional[str] = None  # Zwischenüberschrift vor diesem Parameter
 
 
+# Steuerwelten: GmbH oder gewerblich geprägte GmbH & Co. KG mit einem Gesellschafter
+STEUERWELT_GMBH, STEUERWELT_KG = "GmbH", "GmbH & Co. KG"
+STEUERWELTEN = (STEUERWELT_GMBH, STEUERWELT_KG)
+
 # Reihenfolge = Reihenfolge auf dem Parameterblatt.
 # Alle Sätze sind Platzhalter und vor dem Echteinsatz fachlich zu prüfen.
 PARAMETER = [
@@ -42,10 +46,16 @@ PARAMETER = [
               "berechnet"),
     Parameter("par_Endjahr", "letztes Prognosejahr", "=par_Basisjahr+par_Prognosejahre",
               FMT_JAHR, "berechnet"),
-    Parameter("par_Steuerwelt", "Steuerwelt", "GmbH", FMT_TEXT,
-              "MVP rechnet nur die gewerbliche Struktur mit GmbH", ("GmbH",)),
-    Parameter("par_Steuersatz", "Grenzsteuersatz", 0.30, FMT_PROZENT,
-              "KSt, SolZ und GewSt zusammen; Platzhalter, prüfen"),
+    Parameter("par_Steuerwelt", "Steuerwelt", STEUERWELT_GMBH, FMT_TEXT,
+              "GmbH oder gewerblich geprägte GmbH & Co. KG mit einem Gesellschafter "
+              "(vereinfacht, Sätze im Abschnitt GmbH & Co. KG)", STEUERWELTEN),
+    Parameter("par_Steuersatz", "Steuersatz GmbH", 0.30, FMT_PROZENT,
+              "KSt, SolZ und GewSt zusammen; gilt nur für die GmbH; Platzhalter, prüfen"),
+    Parameter("par_SteuersatzEff", "angewandter Steuersatz",
+              f'=IF(par_Steuerwelt="{STEUERWELT_KG}",par_KGGewSt+(par_KGESt'
+              f'-MIN(par_KGAnrechnung*par_KGMesszahl,par_KGGewSt,par_KGESt))*(1+par_KGSoli),'
+              f'par_Steuersatz)', FMT_PROZENT,
+              "berechnet; GmbH: Steuersatz GmbH, KG: GewSt + (ESt − Anrechnung § 35) × (1 + SolZ)"),
     Parameter("par_Mietsteig", "Mietsteigerung p. a.", 0.02, FMT_PROZENT, "Platzhalter"),
     Parameter("par_NeuMietsteig", "Mietsteigerung Neuobjekte p. a.", 0.02, FMT_PROZENT,
               "Platzhalter; nur Neuobjekte, eigener Satz je Neuobjekt im Blatt Neuobjekte"),
@@ -83,6 +93,30 @@ PARAMETER = [
               "mehr Verkäufe im Zeitraum: Warnung gewerblicher Grundstückshandel"),
     Parameter("par_DOJahre", "Zeitraum Drei-Objekt-Grenze (Jahre)", 5, FMT_ZAHL,
               "vereinfacht: Verkäufe innerhalb dieses Zeitraums; fachlich prüfen"),
+    Parameter("par_KGESt", "ESt-Grenzsteuersatz Gesellschafter", 0.42, FMT_PROZENT,
+              "persönlicher Satz ohne SolZ und KiSt; Platzhalter",
+              abschnitt="GmbH & Co. KG (ein Gesellschafter, nur mit Steuerwelt GmbH & Co. KG)"),
+    Parameter("par_KGSoli", "Solidaritätszuschlag auf die ESt", 0.055, FMT_PROZENT,
+              "0 %, wenn der Gesellschafter unter der Freigrenze bleibt"),
+    Parameter("par_KGHebesatz", "Gewerbesteuer-Hebesatz", 4.0, "0%",
+              "Hebesatz der Gemeinde; Platzhalter"),
+    Parameter("par_KGMesszahl", "Steuermesszahl GewSt", 0.035, FMT_PROZENT,
+              "§ 11 Abs. 2 GewStG"),
+    Parameter("par_KGAnrechnung", "Anrechnungsfaktor § 35 EStG", 4.0, "0.0",
+              "× Messbetrag, höchstens die GewSt und die ESt"),
+    Parameter("par_KGKuerzung", "erweiterte Kürzung § 9 Nr. 1 S. 2 GewStG", "nein", FMT_TEXT,
+              "ja: keine Gewerbesteuer, auch nicht auf Veräußerungsgewinne (vereinfacht)",
+              ("nein", "ja")),
+    Parameter("par_KGVerlustausgleich", "Verluste mit anderen Einkünften verrechnen", "ja",
+              FMT_TEXT, "ja: Verlust mindert die ESt im selben Jahr (Erstattung), nur die "
+              "GewSt trägt ihn vor; § 15a EStG nicht geprüft", ("ja", "nein")),
+    Parameter("par_KGGewSt", "Gewerbesteuer je € Gewinn",
+              '=IF(par_KGKuerzung="ja",0,par_KGMesszahl*par_KGHebesatz)', FMT_PROZENT,
+              "berechnet; ohne Freibetrag § 11 Abs. 1 GewStG"),
+    Parameter("par_VerlustSatz", "Steuersatz auf Verluste",
+              f'=IF(AND(par_Steuerwelt="{STEUERWELT_KG}",par_KGVerlustausgleich="ja"),'
+              f'par_KGESt*(1+par_KGSoli),0)', FMT_PROZENT,
+              "berechnet; Erstattung je € Verlust, GmbH 0 (nur Vortrag)"),
     Parameter("par_QNGSatz", "Sonder-AfA § 7b (QNG) p. a.", 0.05, FMT_PROZENT,
               "Neuobjekte mit „Sonder-AfA § 7b (QNG)“ = ja: Satz × Bemessungsgrundlage, fest "
               "je Jahr, zusätzlich zur regulären AfA",
@@ -1129,8 +1163,11 @@ PRUEFUNGEN = [
     Pruefung("neuobjekte", "Neuobjekte mit Status ungleich OK, darunter Kauf nach Fristjahr "
              "(Fristverstoß) und Kauf vor Bildung der Rücklage", FEHLER,
              "Blatt Neuobjekte, Spalte Status"),
-    Pruefung("steuerwelt", "Steuerwelt außerhalb des MVP, Ergebnisse gelten nur für die GmbH",
+    Pruefung("steuerwelt", "Steuerwelt unbekannt, gerechnet sind nur GmbH und GmbH & Co. KG",
              FEHLER, "Blatt Parameter, Steuerwelt"),
+    Pruefung("kg_vereinfacht", "GmbH & Co. KG vereinfacht: ein Gesellschafter, ohne § 15a "
+             "EStG, GewSt-Freibetrag, § 34a EStG und Sonderbetriebsvermögen", HINWEIS,
+             "Blatt Parameter, Abschnitt GmbH & Co. KG"),
     Pruefung("vorbesitz", "§ 6b gewählt, aber Vorbesitzzeit unter der Mindestdauer: "
              "Gewinn wird sofort versteuert", WARNUNG, "Blatt Verkäufe, Spalte Status"),
     Pruefung("teiluebertrag", "Rücklage nicht voll übertragen, obwohl ein Neuobjekt sie nennt "

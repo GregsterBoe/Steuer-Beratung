@@ -1021,8 +1021,11 @@ def _blatt_liquiditaet(wb) -> None:
     _jahrestabellen(wb, ws, "Liquidität", [
         (sz.titel, liq_spalten(sz), formeln.liquiditaet_zeile(sz)) for sz in SZENARIEN
     ], [
-        "Steuer = Bemessungsgrundlage × Grenzsteuersatz. Verluste werden vorgetragen und mit "
-        "späteren Gewinnen verrechnet (ohne Mindestbesteuerung, ohne Rücktrag).",
+        "Steuer = Bemessungsgrundlage × angewandter Steuersatz. Verluste werden vorgetragen und "
+        "mit späteren Gewinnen verrechnet (ohne Mindestbesteuerung, ohne Rücktrag).",
+        "GmbH & Co. KG mit Verlustausgleich: Steuer = Bemessungsgrundlage × angewandter Satz + "
+        "(Ergebnis − Bemessungsgrundlage) × Satz auf Verluste. Ein Verlust mindert die ESt des "
+        "Gesellschafters sofort (negative Steuer), vorgetragen wird er nur für die GewSt.",
         "steuerwirksam aus Verkauf und Rücklage: in A aus dem Rücklagenspiegel (sofort versteuerte "
         "Gewinne, Auflösung und Gewinnzuschlag), in B und C jeder Veräußerungsgewinn sofort.",
         "Zinsertrag = Liquidität am Vorjahresende × Rendite Alternativanlage; er ist steuerpflichtig. "
@@ -1048,8 +1051,10 @@ def _blatt_auswertung(wb) -> None:
         "+ Zinsertrag − Zinsen Kredite.",
         "stille Reserven = Verkehrswert − Buchwert (Gebäude + G+B) der Objekte im Bestand am "
         "Jahresende. In B und C ohne § 6b-Kürzung der Neuobjekte.",
-        "latente Steuer = (stille Reserven + Rücklagenbestand − Verlustvortrag) × Grenzsteuersatz, "
-        "mindestens 0: die Steuer, wenn alle Objekte zum Verkehrswert verkauft würden.",
+        "latente Steuer = (stille Reserven + Rücklagenbestand − Verlustvortrag) × angewandter "
+        "Steuersatz, mindestens 0: die Steuer, wenn alle Objekte zum Verkehrswert verkauft "
+        "würden. GmbH & Co. KG mit Verlustausgleich: der Teil bis zum Vortrag mit dem Satz auf "
+        "Verluste.",
         "Gesamtvermögen = Verkehrswert Bestand + Liquidität kumuliert − Restschuld Kredite.",
         TOOLTIP_HINWEIS,
     ], erklaerungen.AUSWERTUNG)
@@ -1548,7 +1553,7 @@ def _blatt_uebersicht(wb) -> None:
             buchwert = 'SUMIFS(obj_Restbuchwert,obj_ID,"<>")+SUMIFS(obj_AKGuB,obj_ID,"<>")'
             werte = ["=par_Basisjahr", "=SUM(obj_Verkehrswert)", f"=B{zeile}",
                      f"=C{zeile}-B{zeile}",
-                     f"=B{zeile}-MAX(B{zeile}-({buchwert}),0)*par_Steuersatz", f"=E{zeile}"]
+                     f"=B{zeile}-" + formeln.latente_steuer(f"B{zeile}-({buchwert})"), f"=E{zeile}"]
         else:
             werte = [f"=A{zeile - 1}+1",
                      f"=SUMIFS(prg_Verkehrswert,prg_Jahr,A{zeile},prg_Neu,0)",
@@ -1774,7 +1779,7 @@ def zentrale_annahmen() -> list:
     """Parameter, die Start und Mandanten-Export als zentrale Annahmen zeigen."""
     return [p for p in PARAMETER
             if p.name.startswith(("par_Ann", "par_ErhAlterung", "par_NeuErh", "par_San"))
-            or p.name in ("par_Steuersatz", "par_Mietsteig", "par_NeuMietsteig", "par_Erhaltsteig",
+            or p.name in ("par_Steuerwelt", "par_SteuersatzEff", "par_Mietsteig", "par_NeuMietsteig", "par_Erhaltsteig",
                           "par_Wertsteig", "par_Alternativrendite")]
 
 

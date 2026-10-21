@@ -1486,6 +1486,40 @@ def faelle():
             ("aus_Vortrag", lj(2030), 95_884.57),
             ("aus_LatenteSteuer", lj(2030), 247_234.63),  # (920.000 − 95.884,57) × 30 %
         ]),
+        # GmbH & Co. KG, ein Gesellschafter: ESt 42 %, SolZ 5,5 %, Hebesatz 400 %.
+        # GewSt 14 % wird voll angerechnet: Satz 14 % + 28 % × 1,055 = 43,54 %; ein Verlust
+        # mindert die ESt sofort mit 42 % × 1,055 = 44,31 %, vorgetragen nur für die GewSt
+        ("GmbH & Co. KG: Steuersatz und Verlustausgleich",
+         Modell(objekte=[obj], verkaeufe=[Verkauf("OBJ-001", 2030, preis=1_400_000,
+                                                  anteil_gub=0.8, nutzung_6b="ja")],
+                parameter={**OHNE_ZINS, "par_Steuerwelt": "GmbH & Co. KG"}),
+         befund(kg_vereinfacht=1) + [
+            ("par_KGGewSt", 0, 0.14),
+            ("par_SteuersatzEff", 0, 0.4354),
+            ("par_VerlustSatz", 0, 0.4431),
+            ("liq_ZvE", lj(2030), -95_884.57),
+            ("liq_Steuer", lj(2030), -42_486.45),   # Erstattung ESt und SolZ
+            ("liq_Vortrag", lj(2030), 95_884.57),   # nur GewSt
+            ("liq_Bemessung", lj(2034), 1_044_915.43),
+            # 1.044.915,43 × 43,54 % + 95.884,57 × 44,31 % (ESt ohne Vortrag)
+            ("liq_Steuer", lj(2034), 497_442.63),
+            ("aus_LatenteSteuer", lj(2030), 401_306.31),
+            ("pr_Gesamt", 0, "OK"),
+        ]),
+        # erweiterte Kürzung: keine GewSt, Satz = ESt × (1 + SolZ); ohne Verlustausgleich
+        # wird der Verlust wie bei der GmbH vorgetragen
+        ("GmbH & Co. KG: erweiterte Kürzung, Verluste vortragen",
+         Modell(objekte=[obj], verkaeufe=[Verkauf("OBJ-001", 2030, preis=1_400_000,
+                                                  anteil_gub=0.8, nutzung_6b="ja")],
+                parameter={**OHNE_ZINS, "par_Steuerwelt": "GmbH & Co. KG",
+                           "par_KGKuerzung": "ja", "par_KGVerlustausgleich": "nein"}), [
+            ("par_KGGewSt", 0, 0),
+            ("par_SteuersatzEff", 0, 0.4431),
+            ("par_VerlustSatz", 0, 0),
+            ("liq_Steuer", lj(2030), 0),
+            ("liq_Steuer", lj(2034), 463_002.03),   # 1.044.915,43 × 44,31 %
+            ("aus_LatenteSteuer", lj(2030), 365_165.55),
+        ]),
         # Etappe 8: Abnahmefall der Reinvestition, Handrechnung mit eigenem Nachbau.
         # A: Rücklage 720.000 auf das Neuobjekt, AfA-Basis 480.000, AfA 14.400.
         # B: Gewinn 720.000 sofort versteuert, Neuobjekt entfällt, nur Geld.
@@ -1852,7 +1886,9 @@ def faelle():
             ("Export:Verkauf und Kauf:Vorgang 2:/Veräußerungspreis", 2, "fehlt"),
             ("Export:Verkauf und Kauf:Detailsicht Kauf/NeuID (Kostenstelle)", 2, "NEU-001"),
             ("Export:Verkauf und Kauf:Detailsicht Kauf/NeuID (Kostenstelle)", 3, None),
-            ("Export:Annahmen:Zentrale Annahmen/Grenzsteuersatz", 2, Wie("par_Steuersatz")),
+            ("Export:Annahmen:Zentrale Annahmen/angewandter Steuersatz", 2,
+             Wie("par_SteuersatzEff")),
+            ("Export:Annahmen:Zentrale Annahmen/Steuerwelt", 2, "GmbH"),
             ("Export:Annahmen:Daten je Objekt/KSt 2", 18, 300_000),
             # Miete aus dem Kostenstellenblatt grün, Verkehrswert und Zinssatz Annahme blau,
             # eingetippte Werte ohne Farbe, Zinssatz ohne Restschuld keine Annahme
