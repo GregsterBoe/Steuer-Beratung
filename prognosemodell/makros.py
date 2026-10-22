@@ -6,11 +6,18 @@ baut LibreOffice (headless, per UNO) aus den Quelltexten ein VBA-Projekt
 übernimmt daraus nur das VBA-Projekt und schreibt die eigentliche Mappe wie bisher.
 LibreOffice wird nur beim Bauen gebraucht, die fertige Datei braucht nur Excel.
 
+Die UNO-Brücke (Modul uno) bringt unter Windows und macOS nur das Python mit, das
+in LibreOffice steckt. Fehlt sie im aufrufenden Python, baut dieses LibreOffice-Python
+die Hilfsmappe in einem eigenen Prozess.
+
 Dieselbe LibreOffice-Sitzung führt im Prüfskript die Makros aus.
 """
 
+import json
+import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import uuid
@@ -26,6 +33,52 @@ FILTER_XLSM = "Calc MS Excel 2007 VBA XML"
 FILTER_XLSX = "Calc MS Excel 2007 XML"
 # com.sun.star.script.ModuleType
 MODUL_NORMAL, MODUL_DOKUMENT = 1, 4
+PAKETORDNER = Path(__file__).resolve().parent.parent
+
+
+def _programmordner() -> list:
+    """Mögliche Programmordner von LibreOffice: aus dem PATH, sonst die Standardorte."""
+    ordner = []
+    for name in ("soffice", "libreoffice"):
+        gefunden = shutil.which(name)
+        if gefunden:
+            ordner.append(Path(gefunden).resolve().parent)
+    for variable in ("ProgramFiles", "ProgramFiles(x86)", "ProgramW6432"):
+        if os.environ.get(variable):
+            ordner.append(Path(os.environ[variable]) / "LibreOffice" / "program")
+    ordner += [Path("/Applications/LibreOffice.app/Contents/MacOS"),
+               Path("/usr/lib/libreoffice/program"), Path("/opt/libreoffice/program")]
+    return ordner
+
+
+def soffice_pfad() -> str:
+    """Pfad zu soffice; unter Windows liegt es meist nicht im PATH."""
+    gefunden = shutil.which("soffice") or shutil.which("libreoffice")
+    if gefunden:
+        return gefunden
+    for ordner in _programmordner():
+        for name in ("soffice.exe", "soffice"):
+            if (ordner / name).is_file():
+                return str(ordner / name)
+    return None
+
+
+def libreoffice_python() -> str:
+    """Das mit LibreOffice gelieferte Python (Windows, macOS); dort ist uno importierbar."""
+    for ordner in _programmordner():
+        for kandidat in (ordner / "python.exe", ordner / "python",
+                         ordner.parent / "Resources" / "python"):
+            if kandidat.is_file():
+                return str(kandidat)
+    return None
+
+
+def uno_verfuegbar() -> bool:
+    try:
+        import uno  # noqa: F401
+    except ImportError:
+        return False
+    return True
 
 
 def quelltext(datei: Path) -> str:
@@ -53,7 +106,7 @@ class LibreOffice:
 
     def __enter__(self):
         import uno
-        soffice = shutil.which("soffice") or shutil.which("libreoffice")
+        soffice = soffice_pfad()
         if not soffice:
             raise RuntimeError("LibreOffice (soffice) nicht gefunden; für die Makros nötig.")
         self.ordner.mkdir(parents=True, exist_ok=True)
@@ -160,13 +213,46 @@ def _vba_hilfsmappe(lo: LibreOffice, blaetter: list, ziel: Path) -> None:
         doc.close(True)
 
 
+def _hilfsmappe_extern(blaetter: list, ziel: Path) -> None:
+    """Hilfsmappe mit dem Python von LibreOffice bauen, wenn hier uno fehlt."""
+    python = libreoffice_python()
+    if not python:
+        raise RuntimeError(
+            "Für --makros wird LibreOffice mit der Python-UNO-Brücke gebraucht (Modul uno). "
+            "Unter Windows: LibreOffice installieren (Standardordner C:\\Program Files"
+            "\\LibreOffice), das mitgelieferte Python wird dann automatisch verwendet. "
+            "Unter Debian/Ubuntu: Pakete libreoffice-calc und python3-uno. "
+            "Ohne --makros entsteht die Mappe als .xlsx ohne Schaltflächen.")
+    blattliste = Path(ziel).with_suffix(".json")
+    blattliste.write_text(json.dumps(blaetter), encoding="utf-8")
+    # sys.path statt PYTHONPATH: der Starter von LibreOffice setzt PYTHONPATH selbst
+    code = (f"import sys; sys.path.insert(0, {str(PAKETORDNER)!r}); "
+            "from prognosemodell.makros import _hilfsmappe_kommandozeile; "
+            "_hilfsmappe_kommandozeile(sys.argv[1:])")
+    lauf = subprocess.run([python, "-c", code, str(blattliste), str(ziel)],
+                          capture_output=True, text=True, errors="replace")
+    if lauf.returncode != 0 or not Path(ziel).is_file():
+        raise RuntimeError(f"LibreOffice-Python ({python}) konnte das VBA-Projekt nicht "
+                           f"bauen:\n{lauf.stderr.strip() or lauf.stdout.strip()}")
+
+
+def _hilfsmappe_kommandozeile(argumente: list) -> None:
+    """Einstieg für das LibreOffice-Python: Blattliste (JSON) und Ziel der Hilfsmappe."""
+    blattliste, ziel = Path(argumente[0]), Path(argumente[1])
+    blaetter = [tuple(b) for b in json.loads(blattliste.read_text(encoding="utf-8"))]
+    with LibreOffice(ziel.parent / "lo") as lo:
+        _vba_hilfsmappe(lo, blaetter, ziel)
+
+
 def speichere_mit_makros(wb, ziel: Path, lo: LibreOffice = None) -> Path:
     """Mappe als .xlsm mit eingebettetem VBA-Projekt speichern."""
     ziel = Path(ziel)
     blaetter = [(ws.title, ws.sheet_properties.codeName) for ws in wb.worksheets]
     with tempfile.TemporaryDirectory() as tmp:
         hilfsmappe = Path(tmp) / "vba.xlsm"
-        if lo is None:
+        if lo is None and not uno_verfuegbar():
+            _hilfsmappe_extern(blaetter, hilfsmappe)
+        elif lo is None:
             with LibreOffice(Path(tmp) / "lo") as eigenes:
                 _vba_hilfsmappe(eigenes, blaetter, hilfsmappe)
         else:
