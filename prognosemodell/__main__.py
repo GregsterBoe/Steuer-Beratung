@@ -130,6 +130,8 @@ def main() -> None:
     except PermissionError:
         sys.exit(f"Kann {ziel} nicht schreiben. Ist die Datei noch in Excel geöffnet? "
                  "Bitte schließen oder mit --ausgabe einen anderen Dateinamen angeben.")
+    except RuntimeError as fehler:  # LibreOffice für --makros fehlt oder scheitert
+        sys.exit(str(fehler))
     print(f"geschrieben: {ziel}")
 
 
