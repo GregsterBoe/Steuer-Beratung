@@ -233,6 +233,9 @@ SPALTEN = {
                    "Fristjahr.",
     "rl_Hinweis": "Frist endet nach dem Prognoseende: Auflösung und Zuschlag fehlen im Raster.",
     # Rücklagenspiegel je Jahr
+    "rls_Jahr": "Jahr der Zeile, ab dem Startjahr je Zeile + 1. Die Spalten der Zeile summieren "
+                "Rücklagen und Neuobjekte, deren Bildungs-, Kauf- oder Fristjahr dieses Jahr "
+                "ist.",
     "rls_Gewinne": "Veräußerungsgewinne aller gültigen Verkäufe dieses Jahres (Blatt Verkäufe).",
     "rls_Bildung": "Summe der Rücklagen mit diesem Bildungsjahr.",
     "rls_Uebertragung": "Summe „übertragen gesamt“ der Neuobjekte mit diesem Kaufjahr.",
@@ -317,6 +320,29 @@ SPALTEN = {
                  "(unbekannt, Verkauf ausgeschaltet, Kauf vor Bildung, nach Fristjahr) und Kredit: "
                  "es rechnet, aber ohne diese Übertragung bzw. mit dem gemeldeten Mangel.",
     # Prognose
+    "prg_ID": "ObjektID des Bestandsobjekts (Blatt Objekte) oder NeuID des Neuobjekts (Blatt "
+              "Neuobjekte). Jedes Objekt hat einen festen Block von Zeilen, eine je "
+              "Prognosejahr; leere Objektzeile → leere Zeilen. Mit dem Jahr der Schlüssel, über "
+              "den Liquidität, Auswertung, BWA und Verkäufe die Werte eines Objekts summieren.",
+    "prg_IDObj": "Spalte ObjektID, nur über die Zeilen der Bestandsobjekte (ohne Neuobjekte). "
+                 "Darüber liest das Blatt Verkäufe den Buchwert Gebäude im Verkaufsjahr.",
+    "prg_Jahr": "Prognosejahr der Zeile, mit der ObjektID der Schlüssel für alle Summen je "
+                "Jahr. Erste Zeile des Blocks: Startjahr (Basisjahr + 1), danach Vorjahr + 1; "
+                "Steigerungen rechnen mit (Jahr − Basisjahr).",
+    "prg_JahrObj": "Spalte Jahr, nur über die Zeilen der Bestandsobjekte; Gegenstück zu "
+                   "ObjektID (nur Bestand) für den Buchwert beim Verkauf.",
+    "prg_Neu": "1 = Zeile eines Neuobjekts (Blatt Neuobjekte), 0 = Bestandsobjekt. Neuobjekte "
+               "zählen nur im Plan: die Baseline lässt sie weg, BWA und Auswertung weisen sie "
+               "getrennt aus.",
+    "prg_MitQuelle": "1 = Neuobjekt mit mindestens einer Quelle-Rücklage (Blatt Neuobjekte), "
+                     "Bestandsobjekte 0. Szenario B lässt diese Neuobjekte weg; ihr Geld bleibt "
+                     "in der Alternativanlage.",
+    "prg_ErhaltungHalten": "Erhaltung des Bestandsobjekts, als würde es nie verkauft. "
+                           "Erhaltung Basisjahr × (1 + Erhaltungssteigerung)^(Jahr − "
+                           "Basisjahr); mit Baujahr ab dem Gebäudealter „Alterung ab“ "
+                           "zusätzlich × (1 + Alterung) je Jahr darüber; im Jahr der "
+                           "Großmaßnahme deren Betrag dazu, ebenso gesteigert. Erhaltung im "
+                           "Plan = dieser Wert × aktiv. Neuobjekte 0.",
     "prg_Aktiv": "1 = Objekt erzielt in diesem Jahr Miete und AfA: Bestand bis einschließlich "
                  "Verkaufsjahr, Neuobjekt ab dem Jahr nach dem Kauf.",
     "prg_MieteHalten": "Bestand ohne Verkauf: Miete Basisjahr × (1 + Mietsteigerung des "
@@ -365,6 +391,9 @@ SPALTEN = {
                      "als weitere Kostenstelle eines Pakets); 0 ohne Verkauf.",
     "prg_Unternehmen": "1 = Kostenstelle der Art Unternehmen (Blatt Objekte), keine Immobilie.",
     # Darlehen
+    "dl_ID": "NeuID aus derselben Zeile des Blatts Neuobjekte, nur mit Kredit: Hauptkredit, wenn "
+             "Kredit − Zweitkredit > 0 oder er die Restschuld des Zweitkredits übernimmt; "
+             "Zweitkredit, wenn sein Betrag > 0. Leer: alle Spalten der Zeile bleiben leer.",
     "dl_Teil": "Hauptkredit (oberer Teil des Blatts) oder Zweitkredit (unterer Teil).",
     "dl_Betrag": "Hauptkredit: Kredit − davon Zweitkredit aus dem Blatt Neuobjekte; "
                  "Zweitkredit: davon Zweitkredit. Ohne Betrag bleibt die Zeile leer.",
@@ -387,6 +416,9 @@ SPALTEN = {
 
 # Liquidität: je Szenario dieselbe Tabelle
 LIQUIDITAET = {
+    "jahr": "Jahr der Zeile, ab dem Startjahr (Basisjahr + 1) je Zeile + 1. Alle Spalten der "
+            "Zeile summieren die Werte dieses Jahres aus Prognose, Verkäufen, Rücklagen und "
+            "Darlehen.",
     "einnahmen": "Summe Miete + weitere Einnahmen aller Objekte dieses Jahres (Prognose); "
                  "Baseline: Bestand ohne Verkäufe.",
     "ausgaben": "Summe Erhaltung + weitere Ausgaben aller Objekte dieses Jahres.",
@@ -420,6 +452,8 @@ LIQUIDITAET = {
 
 # Auswertung: je Szenario dieselbe Tabelle
 AUSWERTUNG = {
+    "jahr": "Jahr der Zeile, ab dem Startjahr je Zeile + 1; dieselben Zeilen wie in der "
+            "Liquidität.",
     "ergebnis": "aus der Liquidität: Einnahmen − Ausgaben − AfA.",
     "verkauf": "aus der Liquidität: steuerwirksam aus Verkauf und Rücklage.",
     "zins": "aus der Liquidität: Zinsertrag Alternativanlage.",
@@ -471,6 +505,33 @@ for _n in (1, 2, 3):
                            "und was Zeilen darüber nicht eingesetzt haben; 0 ohne "
                            "Verkaufserlös zur Finanzierung = ja.",
     })
+
+# Hilfsbereiche ohne berechneten Spaltenkopf (Jahreszeilen, Suchschlüssel); die Mappe zeigt
+# sie nicht als Tooltip, sie erklären die benannten Bereiche
+SPALTEN.update({
+    "bwa_Jahr": "Planjahr als Zahl über den Planspalten des Blatts Alle Objekte: Startjahr, "
+                "dann Vorjahr + 1. Die BWA-Zeilen und ihre Herleitung summieren damit Prognose, "
+                "Verkäufe und Rücklagen dieses Jahres.",
+    "bwah_gewinn": "Veräußerungsgewinn in der Herleitung von BWA 1323, nur bei Ausweis netto "
+                   "(Blatt BWA-Zuordnung). Summe der positiven Veräußerungsgewinne der "
+                   "Verkäufe dieses Jahres mit Status OK oder „§ 6b unzulässig: "
+                   "Vorbesitzzeit zu kurz“. Bei Ausweis brutto 0; dann stehen Preis, Kosten "
+                   "und Buchwertabgang in eigenen Zeilen.",
+    "cf_SzNr": "Nummer des im Blatt Cashflow gewählten Szenarios: 1 = A, 2 = B, 3 = C, "
+               "4 = Baseline; ungültige Auswahl → 1. Jede Zeile des Cashflows wählt damit die "
+               "Werte dieses Szenarios aus Liquidität und Auswertung.",
+    "nk_Fort": "Planwerte der Neukauf-Kostenstellen, so wie das Neuobjekt mit ihnen rechnet: "
+               "eingetragener Wert, sonst letzter Wert × (1 + Steigerung); Miete und weitere "
+               "Einnahmen mit der Mietsteigerung des Neuobjekts (in den Jahren ohne "
+               "Mietsteigerung gleich), Erhaltung und weitere Ausgaben mit den Parametern. Vor "
+               "dem ersten Wert (0 gilt als leer) mit Fläche und Mietpreis je m² die Annahme: "
+               "Miete ab dem Jahr nach dem Kauf, Erhaltung und Verwaltung als Quote dieser "
+               "Miete; sonst leer, dann rechnet das Neuobjekt mit Mietrendite und "
+               "Erhaltungsquote.",
+    "nk_Schluessel": "Suchschlüssel aus Kostenstelle, „|“ und Position (miete, einnahmen, "
+                     "erhaltung, ausgaben). Darüber finden Neuobjekte und Prognose die Zeile der "
+                     "fortgeschriebenen Planwerte.",
+})
 
 # Ergebnisbrücke: Tooltips der Zeilen
 BRUECKE = {
