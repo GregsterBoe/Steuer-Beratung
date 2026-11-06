@@ -21,7 +21,8 @@ from . import formeln
 from .bwa import POSTEN, SUMMENBLATT, ZUORDNUNG
 from .modelle import (ANLAGE_FELDER, ANLAGE_SPALTEN, NEU_FELDER, NEU_SPALTEN,
                       NEUKAUF_POSITIONEN, OBJEKT_EINGELESEN, OBJEKT_FELDER, PARAMETER,
-                      STATUS_UEBERSCHRIFT, VARIANTEN_KOPF, VERKAUF_FELDER, VERKAUF_SPALTEN,
+                      STATUS_UEBERSCHRIFT, VARIANTEN_BEREICHE, VARIANTEN_KOPF,
+                      VARIANTEN_SPALTEN, VARIANTEN_SPEICHER, VERKAUF_FELDER, VERKAUF_SPALTEN,
                       ZUORDNUNG_KOST1, prognosejahre)
 
 # Anlagen: aus dem neuen Anlagenverzeichnis kommen Beträge und Daten; von Hand gepflegt
@@ -383,17 +384,46 @@ def _vergleich_halten(alt, neu, bericht: Bericht) -> None:
         bericht.zaehle(SUMMENBLATT)
 
 
+def _ziel(wb, name: str):
+    """Ziel eines benannten Bereichs als Text, None ohne den Namen."""
+    try:
+        return next(iter(wb.defined_names[name].destinations))
+    except (KeyError, StopIteration):
+        return None
+
+
 def _varianten(alt, neu, bericht: Bericht) -> None:
+    """Festgehaltene Varianten übernehmen. Die gespeicherten Eingaben (Blatt
+    Variantenspeicher) gehen nur mit, wenn die Eingabebereiche beider Mappen gleich liegen;
+    sonst passten sie nicht mehr auf die Zellen, die Varianten sind dann nicht einspielbar."""
     if "Varianten" not in alt.sheetnames:
         return
     ws_alt, ws_neu = alt["Varianten"], neu["Varianten"]
     breite = len(VARIANTEN_KOPF)
+    gespeichert = VARIANTEN_KOPF.index(next(s[0] for s in VARIANTEN_SPALTEN
+                                            if s[1] == "var_Gespeichert")) + 1
+    speicher = (VARIANTEN_SPEICHER in alt.sheetnames
+                and all(_ziel(alt, n) == _ziel(neu, n) is not None
+                        for n in VARIANTEN_BEREICHE + ["var_Speicher", "var_Tabelle"]))
+    entfaellt = 0
     for zeile in _zeilen(alt, "var_Bezeichnung", VARIANTEN_ERSTE, ws_alt.max_row):
         werte = [ws_alt.cell(row=zeile, column=s).value for s in range(1, breite + 1)]
         if any(_ist_eingabe(w) for w in werte):
+            if not speicher and werte[gespeichert - 1] is not None:
+                werte[gespeichert - 1] = None
+                entfaellt += 1
             for s, w in enumerate(werte, start=1):
                 ws_neu.cell(row=zeile, column=s, value=w)
             bericht.zaehle("Varianten")
+    if speicher:
+        ws_alt, ws_neu = alt[VARIANTEN_SPEICHER], neu[VARIANTEN_SPEICHER]
+        for reihe in ws_alt.iter_rows(min_row=2, min_col=3):
+            for c in reihe:
+                if c.value is not None:
+                    ws_neu.cell(row=c.row, column=c.column, value=c.value)
+    elif entfaellt:
+        bericht.hinweis(f"Varianten: Eingaben von {entfaellt} Variante(n) passen nicht auf "
+                        "die neue Mappe; Kennzahlen übernommen, Einspielen nicht möglich.")
 
 
 def uebernehmen(neu, pfad, geschuetzt=(), kapazitaet=None) -> list:

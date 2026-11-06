@@ -174,7 +174,9 @@ punkte([
     "getrennt vom Bestand. Im Blatt Neuobjekte kann jedes Neuobjekt einen eigenen Satz haben "
     "(leer = Parameter). „Mietsteigerung erst nach Jahren“, z. B. 10 bei Neubau oder "
     "Staffelmiete über dem Mietspiegel: so viele Jahre nach dem Kauf bleibt die Miete auf dem "
-    "Anfangsstand und steigt erst danach. Das gilt auch für die Fortschreibung im Blatt "
+    "Anfangsstand und steigt erst danach. „Mietsteigerung endet nach Jahren“ für eine "
+    "Staffelmiete mit fester Laufzeit, z. B. 10: die Miete steigt bis zum 10. Jahr nach dem "
+    "Kauf und bleibt danach gleich. Das gilt auch für die Fortschreibung im Blatt "
     "Neukauf-KSt.",
 ])
 
@@ -252,7 +254,10 @@ punkte([
     "(Kreditauszahlung, planmäßige Tilgung, Ablösung bei Verkauf), die Liquidität am Jahresende "
     "und die Kapitaldienstdeckung (Einnahmen − Ausgaben je Euro Zins und Tilgung, unter 1 rot). "
     "Das Diagramm zeigt die drei Bereiche als Säulen und die Liquidität als Linie.",
-    "**Varianten:** mit „Variante festhalten“ gesicherte Stände, etwa verschiedene Verkaufsjahre.",
+    "**Varianten:** mit „Variante festhalten“ gesicherte Stände, etwa verschiedene "
+    "Verkaufsjahre: Endvermögen je Szenario, tiefster Liquiditätsstand mit Jahr, Verkäufe, "
+    "Käufe und die wichtigsten Parameter. Mit „Variante einspielen“ (Zeile markieren) kehren "
+    "Parameter, Objekte, Verkäufe, Neuobjekte und Neukauf-KSt zu diesem Stand zurück.",
     "**Alle Objekte halten:** die Summen-BWA, als würden alle Objekte gehalten und nichts "
     "gekauft (Baseline).",
     "**Vergleich mit Halten:** in „Alle Objekte“ D3 auf „ja“ stellen. Rechts neben den "
@@ -282,7 +287,9 @@ doc.add_heading("7. Schaltflächen (Blatt Parameter)", level=1)
 tabelle(["Schaltfläche", "Wirkung"], [
     ["Plausibilität prüfen", "zeigt alle Fehler, Warnungen und Hinweise"],
     ["Neu berechnen", "rechnet die Mappe vollständig neu"],
-    ["Variante festhalten", "speichert die Kennzahlen des Vergleichs im Blatt Varianten"],
+    ["Variante festhalten", "speichert Kennzahlen, Liquidität, Parameter und alle Eingaben im "
+                            "Blatt Varianten"],
+    ["Variante einspielen", "setzt die Eingaben auf eine festgehaltene Variante zurück"],
     ["Objekt anlegen / duplizieren / entfernen", "pflegt die Zeilen im Blatt Objekte"],
     ["Annahmen wiederherstellen", "setzt geleerte Felder wieder auf die Annahme"],
     ["Objekte -> Kostenstellen", "überträgt überschriebene Werte ins Kostenstellenblatt"],

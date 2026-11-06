@@ -656,11 +656,13 @@ def prognose_zeile_neu(zeile: int, neu_nr: int, erstes_jahr: bool) -> dict:
         return (f"IF({gueltig},N(INDEX({name},{neu_nr},{spalte}))"
                 f"+N(INDEX({name},ROWS(ne_ID)+{neu_nr},{spalte})),0)")
 
-    def ab_kauf(basis, satz, pos, warte="0"):
+    def ab_kauf(basis, satz, pos, warte="0", bis=None):
         """Wert der Neukauf-Kostenstelle, sonst basis ab dem Kauf mit der Steigerung; in
-        den ersten warte Jahren nach dem Kauf ohne Steigerung."""
+        den ersten warte Jahren nach dem Kauf ohne Steigerung, nach dem Jahr bis (Ende
+        einer Staffelmiete) auf dem erreichten Stand."""
+        jahre = f"{t}-{kj}" if bis is None else f"MIN({t}-{kj},{bis})"
         return _leer_oder(zeile, f"IF({aktiv},IF(ISNUMBER({kst(pos)}),{kst(pos)},"
-                                 f"{basis}*(1+{satz})^MAX({t}-{kj}-{warte},0)),0)")
+                                 f"{basis}*(1+{satz})^MAX({jahre}-{warte},0)),0)")
 
     # Fläche × Mietpreis je m²: Miete daraus statt aus der Mietrendite, Erhaltung und weitere
     # Ausgaben in % der Miete statt aus der Erhaltungsquote; Werte der Kostenstelle gehen vor
@@ -676,7 +678,8 @@ def prognose_zeile_neu(zeile: int, neu_nr: int, erstes_jahr: bool) -> dict:
         "jahr": "=par_Startjahr" if erstes_jahr else f"={_p('jahr', zeile - 1)}+1",
         "aktiv": _leer_oder(zeile, f"IF({gueltig},IF({t}>{kj},1,0),0)"),
         "miete": ab_kauf(f'IF({mit_qm},{qm},{ne("ne_Kaufpreis")}*{ne("ne_Mietrendite")})',
-                         ne("ne_MietsteigV"), "miete", f'N({ne("ne_MietWarte")})'),
+                         ne("ne_MietsteigV"), "miete", f'N({ne("ne_MietWarte")})',
+                         f'IF(ISNUMBER({ne("ne_MietBis")}),{ne("ne_MietBis")},{t}-{kj})'),
         "einnahmen": _leer_oder(zeile, f"IF({aktiv},N({kst('einnahmen')}),0)"),
         # in den Anlaufjahren nach dem Kauf gemindert (Neubau oder frisch saniert)
         "erhaltung": aus_kst_oder(

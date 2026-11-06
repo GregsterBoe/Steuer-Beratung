@@ -57,7 +57,7 @@ Dreizehn feste Blätter, getrennt nach Eingabe, Rechnung, Ausgabe und Kontrolle.
 | Prüfung | Kontrolle | je Plausibilitätsprüfung Art, Anzahl betroffener Zeilen, Ergebnis; Gesamtergebnis | alle Plausibilitätsprüfungen als Formeln (Abschnitt 19) |
 | Alle Objekte, je Kostenstelle ein Blatt | Ausgabe | BWA-Zeilen 1010–1380, Ist links, Planjahre rechts als Formeln | Ergebnisse im DATEV-BWA-Format (Abschnitt 18) |
 | Verkauf und Kauf | Ausgabe | je Verkauf Ergebnis- und Detailsicht, je Neuobjekt Detailsicht Kauf | Sonderbereich für die Berichterstattung (Abschnitt 18) |
-| Varianten | Kontrolle | je festgehaltener Variante Bezeichnung, Zeitpunkt, Endvermögen A, B, C, Baseline, Differenzen, Steuer | Ergebnisse verschiedener Eingaben vergleichen; nur das Makro schreibt hier |
+| Varianten | Kontrolle | je festgehaltener Variante Bezeichnung, Zeitpunkt, Endvermögen A, B, C, Baseline, Differenzen, Steuer, tiefste Liquidität mit Jahr, Verkäufe, Käufe, wichtigste Parameter | Ergebnisse verschiedener Eingaben vergleichen und eine Variante wieder einspielen; nur das Makro schreibt hier (Eingaben im ausgeblendeten Blatt Variantenspeicher) |
 
 Konvention: ObjektID ist der Schlüssel, der Objekte, Verkäufe, Rücklagen und Prognose verbindet. Neuobjekte bekommen eine eigene ID, laufen in der Prognose aber in derselben Matrix.
 
@@ -108,7 +108,7 @@ VBA steuert nur, es rechnet nicht. Die Makros schreiben Eingabewerte und lösen 
 | --- | --- |
 | modObjekte | Objekt anlegen, duplizieren, ausblenden; Prognosezeilen je Objekt erzeugen |
 | modSzenario | entfällt: alle Szenarien rechnen gleichzeitig in Formeln (Abschnitt 15) |
-| modVarianten | Kennzahlen des Blatts Vergleich als feste Werte im Blatt Varianten festhalten |
+| modVarianten | Kennzahlen des Blatts Vergleich als feste Werte im Blatt Varianten festhalten, Eingaben sichern und wieder einspielen |
 | modPruefung | Plausibilitätsprüfungen vor der Rechnung (siehe unten) |
 | modRechnen | Neuberechnung anstoßen, Auswertung aktualisieren |
 | modStart | Menü bzw. Schaltflächen auf dem Parameterblatt |
@@ -994,7 +994,7 @@ Die Module liegen als Quelltext in `prognosemodell/vba`, ohne Umlaute; Meldungst
 | modRechnen | `NeuBerechnen` (vollständig), `NeuBerechnenStarten` |
 | modPruefung | `AnzahlFehler`, `AnzahlWarnungen`, `Auffaelligkeiten`, `PruefungStarten`, `PruefungBestanden` (fragt bei Fehlern nach) |
 | modObjekte | `ObjektAnlegen`, `ObjektDuplizieren`, `ObjektEntfernen`, `LeereBloeckeAusblenden` und die Bedienung per Schaltfläche |
-| modVarianten | `VarianteFesthalten`, `VariantenLeeren`, `FreieVariante` |
+| modVarianten | `VarianteFesthalten`, `VarianteEinspielen`, `VariantePosition`, `VariantenLeeren`, `FreieVariante` |
 | ThisWorkbook | beim Öffnen `Einrichten` |
 
 Die Makros fügen nie Zeilen ein und löschen nie welche. Sie schreiben nur in die gelben Eingabefelder (obj\_Eingabe). Jede Objektzeile hat in der Prognose ihren festen Block, deshalb rechnet ein angelegtes oder dupliziertes Objekt sofort ohne Formelbruch mit. „Objekt entfernen“ leert die Eingaben. „Leere Prognoseblöcke ausblenden“ blendet die Blöcke ohne ObjektID aus, auch die leeren Neuobjektblöcke.
@@ -1007,7 +1007,10 @@ Die Makros fügen nie Zeilen ein und löschen nie welche. Sie schreiben nur in d
 - Objekt anlegen ohne Formelbruch. Eine Kopie von OBJ-001 rechnet im eigenen Block (Miete 2027 61.200, Buchwert 2046 160.000), die Übersicht zählt sie mit.
 - Eine doppelte ID oder eine fehlende Quelle wird abgewiesen, ohne dass etwas geschrieben wird. Eine entfernte Zeile wird wieder belegt.
 - Leere Blöcke lassen sich aus- und einblenden.
-- Eine festgehaltene Variante enthält dieselben Werte wie das Blatt Vergleich.
+- Eine festgehaltene Variante enthält dieselben Werte wie das Blatt Vergleich, dazu den tiefsten Liquiditätsstand mit Jahr und die Parameter.
+- Eine eingespielte Variante stellt die Eingaben wieder her: ein danach angelegtes Objekt verschwindet, ein entferntes Objekt rechnet wieder (Miete 2027 61.200, Buchwert 2046 160.000). Eine Variante auf dem aktuellen Stand ändert 0 Felder.
+
+**Varianten festhalten und einspielen:** Die Spalten des Blatts Varianten stehen in `VARIANTEN_SPALTEN` (modelle.py). Die ausgeblendete Zeile 3 (var\_Quellen) nennt je Spalte die Quelle: einen benannten Bereich (erste Zelle, etwa vg\_A oder par\_Mietsteig) oder eine Angabe mit „*“, die das Makro ermittelt (Bezeichnung, Datum, Summe, Minimum und Jahr des Minimums von liq\_Kum, Verkäufe und Käufe als Text, Gespeichert). Eine neue Kennzahl braucht so nur eine Zeile in `VARIANTEN_SPALTEN`. Die Eingaben sichert das Makro je Variante als Block im ausgeblendeten Blatt Variantenspeicher: die Bereiche aus `VARIANTEN_BEREICHE` (par\_Eingabe, obj\_Eingabe, vk\_Eingabe, ne\_Eingabe, nk\_Eingabe) untereinander, je Zelle FormulaR1C1 mit dem Präfix „~“ (so bleiben Annahmeformeln Formeln und stehen als Text im Speicher). Einspielen schreibt nur Zellen zurück, die sich unterscheiden, und rechnet neu. `--uebernehmen` kopiert den Speicher nur, wenn alle diese Bereiche in alter und neuer Mappe gleich liegen; sonst bleiben die Kennzahlen, die Spalte „Eingaben gespeichert“ wird geleert.
 
 Die Makrofälle laufen im Prüfskript in LibreOffice. Dort bricht `Err.Raise` die Funktion ab und liefert 0, Excel zeigt stattdessen die Meldung. Die Schaltflächen und Eingabedialoge sind nur in Excel bedienbar und werden nicht automatisch geprüft.
 
@@ -1526,11 +1529,11 @@ Prüfung: Paket OBJ-001 2030 = −40.115,43 − 36.600 (Sonder-AfA im Kaufjahr 5
 
 **Parameter:** par\_NeuMietsteig „Mietsteigerung Neuobjekte p. a.“ (Kernparameter, Standard 2 %). par\_Mietsteig gilt nur noch für den Bestand.
 
-**Blatt Neuobjekte:** ne\_Mietsteig „Mietsteigerung p. a.“ (leer = par\_NeuMietsteig, verwendet in ne\_MietsteigV) und ne\_MietWarte „Mietsteigerung erst nach Jahren“ (leer = 0).
+**Blatt Neuobjekte:** ne\_Mietsteig „Mietsteigerung p. a.“ (leer = par\_NeuMietsteig, verwendet in ne\_MietsteigV) und ne\_MietWarte „Mietsteigerung erst nach Jahren“ (leer = 0). Staffelmiete mit fester Laufzeit: ne\_MietBis „Mietsteigerung endet nach Jahren“ (leer = bis zum Rasterende).
 
-**Rechnung:** Miete\_t = Anfangsmiete × (1 + ne\_MietsteigV)^MAX(t − Kaufjahr − ne\_MietWarte; 0), Anfangsmiete = Fläche × Mietpreis je m² × 12 bzw. Kaufpreis × Mietrendite. Blatt Neukauf-KSt: Annahme genauso; Fortschreibung von Miete und weiteren Einnahmen mit ne\_MietsteigV des Neuobjekts, das die Kostenstelle wählt (ohne Neuobjekt par\_NeuMietsteig), die Miete in den Jahren Kaufjahr + 1 bis Kaufjahr + ne\_MietWarte ohne Steigerung. Erhaltung und Verwaltung in % der Miete folgen.
+**Rechnung:** Miete\_t = Anfangsmiete × (1 + ne\_MietsteigV)^MAX(MIN(t − Kaufjahr; ne\_MietBis) − ne\_MietWarte; 0), Anfangsmiete = Fläche × Mietpreis je m² × 12 bzw. Kaufpreis × Mietrendite. Blatt Neukauf-KSt: Annahme genauso; Fortschreibung von Miete und weiteren Einnahmen mit ne\_MietsteigV des Neuobjekts, das die Kostenstelle wählt (ohne Neuobjekt par\_NeuMietsteig), die Miete in den Jahren Kaufjahr + 1 bis Kaufjahr + ne\_MietWarte und nach Kaufjahr + ne\_MietBis ohne Steigerung. Erhaltung und Verwaltung in % der Miete folgen.
 
-**Prüfung im Prüfskript:** „Neuobjekte: eigene Mietsteigerung und Jahre ohne Mietsteigerung“: Parameter Neuobjekte 3 % neben Bestand 5 %, eigener Satz 1 % mit 3 Wartejahren, Neukauf-Kostenstelle mit 2 Wartejahren.
+**Prüfung im Prüfskript:** „Neuobjekte: eigene Mietsteigerung und Jahre ohne Mietsteigerung“: Parameter Neuobjekte 3 % neben Bestand 5 %, eigener Satz 1 % mit 3 Wartejahren, Neukauf-Kostenstelle mit 2 Wartejahren und Staffelende nach 4 Jahren, Neuobjekt mit Staffelende nach 2 Jahren.
 
 ## 35. Cashflow
 

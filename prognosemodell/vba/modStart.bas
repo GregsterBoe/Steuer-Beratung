@@ -8,21 +8,32 @@ Option Explicit
 
 Private Const KNOPF_PREFIX As String = "knopf_"
 
-' Schaltflaechen auf dem Parameterblatt anlegen, falls sie fehlen (beim Oeffnen)
+' Schaltflaechen auf dem Parameterblatt (untereinander) und dem Blatt Varianten
+' (nebeneinander) anlegen, falls sie fehlen (beim Oeffnen)
 Public Sub Einrichten()
-    Dim ws As Worksheet, knoepfe As Variant, i As Long
-    Dim links As Double, oben As Double
+    Dim ws As Worksheet
     Set ws = Bereich("par_Basisjahr").Worksheet
-    If KnopfVorhanden(ws, KNOPF_PREFIX & "0") Then Exit Sub
-    knoepfe = Schaltflaechen()
-    links = ws.Range("F5").Left
-    oben = ws.Range("F5").Top
+    KnoepfeAnlegen ws, KNOPF_PREFIX, Schaltflaechen(), ws.Range("F5"), False
+    Set ws = Bereich("var_Tabelle").Worksheet
+    KnoepfeAnlegen ws, KNOPF_PREFIX & "var_", Array( _
+        Array("Variante festhalten", "VarianteFesthaltenStarten"), _
+        Array("Markierte Variante einspielen", "VarianteEinspielenStarten")), _
+        ws.Range("E1"), True
+End Sub
+
+Private Sub KnoepfeAnlegen(ByVal ws As Worksheet, ByVal prefix As String, _
+        ByVal knoepfe As Variant, ByVal start As Range, ByVal nebeneinander As Boolean)
+    Dim i As Long, links As Double, oben As Double
+    If KnopfVorhanden(ws, prefix & "0") Then Exit Sub
     For i = LBound(knoepfe) To UBound(knoepfe)
-        With ws.Buttons.Add(links, oben + i * 28, 260, 24)
-            .Name = KNOPF_PREFIX & i
+        links = start.Left
+        oben = start.Top
+        If nebeneinander Then links = links + i * 230 Else oben = oben + i * 28
+        With ws.Buttons.Add(links, oben + 1, IIf(nebeneinander, 220, 260), 24)
+            .Name = prefix & i
             .Caption = Txt(knoepfe(i)(0))
             .OnAction = knoepfe(i)(1)
-            ' frei schwebend: eingeklappte Parameterzeilen verschieben die Knoepfe nicht
+            ' frei schwebend: eingeklappte Zeilen verschieben die Knoepfe nicht
             On Error Resume Next
             .Placement = 3
             On Error GoTo 0
@@ -35,6 +46,7 @@ Private Function Schaltflaechen() As Variant
         Array("Plausibilit{ae}t pr{ue}fen", "PruefungStarten"), _
         Array("Neu berechnen", "NeuBerechnenStarten"), _
         Array("Variante festhalten (Blatt Varianten)", "VarianteFesthaltenStarten"), _
+        Array("Variante einspielen (Blatt Varianten)", "VarianteEinspielenStarten"), _
         Array("Objekt anlegen", "ObjektAnlegenStarten"), _
         Array("Objekt duplizieren", "ObjektDuplizierenStarten"), _
         Array("Objekt entfernen", "ObjektEntfernenStarten"), _

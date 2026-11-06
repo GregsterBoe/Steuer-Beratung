@@ -20,7 +20,7 @@ from .modelle import (ANLAGE_FELDER, ANLAGE_JAHRE_NAME, ANLAGE_SPALTEN, ANLAGE_S
                       CODENAME_MAPPE, CODENAMEN, FEHLER, OBJEKT_EINGELESEN, FMT_EURO, FMT_JAHR, FMT_PROZENT,
                       KST_VERKNUEPFT, NEUKAUF_POSITIONEN,
                       FMT_TEXT, FMT_ZAHL, HINWEIS, MAX_VARIANTEN, PRUEFUNGEN,
-                      VARIANTEN_KOPF, WARNUNG,
+                      VARIANTEN_BEREICHE, VARIANTEN_SPALTEN, VARIANTEN_SPEICHER, WARNUNG,
                       NEU_FELDER, NEU_SPALTEN, NEU_STATUS_NAME, OBJEKT_FELDER, STATUS_AUS,
                       DARLEHEN_BLOECKE, DARLEHEN_ERSTE, DARLEHEN_SPALTEN, NEU_DETAIL_ERSTE, QUELLEN,
                       PARAMETER, PROGNOSE_SPALTEN, PRG_NUR_BESTAND, Spalte, RUECKLAGE_JAHR_SPALTEN, RUECKLAGE_SPALTEN,
@@ -267,6 +267,8 @@ def _blatt_parameter(wb, modell: Modell) -> None:
         if p.name == "par_StatusPruefung":
             zeile_pruefung = zeile
 
+    # alle Parameterwerte, für Variante festhalten und einspielen (modVarianten)
+    _name(wb, "par_Eingabe", f"Parameter!$B$5:$B${zeile}")
     ws.sheet_properties.outlinePr.summaryBelow = False
     for von, bis, kern in abschnitte:
         ws.row_dimensions.group(von, bis, hidden=not kern, outline_level=1)
@@ -565,6 +567,8 @@ def _blatt_neukauf(wb, modell: Modell) -> None:
             c = ws.cell(row=2, column=spalte, value=f"=par_Basisjahr+{i}")
             c.font, c.fill, c.number_format = FONT_KOPF, FILL_KOPF, FMT_JAHR
     _name(wb, "nk_ID", f"'Neukauf-KSt'!$A${erste}:$A${letzte}")
+    _name(wb, "nk_Eingabe", f"'Neukauf-KSt'!$A${erste}:"
+                            f"${get_column_letter(j0 + n - 1)}${letzte}")
     _name(wb, "nk_Schluessel", f"'Neukauf-KSt'!${schluessel}${erste}:${schluessel}${letzte}")
     _name(wb, "nk_Fort", f"'Neukauf-KSt'!${get_column_letter(fort0)}${erste}:"
                          f"${get_column_letter(fort0 + n - 1)}${letzte}")
@@ -577,6 +581,7 @@ def _blatt_neukauf(wb, modell: Modell) -> None:
     # Mietsteigerung des Neuobjekts, das sie wählt
     qm, kj = get_column_letter(import0 + n + 2), get_column_letter(import0 + n + 3)
     msteig, warte = get_column_letter(import0 + n + 4), get_column_letter(import0 + n + 5)
+    bis = get_column_letter(import0 + n + 6)
     for block in range(max_nk):
         kopf = erste + block * je
         nr_ne = f"MATCH($A${kopf},ne_KSt,0)"
@@ -584,6 +589,10 @@ def _blatt_neukauf(wb, modell: Modell) -> None:
         ws[f"{kj}{kopf}"] = f'=IF($A${kopf}="","",IFERROR(INDEX(ne_Kaufjahr,{nr_ne})*1,""))'
         ws[f"{msteig}{kopf}"] = f"=IFERROR(INDEX(ne_MietsteigV,{nr_ne})*1,par_NeuMietsteig)"
         ws[f"{warte}{kopf}"] = f"=IFERROR(N(INDEX(ne_MietWarte,{nr_ne})),0)"
+        # Ende der Staffelmiete in Jahren nach dem Kauf, leer = nie (10000: auch ohne Kaufjahr
+        # hinter jedem Jahr des Rasters)
+        ws[f"{bis}{kopf}"] = (f'=IFERROR(IF(ISNUMBER(INDEX(ne_MietBis,{nr_ne})),'
+                              f'INDEX(ne_MietBis,{nr_ne}),10000),10000)')
         for k, (key, text, nr, satz) in enumerate(NEUKAUF_POSITIONEN):
             if key in ("miete", "einnahmen"):
                 satz = f"${msteig}${kopf}"
@@ -610,7 +619,8 @@ def _blatt_neukauf(wb, modell: Modell) -> None:
                 annahme = {
                     "miete": f'IF(AND(ISNUMBER(${qm}${kopf}),{jahr}>N(${kj}${kopf})),'
                              f'${qm}${kopf}*(1+{satz})'
-                             f'^MAX({jahr}-N(${kj}${kopf})-${warte}${kopf},0),"")',
+                             f'^MAX(MIN({jahr}-N(${kj}${kopf}),${bis}${kopf})'
+                             f'-${warte}${kopf},0),"")',
                     "erhaltung": f'IF(AND(ISNUMBER(${qm}${kopf}),ISNUMBER({miete})),'
                                  f'{miete}*par_QmErhQuote,"")',
                     "ausgaben": f'IF(AND(ISNUMBER(${qm}${kopf}),ISNUMBER({miete})),'
@@ -623,9 +633,11 @@ def _blatt_neukauf(wb, modell: Modell) -> None:
                           f'{get_column_letter(j0 + i - 1)}{zeile},"<>0",'
                           f'${get_column_letter(j0)}{zeile}:'
                           f'{get_column_letter(j0 + i - 1)}{zeile},"<>")>0')
-                # Miete: in den Jahren ohne Mietsteigerung nach dem Kauf gleich
+                # Miete: in den Jahren ohne Mietsteigerung nach dem Kauf und nach dem Ende
+                # der Staffelmiete gleich
                 steig = (f"IF(AND({jahr}>N(${kj}${kopf}),"
-                         f"{jahr}<=N(${kj}${kopf})+${warte}${kopf}),0,{satz})"
+                         f"OR({jahr}<=N(${kj}${kopf})+${warte}${kopf},"
+                         f"{jahr}>N(${kj}${kopf})+${bis}${kopf})),0,{satz})"
                          if key == "miete" else satz)
                 formel = (f'=IF(N({wert})<>0,{wert},{annahme})' if i == 0 else
                           f'=IF(AND(ISNUMBER({wert}),OR(N({wert})<>0,{vorher})),{wert},'
@@ -650,7 +662,7 @@ def _blatt_neukauf(wb, modell: Modell) -> None:
         f"{a}{erste}:{get_column_letter(j0 + n - 1)}{letzte}",
         FormulaRule(formula=[f"AND(ISNUMBER({a}{erste}),{a}{erste}={imp}{erste})"],
                     fill=FILL_EINGELESEN))
-    for i in range(n + 6):
+    for i in range(n + 7):
         ws.column_dimensions[get_column_letter(import0 + i)].hidden = True
     for i in range(n):
         ws.column_dimensions[get_column_letter(j0 + i)].width = 11
@@ -727,6 +739,8 @@ def _blatt_verkaeufe(wb, modell: Modell) -> None:
             _farblogik(ws, bst, erste, letzte, dataclasses.replace(f, annahme=True))
 
     ws.column_dimensions[st].width = 34
+    _name(wb, "vk_Eingabe", f"'Verkäufe'!$A${erste}:"
+                            f"${get_column_letter(len(VERKAUF_FELDER))}${letzte}")
     _name(wb, VERKAUF_STATUS_NAME, f"'Verkäufe'!${st}${erste}:${st}${letzte}")
     pa = get_column_letter(status_spalte + 1)
     ws.cell(row=1, column=status_spalte + 1, value="Preis angenommen").font = FONT_KOPF
@@ -804,6 +818,8 @@ def _blatt_neuobjekte(wb, modell: Modell) -> None:
         _farblogik(ws, bst, erste, letzte, dataclasses.replace(f, pflicht=False, annahme=True))
 
     ws.column_dimensions[st].width = 44
+    _name(wb, "ne_Eingabe", f"'Neuobjekte'!$A${erste}:"
+                            f"${get_column_letter(len(NEU_FELDER))}${letzte}")
     _name(wb, NEU_STATUS_NAME, f"'Neuobjekte'!${st}${erste}:${st}${letzte}")
     for zeile in range(erste, letzte + 1):
         for i, f in enumerate(NEU_FELDER, start=1):
@@ -1709,29 +1725,52 @@ def _blatt_pruefung(wb) -> None:
 
 
 def _blatt_varianten(wb) -> None:
-    """Festgehaltene Ergebnisse: das Makro „Variante festhalten“ schreibt je Lauf eine Zeile."""
+    """Festgehaltene Ergebnisse: das Makro „Variante festhalten“ schreibt je Lauf eine Zeile
+    mit Kennzahlen, Liquidität, Verkäufen, Käufen und den wichtigsten Parametern, und sichert
+    alle Eingaben im ausgeblendeten Blatt Variantenspeicher; „Variante einspielen“ schreibt
+    sie zurück."""
     ws = wb.create_sheet("Varianten")
     ws["A1"] = "Varianten: festgehaltene Ergebnisse"
     ws["A1"].font = FONT_TITEL
+    ws.row_dimensions[1].height = 26
     ws["A2"] = (HINWEIS_FINANZIERUNG + " Feste Werte, keine Formeln: Eingaben ändern (etwa "
-                "Verkaufsjahr oder Preis), dann erneut festhalten und die Zeilen vergleichen.")
+                "Verkaufsjahr oder Preis), dann erneut festhalten und die Zeilen vergleichen. "
+                "„Variante einspielen“ (Zeile markieren) setzt Parameter, Objekte, Verkäufe, "
+                "Neuobjekte und Neukauf-KSt auf den festgehaltenen Stand zurück; die "
+                "Kostenstellenblätter und das Blatt Anlagen bleiben unverändert.")
     kopf = 4
-    _kopf(ws, kopf, VARIANTEN_KOPF)
-    ws.row_dimensions[kopf].height = 32
+    _kopf(ws, kopf, [s[0] for s in VARIANTEN_SPALTEN])
+    ws.row_dimensions[kopf].height = 45
+    # Zeile 3, ausgeblendet: woher das Makro den Wert der Spalte nimmt
+    for spalte, s in enumerate(VARIANTEN_SPALTEN, start=1):
+        ws.cell(row=3, column=spalte, value=s[2])
+    ws.row_dimensions[3].hidden = True
+    breite = get_column_letter(len(VARIANTEN_SPALTEN))
+    _name(wb, "var_Quellen", f"Varianten!$A$3:${breite}$3")
     erste, letzte = kopf + 1, kopf + MAX_VARIANTEN
-    _name(wb, "var_Tabelle",
-          f"Varianten!$A${erste}:${get_column_letter(len(VARIANTEN_KOPF))}${letzte}")
-    for name, bst in zip(("var_Bezeichnung", "var_Datum", "var_A", "var_B", "var_C",
-                          "var_Baseline", "var_DiffB", "var_DiffC", "var_Steuer",
-                          "var_Pruefung"), "ABCDEFGHIJ"):
+    _name(wb, "var_Tabelle", f"Varianten!$A${erste}:${breite}${letzte}")
+    for spalte, (_, name, _, fmt, b) in enumerate(VARIANTEN_SPALTEN, start=1):
+        bst = get_column_letter(spalte)
         _name(wb, name, f"Varianten!${bst}${erste}:${bst}${letzte}")
-    for zeile in range(erste, letzte + 1):
-        ws.cell(row=zeile, column=2).number_format = "DD.MM.YYYY HH:MM"
-        for spalte in range(3, len(VARIANTEN_KOPF)):
-            ws.cell(row=zeile, column=spalte).number_format = FMT_EURO
-    for spalte, breite in zip("ABCDEFGHIJ", (28, 16, 16, 16, 16, 18, 14, 14, 16, 16)):
-        ws.column_dimensions[spalte].width = breite
+        ws.column_dimensions[bst].width = b
+        for zeile in range(erste, letzte + 1):
+            ws.cell(row=zeile, column=spalte).number_format = fmt
     ws.freeze_panes = f"B{erste}"
+    _blatt_variantenspeicher(wb)
+
+
+def _blatt_variantenspeicher(wb) -> None:
+    """Ausgeblendet: je festgehaltener Variante ein Block mit den Eingaben (FormulaR1C1,
+    Präfix ~), die Bereiche aus VARIANTEN_BEREICHE untereinander. Nur die Makros lesen und
+    schreiben hier."""
+    ws = wb.create_sheet(VARIANTEN_SPEICHER)
+    ws["A1"] = ("Gespeicherte Eingaben der Varianten (Makro), nicht von Hand ändern. "
+                "Bereiche je Variante untereinander, ab Spalte C.")
+    for i, name in enumerate(VARIANTEN_BEREICHE, start=2):
+        ws.cell(row=i, column=1, value=name)
+    _name(wb, "var_Bereiche", f"'{VARIANTEN_SPEICHER}'!$A$2:$A${1 + len(VARIANTEN_BEREICHE)}")
+    _name(wb, "var_Speicher", f"'{VARIANTEN_SPEICHER}'!$C$2")
+    ws.sheet_state = "hidden"
 
 
 # Optionen des Startblatts: Text und Szenario (Kennzahlen im Blatt Vergleich)
