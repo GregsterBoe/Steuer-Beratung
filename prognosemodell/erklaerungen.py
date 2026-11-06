@@ -327,7 +327,9 @@ SPALTEN = {
     "prg_Miete": "Bestand: Miete bei Halten, bis zum Verkaufsjahr. Neuobjekt: Planwert der "
                  "Neukauf-Kostenstelle, sonst Fläche × Mietpreis je m² × 12 bzw. Kaufpreis × "
                  "Mietrendite, ab dem Kauf mit der Mietsteigerung des Neuobjekts; mit "
-                 "„Mietsteigerung erst nach Jahren“ so lange auf dem Anfangsstand.",
+                 "„Mietsteigerung erst nach Jahren“ so lange auf dem Anfangsstand, mit "
+                 "„Mietsteigerung endet nach Jahren“ (Staffelmiete) danach auf dem "
+                 "erreichten Stand.",
     "prg_Erhaltung": "Erhaltung Basisjahr, fortgeschrieben mit Erhaltungssteigerung, Alterung "
                      "über dem Gebäudealter (nur mit Baujahr), plus Großmaßnahme im Jahr der Maßnahme.",
     "prg_AfA": "AfA laut Blatt Anlagen bzw. AfA-Plan, sonst AfA je Jahr bis der Restbuchwert "

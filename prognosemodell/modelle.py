@@ -204,6 +204,7 @@ CODENAMEN = {
     "Objekte": "wsObjekte", "Verkäufe": "wsVerkaeufe", "Neuobjekte": "wsNeuobjekte",
     "Prognose": "wsPrognose", "Rücklagen": "wsRuecklagen", "Liquidität": "wsLiquiditaet",
     "Auswertung": "wsAuswertung", "Prüfung": "wsPruefung", "Varianten": "wsVarianten",
+    "Variantenspeicher": "wsVarSpeicher",
     "BWA-Zuordnung": "wsBWAZuordnung", "Anlagen": "wsAnlagen", "AfA-Plan": "wsAfAPlan",
     "Neukauf-KSt": "wsNeukaufKSt", "Darlehen": "wsDarlehen", "Ergebnisbrücke": "wsBruecke",
     "Cashflow": "wsCashflow",
@@ -719,6 +720,13 @@ NEU_FELDER = [
          hinweis="z. B. 10 bei Neubau oder Staffelmiete über dem Mietspiegel: die Miete bleibt "
                  "so viele Jahre nach dem Kauf auf dem Anfangsstand und steigt erst danach, "
                  "sobald der Mietspiegel aufgeholt hat. Gilt nur für die Miete. Leer = 0"),
+    # Staffelmiete mit fester Laufzeit: danach keine Steigerung mehr
+    Feld("miet_bis", "Mietsteigerung endet nach Jahren", "ne_MietBis", FMT_ZAHL, False, 10,
+         minimum=0, maximum=100, ganzzahl=True,
+         hinweis="z. B. 10 bei Staffelmiete über 10 Jahre ohne Erhöhung danach: die Miete "
+                 "steigt bis zum so vielten Jahr nach dem Kauf mit dem Satz und bleibt dann "
+                 "auf dem erreichten Stand. Mit „Mietsteigerung erst nach Jahren“ steigt sie "
+                 "nur dazwischen. Gilt nur für die Miete. Leer = bis zum Ende des Rasters"),
     # bis zu drei Rücklagen je Neuobjekt, übertragen in dieser Reihenfolge (QUELLEN)
     Feld("quelle", "Quelle 1 RücklageID", "ne_Quelle", FMT_TEXT, False, 16,
          hinweis="Rücklage aus dem Blatt Rücklagen; ihr Gewinn mindert die AK (steuerlich). "
@@ -1117,6 +1125,7 @@ class Neuobjekt:
     miete_qm: Optional[float] = None     # € je m² und Monat zum Kaufzeitpunkt
     mietsteig: Optional[float] = None    # leer = par_NeuMietsteig
     miet_warte: Optional[int] = None     # Jahre nach dem Kauf ohne Mietsteigerung, leer = 0
+    miet_bis: Optional[int] = None       # Mietsteigerung nur bis zum n-ten Jahr nach dem Kauf
     quelle: Optional[str] = None         # RücklageID, z. B. "RL-OBJ-001"
     kst: Optional[str] = None            # Neukauf-Kostenstelle, z. B. "KSt 31"
     quelle2: Optional[str] = None        # weitere Rücklagen, nach quelle übertragen
@@ -1248,10 +1257,39 @@ PRUEFUNGEN = [
 ]
 
 # Blatt Varianten: je Makrolauf eine Zeile mit festen Werten (Projektplan Abschnitt 19)
-VARIANTEN_KOPF = ["Variante", "festgehalten am", "Endvermögen A", "Endvermögen B",
-                  "Endvermögen C", "Endvermögen Baseline", "A − B", "A − C", "Steuer A gesamt",
-                  "Prüfung"]
+# (Überschrift, Name der Spalte, Quelle, Format, Breite). Quelle: benannter Bereich der
+# Mappe (erste Zelle) oder eine Angabe mit „*“, die das Makro selbst ermittelt
+# (modVarianten.Kennzahl). Die ersten zehn Spalten stehen seit Etappe 9 fest.
+VARIANTEN_SPALTEN = [
+    ("Variante", "var_Bezeichnung", "*Bezeichnung", FMT_TEXT, 28),
+    ("festgehalten am", "var_Datum", "*Datum", "DD.MM.YYYY HH:MM", 16),
+    ("Endvermögen A", "var_A", "vg_A", FMT_EURO, 16),
+    ("Endvermögen B", "var_B", "vg_B", FMT_EURO, 16),
+    ("Endvermögen C", "var_C", "vg_C", FMT_EURO, 16),
+    ("Endvermögen Baseline", "var_Baseline", "vg_Baseline", FMT_EURO, 18),
+    ("A − B", "var_DiffB", "vg_DiffB", FMT_EURO, 14),
+    ("A − C", "var_DiffC", "vg_DiffC", FMT_EURO, 14),
+    ("Steuer A gesamt", "var_Steuer", "*Summe:liq_Steuer", FMT_EURO, 16),
+    ("Prüfung", "var_Pruefung", "pr_Gesamt", FMT_TEXT, 16),
+    ("Liquidität tiefster Stand A", "var_LiqMin", "*Minimum:liq_Kum", FMT_EURO, 16),
+    ("tiefster Stand im Jahr", "var_LiqMinJahr", "*MinimumJahr:liq_Kum", FMT_JAHR, 10),
+    ("Verkäufe (ObjektID Jahr Preis)", "var_Verkaeufe", "*Verkaeufe", FMT_TEXT, 36),
+    ("Käufe (NeuID Jahr Preis)", "var_Kaeufe", "*Kaeufe", FMT_TEXT, 36),
+    ("Steuerwelt", "var_Steuerwelt", "par_Steuerwelt", FMT_TEXT, 14),
+    ("angewandter Steuersatz", "var_SteuersatzEff", "par_SteuersatzEff", FMT_PROZENT, 12),
+    ("Mietsteigerung", "var_Mietsteig", "par_Mietsteig", FMT_PROZENT, 12),
+    ("Mietsteigerung Neuobjekte", "var_NeuMietsteig", "par_NeuMietsteig", FMT_PROZENT, 12),
+    ("Erhaltungssteigerung", "var_Erhaltsteig", "par_Erhaltsteig", FMT_PROZENT, 12),
+    ("Wertsteigerung", "var_Wertsteig", "par_Wertsteig", FMT_PROZENT, 12),
+    ("Alternativrendite", "var_Alternativrendite", "par_Alternativrendite", FMT_PROZENT, 12),
+    ("Eingaben gespeichert (einspielbar)", "var_Gespeichert", "*Gespeichert", FMT_TEXT, 14),
+]
+VARIANTEN_KOPF = [s[0] for s in VARIANTEN_SPALTEN]
 MAX_VARIANTEN = 100
+# Eingaben, die „Variante festhalten“ im Blatt Variantenspeicher sichert und „Variante
+# einspielen“ zurückschreibt (benannte Bereiche, je ein Block untereinander)
+VARIANTEN_BEREICHE = ["par_Eingabe", "obj_Eingabe", "vk_Eingabe", "ne_Eingabe", "nk_Eingabe"]
+VARIANTEN_SPEICHER = "Variantenspeicher"
 
 
 @dataclass(frozen=True)

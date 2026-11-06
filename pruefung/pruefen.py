@@ -2099,7 +2099,8 @@ def faelle():
         # = 12.000, eigener Satz 1 %, 3 Jahre ohne Steigerung: 2028 bis 2030 12.000, 2031
         # 12.120, 2032 12.241,20; Instandhaltung 7 % davon. NEU-3 auf KSt 32 (Miete 10.000
         # im Basisjahr), 2 Jahre ohne Steigerung: 2027 fortgeschrieben × 1,03 = 10.300, 2028
-        # und 2029 gleich, 2030 10.609
+        # und 2029 gleich, 2030 10.609, Staffel endet nach 4 Jahren: 2031 10.927,27, dann
+        # gleich. NEU-4 Mietrendite 4 %, 2 % Steigerung nur bis zum 2. Jahr nach dem Kauf
         ("Neuobjekte: eigene Mietsteigerung und Jahre ohne Mietsteigerung",
          dataclasses.replace(vorlage_eingelesen(
              neukauf=[("KSt 32", "Neubau Süd", {1020: 10_000})],
@@ -2109,7 +2110,10 @@ def faelle():
                                    afa_satz=0.02, flaeche=100, miete_qm=10, mietsteig=0.01,
                                    miet_warte=3),
                          Neuobjekt("NEU-3", 2027, kaufpreis=500_000, anteil_gub=0.2,
-                                   afa_satz=0.02, kst="KSt 32", miet_warte=2)]),
+                                   afa_satz=0.02, kst="KSt 32", miet_warte=2, miet_bis=4),
+                         Neuobjekt("NEU-4", 2027, kaufpreis=500_000, anteil_gub=0.2,
+                                   afa_satz=0.02, mietrendite=0.04, mietsteig=0.02,
+                                   miet_bis=2)]),
              parameter={"par_Mietsteig": 0.05, "par_NeuMietsteig": 0.03}), [
             ("ne_MietsteigV", 0, 0.03),
             ("ne_MietsteigV", 1, 0.01),
@@ -2128,6 +2132,15 @@ def faelle():
             ("prg_Miete", prg_neu(3, 2029), 10_300),
             ("prg_Miete", prg_neu(3, 2030), 10_609),
             ("BWA:KSt 32:1020", 2030, 10_609),
+            # Staffelmiete: NEU-3 steigt bis zum 4. Jahr nach dem Kauf (2031), dann gleich
+            ("prg_Miete", prg_neu(3, 2031), 10_927.27),
+            ("prg_Miete", prg_neu(3, 2032), 10_927.27),
+            ("prg_Miete", prg_neu(3, 2040), 10_927.27),
+            # NEU-4: 20.000 × 1,02 = 20.400 (2028), 20.808 (2029), danach gleich
+            ("prg_Miete", prg_neu(4, 2028), 20_400),
+            ("prg_Miete", prg_neu(4, 2029), 20_808),
+            ("prg_Miete", prg_neu(4, 2030), 20_808),
+            ("prg_Miete", prg_neu(4, 2046), 20_808),
         ]),
         # Kauf aktiv = nein: NEU-001 rechnet nicht mit (keine Übertragung, kein Kredit, kein
         # Kauf in der Liquidität), die Rücklage 720.000 wird aufgelöst, kein Fehler in der
@@ -3034,7 +3047,7 @@ def faelle():
         ]),
         ("Etappe 9: Makros Prüfung und Variante festhalten", Modell(objekte=[obj]), [
             ("var_Bezeichnung", 0, "dritte"),
-            ("var_Bezeichnung", 1, None),        # nach dem Leeren nur eine Zeile
+            ("var_Bezeichnung", 2, None),        # nach dem Leeren nur „dritte“ und eine weitere
             ("var_A", 0, Wie("vg_A", 0)),        # Endvermögen nach latenter Steuer
             ("var_B", 0, Wie("vg_B", 0)),
             ("var_C", 0, Wie("vg_C", 0)),
@@ -3042,6 +3055,22 @@ def faelle():
             ("var_DiffC", 0, Wie("vg_DiffC", 0)),
             ("var_Steuer", 0, Wie("vg_A", 14)),
             ("var_Pruefung", 0, "OK"),
+            # tiefster Liquiditätsstand: Testobjekt mit Überschuss, also im ersten Jahr
+            ("var_LiqMin", 0, Wie("liq_Kum", 0)),
+            ("var_LiqMinJahr", 0, 2027),
+            ("var_Mietsteig", 0, Wie("par_Mietsteig", 0)),
+            ("var_Steuerwelt", 0, "GmbH"),
+            ("var_Gespeichert", 0, "ja"),
+            # zweite Variante mit OBJ-002 festgehalten, dann die erste eingespielt
+            ("var_Bezeichnung", 1, "mit OBJ-002"),
+            ("var_Gespeichert", 1, "ja"),
+            ("obj_ID", 0, "OBJ-001"),
+            ("obj_ID", 1, None),
+            ("ueb_Objekte", 0, 1),
+            ("obj_Restbuchwert", 0, 480_000),
+            ("prg_Miete", prg(1, 2027), 61_200),
+            ("prg_Buchwert", prg(1, 2046), 160_000),
+            ("var_A", 0, Wie("vg_A", 0)),
         ], [
             ("modPruefung", "AnzahlFehler", (), 0),
             ("modPruefung", "AnzahlWarnungen", (), 0),
@@ -3052,6 +3081,15 @@ def faelle():
             ("modVarianten", "FreieVariante", (), 3),
             ("modVarianten", "VariantenLeeren", (), FEHLT),
             ("modVarianten", "VarianteFesthalten", ("dritte",), 1),
+            ("modObjekte", "ObjektAnlegen", ("OBJ-002",), 2),
+            ("modVarianten", "VarianteFesthalten", ("mit OBJ-002",), 2),
+            ("modVarianten", "VariantePosition", ("mit OBJ-002",), 2),
+            ("modVarianten", "VarianteEinspielen", (1,), 1),    # nur die ObjektID ändert sich
+            ("modVarianten", "VarianteEinspielen", (1,), 0),    # schon auf dem Stand
+            ("modVarianten", "VarianteEinspielen", (5,), 0),    # gibt es nicht
+            # OBJ-001 entfernt, die Variante stellt seine Eingaben wieder her
+            ("modObjekte", "ObjektEntfernen", ("OBJ-001",), FEHLT),
+            ("modVarianten", "VarianteEinspielen", (1,), FEHLT),
             ("modRechnen", "NeuBerechnen", (), FEHLT),
         ]),
         # ohne Miete bleiben Erhaltung und AfA: Liquidität in allen 20 Jahren negativ

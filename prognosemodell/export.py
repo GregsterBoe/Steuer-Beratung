@@ -1105,6 +1105,7 @@ NEU_ANGABEN = [
     Angabe("Erhaltung auf Kaufpreis", "ne_ErhQuote", FMT_PROZENT, ebene=1),
     Angabe("Mietsteigerung p. a.", "ne_MietsteigV", FMT_PROZENT, ebene=1),
     Angabe("Mietsteigerung erst nach Jahren", "ne_MietWarte", FMT_ZAHL, ebene=1),
+    Angabe("Mietsteigerung endet nach Jahren", "ne_MietBis", FMT_ZAHL, ebene=1),
     Angabe("Kostenstelle Neukauf", "ne_KSt", ebene=1),
     Angabe("Miete im ersten vollen Jahr", "#miete", FMT_BETRAG, ebene=1),
     Angabe("Vergleichswerte zum Verkauf", kopf=True),
