@@ -66,6 +66,9 @@ python -m pruefung.pruefen_einlesen  # prüft die Einleseschicht, ohne LibreOffi
 python -m pruefung.zirkelbezug      # sucht Zirkelbezüge, wie Excel sie sieht, ohne LibreOffice
 python -m prognosemodell.export Prognose.xlsx   # Mandanten-Export Prognose_Mandant.xlsx: kompakt, mit Verständnisformeln
 python -m prognosemodell.vorlagen    # schreibt vorlagen/Kostenstellen_BWA_Vorlage.xlsx und vorlagen/Inventar_Vorlage.xlsx
+python -m prognosemodell.browser     # Browser-Fassung ausgabe/Prognosemodell.html (mit Beispiel)
+python -m prognosemodell.browser --mappe Prognose.xlsx   # Browser-Fassung mit den Eingaben einer Mappe
+python -m pruefung.abgleich          # rechnet die Prüffälle in Mappe und Browser-Fassung und vergleicht (braucht Node.js)
 ```
 
 Das Prüfskript und `--makros` brauchen LibreOffice mit Calc und der Python-UNO-Brücke (`soffice`, unter Debian/Ubuntu die Pakete `libreoffice-calc` und `python3-uno`). Unter Windows und macOS hat nur das in LibreOffice enthaltene Python die UNO-Brücke: `--makros` findet LibreOffice dann im Standardordner (etwa `C:\Program Files\LibreOffice`) und baut das VBA-Projekt mit dessen Python, das gewohnte Python reicht also für den Aufruf.
@@ -243,6 +246,8 @@ Die Ergebnisse stehen auch im **DATEV-BWA-Format** (Projektplan, Abschnitt 18):
 - **Annahmen:** zentrale Annahmen, Daten je Objekt mit Herkunft (blau Annahme, grün Buchhaltung oder Anlagenverzeichnis), auffällige Prüfungen.
 
 Zeilen ohne Wert, Monatsspalten, Hilfszeilen und ausgeschaltete Vorgänge entfallen; Ist-Vorjahre erscheinen nur, wenn sie eingelesen sind. Alle Blätter sind für den Druck im Querformat eingerichtet.
+
+**Browser-Fassung:** `python -m prognosemodell.browser` schreibt eine HTML-Datei, die ohne Setup im Browser läuft (Doppelklick, kein Server, keine Makros, auch ohne Internet). Sie rechnet dieselben Formeln wie die Mappe in JavaScript (`browser/rechenwerk.js`) und rechnet bei jeder Eingabe sofort neu. Jede Zahl lässt sich anklicken: rechts erscheint ihr Rechenweg, die Formel in Worten mit den Werten der Teile, und von dort klickt man sich bis zur Eingabe durch. Ansichten: Überblick mit Empfehlung und Diagrammen, Szenarienvergleich, Liquidität und Steuer, Vermögen, Parameter, Objekte, Verkäufe, Neuobjekte, Anlagen und Planwerte, Prognose je Objekt, § 6b-Rücklagen, Darlehen, Prüfung. Leere Felder zeigen die Annahme (blau). Die Eingaben bleiben im Browser; „Speichern“ und „Öffnen“ arbeiten mit einer JSON-Datei. Mit `--mappe Prognose.xlsx` übernimmt die Seite die Eingaben einer gespeicherten Mappe, samt Anlagenverzeichnis, AfA-Plan und Neukauf-Kostenstellen. Noch nicht enthalten: BWA-Blätter, Ergebnisbrücke, Cashflow-Blatt, Varianten, Optimierung und Mandanten-Export. Vorerst wird doppelt gepflegt; `python -m pruefung.abgleich` rechnet alle Prüffälle in beiden und vergleicht auf den Cent (Projektplan, Abschnitt 39).
 
 **Startblatt und Datenlage**
 
