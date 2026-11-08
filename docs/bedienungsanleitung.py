@@ -258,6 +258,14 @@ punkte([
     "Verkaufsjahre: Endvermögen je Szenario, tiefster Liquiditätsstand mit Jahr, Verkäufe, "
     "Käufe und die wichtigsten Parameter. Mit „Variante einspielen“ (Zeile markieren) kehren "
     "Parameter, Objekte, Verkäufe, Neuobjekte und Neukauf-KSt zu diesem Stand zurück.",
+    "**Optimierung:** sucht je Neuobjekt Kaufjahr, Kreditquote und „§ 6b nur bis "
+    "QNG-Grenze“ so, dass das Endvermögen am höchsten ist, ohne dass die Liquidität unter die "
+    "Mindestliquidität fällt (Parameter, Abschnitt Ausschüttung und Liquidität). Oben stehen "
+    "Ziel und Nebenbedingungen, darunter die Einstellungen (gelb) und je Neuobjekt die Spalte "
+    "„optimieren“. „Optimieren“ trägt die beste Kombination ein und hält Ausgang und Ergebnis "
+    "im Blatt Varianten fest; „Tragbare Ausschüttung ermitteln“ nennt den höchsten Betrag p. a., "
+    "den die aktuellen Eingaben tragen. Faustregel: Kredit lohnt, solange sein Zins unter der "
+    "Alternativrendite liegt; sonst so viel Kredit wie nötig, damit die Ausschüttung trägt.",
     "**Alle Objekte halten:** die Summen-BWA, als würden alle Objekte gehalten und nichts "
     "gekauft (Baseline).",
     "**Vergleich mit Halten:** in „Alle Objekte“ D3 auf „ja“ stellen. Rechts neben den "
@@ -278,7 +286,7 @@ punkte([
     "**Warnung:** Vorbesitzzeit für § 6b zu kurz, Rücklage nicht voll übertragen, Drei-Objekt-"
     "Grenze, Abweichung vom Kostenstellenblatt, unbekannte Neukauf-Kostenstelle, Verkauf "
     "ohne Restschuld trotz Zinsaufwand.",
-    "**Hinweis:** Frist nach Prognoseende, negative Liquidität, fehlender Verkehrswert, Anlagen "
+    "**Hinweis:** Frist nach Prognoseende, Liquidität unter der Mindestliquidität, fehlender Verkehrswert, Anlagen "
     "ohne Objekt.",
 ])
 
@@ -290,6 +298,8 @@ tabelle(["Schaltfläche", "Wirkung"], [
     ["Variante festhalten", "speichert Kennzahlen, Liquidität, Parameter und alle Eingaben im "
                             "Blatt Varianten"],
     ["Variante einspielen", "setzt die Eingaben auf eine festgehaltene Variante zurück"],
+    ["Optimieren", "Blatt Optimierung: Kaufjahr, Kreditquote und § 6b-Schalter der Neuobjekte "
+                   "auf das Endvermögen ausrichten"],
     ["Objekt anlegen / duplizieren / entfernen", "pflegt die Zeilen im Blatt Objekte"],
     ["Annahmen wiederherstellen", "setzt geleerte Felder wieder auf die Annahme"],
     ["Objekte -> Kostenstellen", "überträgt überschriebene Werte ins Kostenstellenblatt"],

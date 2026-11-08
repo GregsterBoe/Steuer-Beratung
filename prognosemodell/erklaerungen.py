@@ -12,6 +12,7 @@ Spaltenschlüssel abgelegt.
 KERNPARAMETER = {
     "par_Basisjahr", "par_Prognosejahre", "par_Steuerwelt", "par_Steuersatz", "par_Mietsteig", "par_NeuMietsteig",
     "par_Erhaltsteig", "par_Wertsteig", "par_Alternativrendite", "par_StatusPruefung",
+    "par_Ausschuettung",
     "par_AnnVervielfaeltiger", "par_AnnGebaeudeanteil",
 }
 
@@ -89,6 +90,17 @@ PARAMETER_WIRKUNG = {
     "par_Alternativrendite": "Zinsertrag je Jahr = Liquidität am Vorjahresende × Satz, voll "
                              "steuerpflichtig; negative Liquidität kostet denselben Satz. "
                              "Entscheidet den Vergleich A gegen B (Immobilie oder Geldanlage).",
+    "par_Ausschuettung": "Ausschüttung je Jahr = Betrag × (1 + Steigerung)^(Jahr − erstes "
+                         "Ausschüttungsjahr); mindert in allen Szenarien die Liquidität und "
+                         "damit den Zinsertrag, nicht das Ergebnis. Blatt Optimierung sucht "
+                         "Käufe und Finanzierung, die sie tragen.",
+    "par_AusschuettungAb": "Erstes Jahr mit Ausschüttung; davor 0.",
+    "par_AusschuettungSteig": "Jährliche Steigerung der Ausschüttung ab dem zweiten Jahr.",
+    "par_MindestLiq": "Prüfung „Liquidität“ und Nebenbedingung der Optimierung: Liquidität "
+                      "kumuliert im Plan A darf in keinem Jahr darunter liegen.",
+    "par_MindestKDD": "Nebenbedingung der Optimierung: in jedem Jahr mit Kapitaldienst "
+                      "(Einnahmen − Ausgaben) / (Zinsen + planmäßige Tilgung) mindestens so "
+                      "hoch. Leer = keine Vorgabe.",
     "par_StatusPruefung": "Berechnet: Ergebnis aller Plausibilitätsprüfungen. Ungleich OK: "
                           "Blatt Prüfung zeigt, wo nachzusehen ist.",
     "par_AnlStand": "Jahr der Buchwerte im Blatt Anlagen. Bis zum Basisjahr schreibt das Blatt "
@@ -254,9 +266,11 @@ SPALTEN = {
     "ne_RLGeb": "Summe der Quellen: Rücklage Gebäude, soweit nicht schon von Zeilen darüber "
                 "verwendet.",
     "ne_RLGuB": "Summe der Quellen: Rücklage G+B, soweit nicht schon verwendet.",
-    "ne_Ue1": "Gebäudegewinn auf das Gebäude: höchstens AK Gebäude neu.",
+    "ne_Ue1": "Gebäudegewinn auf das Gebäude: höchstens AK Gebäude neu, mit „§ 6b nur bis "
+              "QNG-Grenze“ höchstens AK Gebäude − Höchstbetrag § 7b je m² × Fläche.",
     "ne_Ue2": "G+B-Gewinn auf G+B: höchstens AK G+B neu.",
-    "ne_Ue3": "Rest des G+B-Gewinns auf das Gebäude: höchstens AK Gebäude neu − ü1.",
+    "ne_Ue3": "Rest des G+B-Gewinns auf das Gebäude: höchstens AK Gebäude neu − ü1, mit "
+              "„§ 6b nur bis QNG-Grenze“ höchstens bis zur QNG-Grenze.",
     "ne_UeGesamt": "ü1 + ü2 + ü3: mindert die AK und geht als Übertragung in den "
                    "Rücklagenspiegel.",
     "ne_UeFolge": "Teil der Übertragung aus Quellen, die erst im Jahr nach dem Kauf verkauft "
@@ -414,8 +428,10 @@ LIQUIDITAET = {
                "seiner Restschuld. Mindert nur die Liquidität, nicht das Ergebnis.",
     "abloesung": "Teil der Tilgung, der im Verkaufsjahr die Restschuld des verkauften "
                  "Objekts ablöst; der Rest ist planmäßige Tilgung.",
+    "ausschuettung": "Ausschüttung an den Gesellschafter laut Parameterblatt, in allen "
+                     "Szenarien gleich. Mindert nur die Liquidität, nicht das Ergebnis.",
     "zufluss": "Einnahmen − Ausgaben + Zinsertrag − Zinsen + Verkaufserlöse − Steuer − Kauf "
-               "+ Kreditauszahlung − Tilgung. AfA fließt nicht ab.",
+               "+ Kreditauszahlung − Tilgung − Ausschüttung. AfA fließt nicht ab.",
     "kum": "Vorjahr + freier Mittelzufluss; negativ = Finanzierungslücke.",
     "restschuld": "Summe der Restschulden aller Darlehen am Jahresende.",
 }
@@ -535,7 +551,8 @@ CASHFLOW = {
     "kredit": "Kreditauszahlungen der Neuobjekte zum Kauf.",
     "tilgung": "Tilgung nach Tilgungsplan bzw. Rate − Zins, ohne Ablösung bei Verkauf.",
     "abloesung": "Restschuld eines verkauften Bestandsobjekts, abgelöst im Verkaufsjahr.",
-    "finanzierung": "Kreditauszahlung minus Tilgung und Ablösung.",
+    "ausschuettung": "Ausschüttung an den Gesellschafter (Parameterblatt).",
+    "finanzierung": "Kreditauszahlung minus Tilgung, Ablösung und Ausschüttung.",
     "veraenderung": "operativ + Investition + Finanzierung = freier Mittelzufluss im Blatt "
                     "Liquidität.",
     "anfang": "Liquidität Ende des Vorjahres; das Raster beginnt mit 0.",

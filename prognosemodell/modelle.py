@@ -79,6 +79,24 @@ PARAMETER = [
     Parameter("par_AnlStand", "Stand Anlagenverzeichnis (Wj-Ende)", "=par_Basisjahr-1", FMT_JAHR,
               "Jahr der Buchwerte im Blatt Anlagen; die AfA bis zum Ende des Basisjahrs "
               "rechnet das Blatt fort"),
+    # Ausschüttung an den Gesellschafter: Abfluss aus der Liquidität in allen Szenarien;
+    # Mindestliquidität und Mindest-Kapitaldienstdeckung sind Nebenbedingungen der
+    # Optimierung (Blatt Optimierung) und der Prüfung
+    Parameter("par_Ausschuettung", "Ausschüttung p. a.", 0, FMT_EURO,
+              "Abfluss an den Gesellschafter zum Jahresende, in allen Szenarien gleich; "
+              "keine Steuer auf Ebene der Gesellschaft, KapESt beim Gesellschafter nicht "
+              "abgebildet. 0 = keine",
+              abschnitt="Ausschüttung und Liquidität"),
+    Parameter("par_AusschuettungAb", "Ausschüttung ab Jahr", None, FMT_JAHR,
+              "leer = erstes Prognosejahr"),
+    Parameter("par_AusschuettungSteig", "Steigerung der Ausschüttung p. a.", 0, FMT_PROZENT,
+              "ab dem zweiten Ausschüttungsjahr; 0 = gleichbleibend"),
+    Parameter("par_MindestLiq", "Mindestliquidität", 0, FMT_EURO,
+              "Liquidität im Plan A soll in keinem Jahr darunter liegen; Prüfung und "
+              "Optimierung. 0 = nicht negativ"),
+    Parameter("par_MindestKDD", "Mindest-Kapitaldienstdeckung", None, "0.00",
+              "z. B. 1,2: (Einnahmen − Ausgaben) / Kapitaldienst im Plan A; nur für die "
+              "Optimierung. Leer = keine Vorgabe"),
     Parameter("par_6bVorbesitz", "§ 6b Mindest-Vorbesitzzeit (Jahre)", 6, FMT_ZAHL, "",
               abschnitt="§ 6b und Drei-Objekt-Grenze (gesetzliche Werte)"),
     Parameter("par_6bFrist", "§ 6b Reinvestitionsfrist (Jahre)", 4, FMT_ZAHL, ""),
@@ -207,7 +225,7 @@ CODENAMEN = {
     "Variantenspeicher": "wsVarSpeicher",
     "BWA-Zuordnung": "wsBWAZuordnung", "Anlagen": "wsAnlagen", "AfA-Plan": "wsAfAPlan",
     "Neukauf-KSt": "wsNeukaufKSt", "Darlehen": "wsDarlehen", "Ergebnisbrücke": "wsBruecke",
-    "Cashflow": "wsCashflow",
+    "Cashflow": "wsCashflow", "Optimierung": "wsOptimierung",
 }
 
 
@@ -689,6 +707,16 @@ NEU_FELDER = [
                  "AfA-Basis, im Kaufjahr und den drei Folgejahren, vor der regulären AfA. Mit "
                  "Fläche höchstens 4.000 € je m², über der Baukostenobergrenze keine. Danach "
                  "linear: Restwert × AfA-Satz. leer = nein"),
+    # § 6b-Übertrag auf das Gebäude nur so weit, dass die Bemessungsgrundlage § 7b nicht
+    # sinkt: höchstens AK Gebäude − par_QNGHoechstQm × Fläche; der Rest bleibt in der
+    # Rücklage für spätere Neuobjekte oder wird im Fristjahr aufgelöst
+    Feld("qng_grenze", "§ 6b nur bis QNG-Grenze", "ne_6bQNG", FMT_TEXT, False, 11,
+         auswahl=("ja", "nein"),
+         hinweis="nur mit Sonder-AfA § 7b (QNG) = ja: Gebäudegewinne (ü1, ü3) gehen nur so weit "
+                 "auf das Gebäude, dass die Sonder-AfA nicht sinkt, also höchstens AK Gebäude "
+                 "− 4.000 € × Fläche (ohne Fläche: nichts). G+B-Gewinne auf G+B (ü2) bleiben. "
+                 "Der Rest der Rücklage steht späteren Neuobjekten zur Verfügung, sonst wird "
+                 "er im Fristjahr mit Zuschlag aufgelöst. leer = nein"),
     Feld("mietrendite", "Mietrendite auf Kaufpreis", "ne_Mietrendite", FMT_PROZENT, False, 11,
          minimum=0, maximum=1,
          hinweis="Jahresmiete = Kaufpreis × Rendite ab dem Folgejahr, dann mit der "
@@ -957,6 +985,7 @@ _LIQ = [
     ("kredit", "Kreditauszahlung", "Kredit", FMT_EURO, 14),
     ("tilgung", "Tilgung Darlehen (mit Ablösung bei Verkauf)", "Tilgung", FMT_EURO, 15),
     ("abloesung", "davon Ablösung bei Verkauf", "Abloesung", FMT_EURO, 14),
+    ("ausschuettung", "Ausschüttung an Gesellschafter", "Ausschuettung", FMT_EURO, 14),
     ("zufluss", "freier Mittelzufluss", "Zufluss", FMT_EURO, 14),
     ("kum", "Liquidität kumuliert Ende", "Kum", FMT_EURO, 15),
     ("restschuld", "Restschuld Darlehen Ende", "Restschuld", FMT_EURO, 15),
@@ -1028,6 +1057,8 @@ VERGLEICH_KENNZAHLEN = [
     ("Restschuld Darlehen", "aus", "Restschuld", "ende",
      "Darlehen der Bestands- und Neuobjekte; mindert das Gesamtvermögen"),
     ("Zinsen Darlehen", "liq", "KreditZins", "summe", "Summe über alle Jahre"),
+    ("Ausschüttungen", "liq", "Ausschuettung", "summe",
+     "an den Gesellschafter, in allen Szenarien gleich; mindert die Liquidität"),
 ]
 
 
@@ -1116,6 +1147,7 @@ class Neuobjekt:
     name: Optional[str] = None
     afa_methode: Optional[str] = None    # "linear" (leer) oder "degressiv"
     qng: Optional[str] = None            # "ja": Sonder-AfA § 7b (QNG); leer = nein
+    qng_grenze: Optional[str] = None     # "ja": § 6b auf das Gebäude nur bis zur QNG-Grenze
     nebenkosten: Optional[float] = None
     ak_gub_eingabe: Optional[float] = None  # None = vorbelegt aus dem Anteil G+B
     ak_geb_eingabe: Optional[float] = None  # None = Kaufpreis + Nebenkosten − AK G+B
@@ -1190,8 +1222,9 @@ PRUEFUNGEN = [
              WARNUNG, "Blatt Verkäufe, Spalte Verkaufsjahr; Grenze auf dem Parameterblatt"),
     Pruefung("frist_ende", "Frist einer Rücklage endet nach dem Prognoseende; Auflösung und "
              "Zuschlag liegen außerhalb des Rasters", HINWEIS, "Blatt Rücklagen, Spalte Hinweis"),
-    Pruefung("liquiditaet", "Liquidität im Plan (A) in mindestens einem Jahr negativ: "
-             "Finanzierungsbedarf, ggf. Kredit im Blatt Neuobjekte", HINWEIS,
+    Pruefung("liquiditaet", "Liquidität im Plan (A) in mindestens einem Jahr unter der "
+             "Mindestliquidität (Parameter, 0 = negativ): Finanzierungsbedarf, ggf. Kredit im "
+             "Blatt Neuobjekte, Ausschüttung senken oder Blatt Optimierung", HINWEIS,
              "Blatt Liquidität, Liquidität kumuliert"),
     Pruefung("kritisch", "Verkauf mit Annahmen bei steuerlichen Stammdaten oder Verkaufspreis "
              "(orange): Veräußerungsgewinn und § 6b-Rücklage sind nur geschätzt", WARNUNG,
@@ -1282,6 +1315,9 @@ VARIANTEN_SPALTEN = [
     ("Erhaltungssteigerung", "var_Erhaltsteig", "par_Erhaltsteig", FMT_PROZENT, 12),
     ("Wertsteigerung", "var_Wertsteig", "par_Wertsteig", FMT_PROZENT, 12),
     ("Alternativrendite", "var_Alternativrendite", "par_Alternativrendite", FMT_PROZENT, 12),
+    ("Ausschüttung p. a.", "var_Ausschuettung", "par_Ausschuettung", FMT_EURO, 14),
+    ("Kreditquote je Kauf (NeuID Quote)", "var_Kreditquoten", "*Kreditquoten", FMT_TEXT, 30),
+    ("§ 6b nur bis QNG-Grenze (NeuID)", "var_6bQNG", "*QNGGrenze", FMT_TEXT, 22),
     ("Eingaben gespeichert (einspielbar)", "var_Gespeichert", "*Gespeichert", FMT_TEXT, 14),
 ]
 VARIANTEN_KOPF = [s[0] for s in VARIANTEN_SPALTEN]

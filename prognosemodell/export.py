@@ -60,6 +60,7 @@ BWA_GESAMT = "BWA gesamt"
 BWA_HALTEN = "BWA halten"
 BWA_OBJEKTE = "BWA je Objekt"
 VERKAUF_KAUF = "Verkauf und Kauf"
+VARIANTEN = "Varianten"
 ANNAHMEN = "Annahmen"
 INHALT = [
     (JAHRESRECHNUNG, "je Jahr Ergebnis und Steuer, Geldfluss und Vermögen; Plan und Halten"),
@@ -73,6 +74,8 @@ INHALT = [
                  "Neuobjekte"),
     (BWA_OBJEKTE, "BWA je Kostenstelle untereinander, mit Inhaltsverzeichnis"),
     (VERKAUF_KAUF, "geplante Verkäufe und Neuobjekte, Ergebnis und Herleitung je Vorgang"),
+    (VARIANTEN, "festgehaltene Varianten nebeneinander, etwa Ausgang und Ergebnis der "
+                "Optimierung: Endvermögen, Liquidität, Ausschüttung, Käufe und Finanzierung"),
     (ANNAHMEN, "zentrale Annahmen, Daten je Objekt mit Herkunft, Plausibilitätsprüfung"),
 ]
 
@@ -363,7 +366,10 @@ def _blatt_ueberblick(ex, wb, quelle: str, blaetter: list) -> None:
          FMT_BETRAG),
         (f"tiefster Liquiditätsstand im Plan (im Jahr {jahre[tiefst]}; negativ = "
          "Finanzierungsbedarf)", kum[tiefst], FMT_BETRAG),
-    ]:
+    ] + ([("Ausschüttungen an den Gesellschafter über alle Jahre (in allen Optionen gleich)",
+           sum(map(_zahl, _bereich(wb, "liq_Ausschuettung"))), FMT_BETRAG)]
+         if "liq_Ausschuettung" in wb.defined_names
+         and _ungleich_null(_bereich(wb, "liq_Ausschuettung")) else []):
         ws.cell(row=zeile, column=1, value=text)
         ws.cell(row=zeile, column=2, value=wert).number_format = fmt
         zeile += 1
@@ -489,6 +495,7 @@ JAHRESRECHNUNG_POSTEN = [
     Posten("./. Kauf Neuobjekte inkl. Nebenkosten", "liq", "Kauf", -1),
     Posten("+ Kreditauszahlung", "liq", "Kredit"),
     Posten("./. Tilgung Darlehen (mit Ablösung bei Verkauf)", "liq", "Tilgung", -1),
+    Posten("./. Ausschüttung an Gesellschafter", "liq", "Ausschuettung", -1),
     Posten("= freier Mittelzufluss", "liq", "Zufluss", art="summe"),
     Posten("Liquidität am Jahresende (Alternativanlage)", "liq", "Kum", art="bestand"),
     Posten("Vermögen am Jahresende"),
@@ -612,9 +619,14 @@ def _blatt_jahresrechnung(ex, wb) -> None:
     ws.freeze_panes = ws.cell(row=zeile + 1, column=2)
     kopf = zeile
     zeile += 1
+    # Ausschüttung nur, wenn es eine gibt (ältere Mappen kennen sie nicht)
+    ohne_ausschuettung = ("liq_Ausschuettung" not in wb.defined_names
+                          or not _ungleich_null(_bereich(wb, "liq_Ausschuettung")))
+    posten = [p for p in JAHRESRECHNUNG_POSTEN
+              if not (p.feld == "Ausschuettung" and ohne_ausschuettung)]
     plan_gleich_halten = all(
         all(abs(a - b) <= SCHWELLE for a, b in zip(_reihe(wb, "Plan", p), _reihe(wb, "Halten", p)))
-        for p in JAHRESRECHNUNG_POSTEN if p.quelle)
+        for p in posten if p.quelle)
     herleitungen = {}
     for sicht, titel in (("Plan", "Plan: mit Verkäufen und Neuobjekten"),
                          ("Halten", "Halten: alle Objekte behalten")):
@@ -623,7 +635,7 @@ def _blatt_jahresrechnung(ex, wb) -> None:
         zeile += 1
         _abschnitt(ws, zeile, titel, n + 2)
         herleitungen[sicht] = Herleitung()
-        zeile = _jahreszeilen(ws, zeile + 1, JAHRESRECHNUNG_POSTEN,
+        zeile = _jahreszeilen(ws, zeile + 1, posten,
                               lambda p, s=sicht: _reihe(wb, s, p), n,
                               herleitung=herleitungen[sicht])
     zeile += 1
@@ -801,6 +813,77 @@ def _blatt_cashflow(ex, wb, formeln: Formeln) -> None:
         ws.column_dimensions[get_column_letter(i)].width = BREITE_ZAHL
     ws.add_chart(diagramm_cashflow(ws, kopfzeile, zeilen, 2, n + 1), f"A{zeile + 1}")
     _druck(ws, f"{kopfzeile}:{kopfzeile}")
+
+
+# --- Blatt Varianten ---
+
+# (Überschrift, Name in der Mappe, Format); fehlt der Name (ältere Mappe), entfällt die Spalte
+VARIANTEN_ANGABEN = [
+    ("Variante", "var_Bezeichnung", None),
+    ("festgehalten am", "var_Datum", "DD.MM.YYYY HH:MM"),
+    ("Endvermögen Plan", "var_A", FMT_BETRAG),
+    ("Endvermögen Halten", "var_Baseline", FMT_BETRAG),
+    ("Differenz Plan − Halten", None, FMT_DIFF),
+    ("Differenz zur besten Variante", None, FMT_DIFF),
+    ("tiefste Liquidität Plan", "var_LiqMin", FMT_BETRAG),
+    ("im Jahr", "var_LiqMinJahr", "0"),
+    ("Steuer Plan gesamt", "var_Steuer", FMT_BETRAG),
+    ("Ausschüttung p. a.", "var_Ausschuettung", FMT_BETRAG),
+    ("Käufe (NeuID Jahr Preis in T€)", "var_Kaeufe", None),
+    ("Kreditquote je Kauf", "var_Kreditquoten", None),
+    ("§ 6b nur bis QNG-Grenze", "var_6bQNG", None),
+    ("Verkäufe (ObjektID Jahr Preis in T€)", "var_Verkaeufe", None),
+    ("Plausibilitätsprüfung", "var_Pruefung", None),
+]
+
+
+def _blatt_varianten(ex, wb) -> bool:
+    """Festgehaltene Varianten (Blatt Varianten der Mappe) je Zeile, die Differenzen als
+    Formeln; nur, wenn mindestens eine Variante festgehalten ist."""
+    if "var_Bezeichnung" not in wb.defined_names:
+        return False
+    namen = _bereich(wb, "var_Bezeichnung")
+    zeilen = [i for i, n in enumerate(namen) if n not in (None, "")]
+    if not zeilen:
+        return False
+    angaben = [(t, n, f) for t, n, f in VARIANTEN_ANGABEN
+               if n is None or n in wb.defined_names]
+    spalten = {n: _bereich(wb, n) for _, n, _ in angaben if n}
+    ws = ex.create_sheet(VARIANTEN)
+    zeile = _titel(ws, "Varianten: festgehaltene Ergebnisse im Vergleich",
+                   "Je Zeile ein festgehaltener Stand der Eingaben (Blatt Varianten der Mappe), "
+                   "etwa vor und nach der Optimierung. Endvermögen nach latenter Steuer am Ende "
+                   "des Rasters; die beste Variante ist fett. Kreditquote = Kredit / (Kaufpreis "
+                   "+ Nebenkosten).")
+    _kopfzeile(ws, zeile, [t for t, _, _ in angaben])
+    ws.row_dimensions[zeile].height = 45
+    kopf = zeile
+    spalte_von = {t: i for i, (t, _, _) in enumerate(angaben, start=1)}
+    plan = get_column_letter(spalte_von["Endvermögen Plan"])
+    halten = get_column_letter(spalte_von["Endvermögen Halten"])
+    werte_plan = [_zahl(spalten["var_A"][i]) for i in zeilen]
+    beste = max(werte_plan)
+    erste, letzte = kopf + 1, kopf + len(zeilen)
+    for z, i in enumerate(zeilen, start=erste):
+        for s, (text, name, fmt) in enumerate(angaben, start=1):
+            if text == "Differenz Plan − Halten":
+                c = _formel(ws, z, s, f"={plan}{z}-{halten}{z}")
+            elif text == "Differenz zur besten Variante":
+                c = _formel(ws, z, s, f"={plan}{z}-MAX({plan}${erste}:{plan}${letzte})")
+            else:
+                c = ws.cell(row=z, column=s, value=spalten[name][i])
+            if fmt:
+                c.number_format = fmt
+            if _zahl(spalten["var_A"][i]) >= beste - SCHWELLE:
+                c.font = FONT_FETT
+    breiten = {"Variante": 30, "Käufe (NeuID Jahr Preis in T€)": 30,
+               "Kreditquote je Kauf": 24, "Verkäufe (ObjektID Jahr Preis in T€)": 30,
+               "festgehalten am": 16}
+    for s, (text, _, _) in enumerate(angaben, start=1):
+        ws.column_dimensions[get_column_letter(s)].width = breiten.get(text, 15)
+    ws.freeze_panes = ws.cell(row=erste, column=2)
+    _druck(ws, f"{kopf}:{kopf}")
+    return True
 
 
 # --- BWA-Blätter ---
@@ -1500,6 +1583,8 @@ def erstelle_export(wb, formeln_wb=None, quelle: str = "") -> Workbook:
     _blatt_bwa_objekte(ex, wb, spalten, formeln)
     if _blatt_verkauf_kauf(ex, wb, formeln):
         blaetter.append(VERKAUF_KAUF)
+    if _blatt_varianten(ex, wb):
+        blaetter.append(VARIANTEN)
     _blatt_annahmen(ex, wb, formeln_wb)
     blaetter.append(ANNAHMEN)
     _blatt_ueberblick(ex, wb, quelle, blaetter)

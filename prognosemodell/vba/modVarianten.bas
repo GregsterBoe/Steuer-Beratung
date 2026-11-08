@@ -65,6 +65,8 @@ Private Function Kennzahl(ByVal quelle As String, ByVal bezeichnung As String) A
         Case "MinimumJahr": Kennzahl = TiefsterStand(rest, True)
         Case "Verkaeufe": Kennzahl = Vorgaenge("vk_ID", "vk_Jahr", "vk_Preis", "vk_Aktiv")
         Case "Kaeufe": Kennzahl = Vorgaenge("ne_ID", "ne_Kaufjahr", "ne_Kaufpreis", "ne_Aktiv")
+        Case "Kreditquoten": Kennzahl = Kreditquoten()
+        Case "QNGGrenze": Kennzahl = MitQNGGrenze()
         Case "Gespeichert": Kennzahl = JA
         Case Else: Kennzahl = ""
     End Select
@@ -110,6 +112,40 @@ Private Function Vorgaenge(ByVal idName As String, ByVal jahrName As String, _
         End If
     Next i
     Vorgaenge = s
+End Function
+
+' Rechnende Neuobjekte mit Kreditquote: "NeuID 80 %; ..." (Kredit / Kaufpreis + Nebenkosten)
+Private Function Kreditquoten() As String
+    Dim ids As Range, i As Long, s As String, ak As Variant, kredit As Variant
+    Set ids = Bereich("ne_ID")
+    For i = 1 To ids.Rows.Count
+        If CStr(Bereich("ne_Gueltig").Cells(i, 1).Value) = "1" Then
+            ak = Bereich("ne_AKGesamt").Cells(i, 1).Value
+            kredit = Bereich("ne_Kredit").Cells(i, 1).Value
+            If IsNumeric(ak) And IsNumeric(kredit) And CStr(ak) <> "" Then
+                If CDbl(ak) > 0 Then
+                    If s <> "" Then s = s & "; "
+                    s = s & Trim$(CStr(ids.Cells(i, 1).Value)) & " " & _
+                        Format(CDbl(kredit) / CDbl(ak) * 100, "0") & " %"
+                End If
+            End If
+        End If
+    Next i
+    Kreditquoten = s
+End Function
+
+' Rechnende Neuobjekte mit "Paragraph 6b nur bis QNG-Grenze = ja": "NeuID; ..."
+Private Function MitQNGGrenze() As String
+    Dim ids As Range, i As Long, s As String
+    Set ids = Bereich("ne_ID")
+    For i = 1 To ids.Rows.Count
+        If CStr(Bereich("ne_Gueltig").Cells(i, 1).Value) = "1" And _
+                LCase$(Trim$(CStr(Bereich("ne_6bQNG").Cells(i, 1).Value))) = JA Then
+            If s <> "" Then s = s & "; "
+            s = s & Trim$(CStr(ids.Cells(i, 1).Value))
+        End If
+    Next i
+    MitQNGGrenze = s
 End Function
 
 ' Zeilen eines Variantenblocks im Speicher: Summe der Zeilen aller Bereiche

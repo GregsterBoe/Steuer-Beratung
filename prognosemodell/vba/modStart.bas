@@ -19,6 +19,11 @@ Public Sub Einrichten()
         Array("Variante festhalten", "VarianteFesthaltenStarten"), _
         Array("Markierte Variante einspielen", "VarianteEinspielenStarten")), _
         ws.Range("E1"), True
+    Set ws = Bereich("opt_Ziel").Worksheet
+    KnoepfeAnlegen ws, KNOPF_PREFIX & "opt_", Array( _
+        Array("Optimieren", "OptimierenStarten"), _
+        Array("Tragbare Aussch{ue}ttung ermitteln", "TragbareAusschuettungStarten")), _
+        ws.Range("D4"), False
 End Sub
 
 Private Sub KnoepfeAnlegen(ByVal ws As Worksheet, ByVal prefix As String, _
@@ -47,6 +52,7 @@ Private Function Schaltflaechen() As Variant
         Array("Neu berechnen", "NeuBerechnenStarten"), _
         Array("Variante festhalten (Blatt Varianten)", "VarianteFesthaltenStarten"), _
         Array("Variante einspielen (Blatt Varianten)", "VarianteEinspielenStarten"), _
+        Array("Optimieren (Blatt Optimierung)", "OptimierenStarten"), _
         Array("Objekt anlegen", "ObjektAnlegenStarten"), _
         Array("Objekt duplizieren", "ObjektDuplizierenStarten"), _
         Array("Objekt entfernen", "ObjektEntfernenStarten"), _

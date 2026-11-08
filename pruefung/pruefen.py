@@ -2699,15 +2699,20 @@ def faelle():
             (f"{KOPF}Liquidität:2", 1, "Jahr"),
             (f"{KOPF}Rücklagen:1", 1, "RücklageID [Tooltip]"),
             (f"{KOPF}Parameter:5", 1, "★ Basisjahr (Ist) [Tooltip]"),
-            (f"{KOPF}Parameter:14", 1, "Steigerung weitere Ausgaben p. a. [Tooltip]"),
-            # § 6b- und § 7b-Abschnitt eingeklappt, Annahmen bei fehlenden Daten (mit
-            # Kernparametern) offen
+            (f"{KOPF}Parameter:15", 1, "Steigerung weitere Ausgaben p. a. [Tooltip]"),
+            # Ausschüttung und Annahmen bei fehlenden Daten (mit Kernparametern) offen;
+            # § 6b, GmbH & Co. KG, § 7b und Reinvestition eingeklappt
             (f"{ZEILE_EINGEKLAPPT}Parameter", 23, (0, False)),
-            (f"{ZEILE_EINGEKLAPPT}Parameter", 24, (1, True)),
-            (f"{ZEILE_EINGEKLAPPT}Parameter", 29, (1, True)),
-            (f"{ZEILE_EINGEKLAPPT}Parameter", 33, (1, True)),
-            (f"{ZEILE_EINGEKLAPPT}Parameter", 39, (1, False)),
-            (f"{ZEILE_EINGEKLAPPT}Parameter", 47, (1, True)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 25, (1, False)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 32, (1, True)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 41, (1, True)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 52, (1, True)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 58, (1, False)),
+            (f"{ZEILE_EINGEKLAPPT}Parameter", 65, (1, True)),
+            (f"{KOPF}Neuobjekte:1", nr(NEU_FELDER, "qng_grenze"),
+             "§ 6b nur bis QNG-Grenze [Tooltip]"),
+            (f"{AUSWAHL}Optimierung", "C" + opt_zelle("opt_ID")[1].split(":")[0][1:],
+             ('"ja,nein"', 1)),
             ("par_6bFrist", 0, 4),
             ("par_6bFristNeubau", 0, 6),
             # Auswahllisten: je Zelle genau eine Überprüfung, sonst verwirft Excel sie
@@ -3265,7 +3270,192 @@ def faelle():
              f"{FEHLER}: {PRUEFUNGEN[0].bezeichnung} (1)\n"
              f"{HINWEIS}: {PRUEFUNGEN[pr('liquiditaet')].bezeichnung} (20)\n"),
         ]),
+        # Ausschüttung 30.000 ab 2028, +10 % p. a., in allen Szenarien gleich; ohne Zins.
+        # 2028: 62.424 − 8.405 − Steuer 11.405,70 − 30.000 = 12.613,30, kumuliert 54.513,30.
+        # Mindestliquidität 50.000: 12 Jahre darunter (Hinweis Liquidität).
+        ("Ausschüttung: Abfluss in allen Szenarien, Cashflow, Mindestliquidität",
+         Modell(objekte=[obj], parameter={**OHNE_ZINS, "par_Ausschuettung": 30_000,
+                                          "par_AusschuettungAb": 2028,
+                                          "par_AusschuettungSteig": 0.1,
+                                          "par_MindestLiq": 50_000}), [
+            ("liq_Ausschuettung", lj(2027), 0),
+            ("liq_Ausschuettung", lj(2028), 30_000),
+            ("liq_Ausschuettung", lj(2029), 33_000),
+            ("lqb_Ausschuettung", lj(2029), 33_000),
+            ("lvb_Ausschuettung", lj(2029), 33_000),
+            ("lvc_Ausschuettung", lj(2029), 33_000),
+            ("liq_Zufluss", lj(2027), 41_900),
+            ("liq_Zufluss", lj(2028), 12_613.30),
+            ("liq_Kum", lj(2028), 54_513.30),
+            ("liq_Steuer", lj(2028), 11_405.70),   # Ergebnis und Steuer unverändert
+            ("cf_Ausschuettung", 1, -30_000),
+            ("cf_Kontrolle", 1, 0),
+            ("pr_Anzahl", pr("cashflow"), 0),
+            ("pr_Anzahl", pr("bruecke"), 0),
+            ("pr_Anzahl", pr("liquiditaet"), 12),
+            ("opt_LiqJahre", 0, 12),
+            ("opt_Erfuellt", 0, "nein"),
+            ("opt_LiqMin", 0, Wie("liq_Kum", lj(2046))),
+            ("opt_AusschuettungSumme", 0, Wie("vg_A", 19)),   # Vergleich, Zeile Ausschüttungen
+            ("opt_Ziel", 0, Wie("vg_A", 0)),
+            ("opt_KDDJahre", 0, 0),
+            ("opt_MindestKDD", 0, "keine"),
+            # „Block/Beschriftung“: die Beschriftung beginnt selbst mit „./.“
+            ("Export:Jahresrechnung:Plan:/./. Ausschüttung an Gesellschafter", 2029, -33_000),
+            (f"{EXPORT_KONTROLLE}Plan:", 0, 0),
+            ("Export:Cashflow:− Ausschüttung an Gesellschafter", 2028, -30_000),
+            ("Export:Überblick:Ausschüttungen an den Gesellschafter über alle Jahre (in allen "
+             "Optionen gleich)", 2, Wie("vg_A", 19)),
+        ]),
+        # § 6b nur bis QNG-Grenze: OBJ-001 Ende 2029, Rücklage Gebäude 268.000, G+B 500.000.
+        # NEU-001 2030 QNG, 180 m², AK Gebäude 800.000: Grenze 800.000 − 4.000 × 180 = 80.000;
+        # ü1 80.000, ü2 200.000, ü3 0, AfA-Basis und Bemessungsgrundlage 720.000 (wie ohne
+        # Übertrag). NEU-002 2031 ohne QNG nimmt den Rest: ü1 188.000, ü2 120.000, ü3 180.000.
+        ("§ 6b nur bis QNG-Grenze, Rest auf ein zweites Neuobjekt",
+         Modell(objekte=[obj],
+                verkaeufe=[Verkauf("OBJ-001", 2029, preis=1_400_000, nutzung_6b="ja")],
+                neuobjekte=[
+                    Neuobjekt("NEU-001", 2030, kaufpreis=1_000_000, anteil_gub=0.2,
+                              afa_satz=0.03, quelle="RL-OBJ-001", qng="ja", qng_grenze="ja",
+                              flaeche=180),
+                    Neuobjekt("NEU-002", 2031, kaufpreis=600_000, anteil_gub=0.2,
+                              afa_satz=0.03, quelle="RL-OBJ-001")]), [
+            ("ne_Ue1", 0, 80_000),
+            ("ne_Ue2", 0, 200_000),
+            ("ne_Ue3", 0, 0),
+            ("ne_AfABasis", 0, 720_000),
+            ("ne_QNGBasis", 0, 720_000),
+            ("prg_AfAQNG", prg_neu(1, 2030), 36_000),
+            ("ne_Ue1", 1, 188_000),
+            ("ne_Ue2", 1, 120_000),
+            ("ne_Ue3", 1, 180_000),
+            ("ne_AfABasis", 1, 112_000),
+            ("rl_Aufloesung", 0, 0),
+            ("ne_Status", 0, "OK"),
+            ("ne_Status", 1, "OK"),
+            ("pr_Gesamt", 0, "OK"),
+        ]),
+        # Ohne zweites Neuobjekt bleibt der Rest stehen: mit Fläche 188.000 + 300.000, ohne
+        # Fläche geht nichts auf das Gebäude (die ganze AfA-Basis ist Bemessungsgrundlage)
+        ("§ 6b nur bis QNG-Grenze, Rest aufgelöst",
+         Modell(objekte=[obj, dataclasses.replace(obj, objekt_id="OBJ-002")],
+                verkaeufe=[Verkauf("OBJ-001", 2029, preis=1_400_000, nutzung_6b="ja"),
+                           Verkauf("OBJ-002", 2029, preis=1_400_000, nutzung_6b="ja")],
+                neuobjekte=[
+                    Neuobjekt("NEU-001", 2030, kaufpreis=1_000_000, anteil_gub=0.2,
+                              afa_satz=0.03, quelle="RL-OBJ-001", qng="ja", qng_grenze="ja",
+                              flaeche=180),
+                    Neuobjekt("NEU-002", 2030, kaufpreis=1_000_000, anteil_gub=0.2,
+                              afa_satz=0.03, quelle="RL-OBJ-002", qng="ja", qng_grenze="ja"),
+                    # ohne QNG wirkt der Schalter nicht
+                    Neuobjekt("NEU-003", 2030, kaufpreis=1_000_000, anteil_gub=0.2,
+                              afa_satz=0.03, qng_grenze="ja")]), [
+            ("ne_Ue1", 0, 80_000),
+            ("rl_Aufloesung", 0, 488_000),
+            ("ne_Ue1", 1, 0),
+            ("ne_Ue2", 1, 200_000),
+            ("ne_Ue3", 1, 0),
+            ("ne_QNGBasis", 1, 800_000),
+            ("rl_Aufloesung", 1, 568_000),
+            ("ne_Status", 2, "OK"),
+            ("pr_Anzahl", pr("teiluebertrag"), 2),
+        ]),
+        # Optimierung: Kredit 1 % unter der Alternativrendite 3 %, also höchste Quote (80 %);
+        # Kauf schon im Verkaufsjahr 2029 bringt ein Jahr mehr Miete. § 6b nur bis QNG-Grenze
+        # bleibt nein: ohne weiteres Neuobjekt würde der Rest mit Zuschlag aufgelöst.
+        ("Optimierung: günstiger Kredit, Kaufjahr, Varianten",
+         Modell(objekte=[obj],
+                verkaeufe=[Verkauf("OBJ-001", 2029, preis=1_400_000, nutzung_6b="ja")],
+                neuobjekte=[Neuobjekt("NEU-001", 2030, kaufpreis=1_000_000, anteil_gub=0.2,
+                                      afa_satz=0.03, mietrendite=0.05, quelle="RL-OBJ-001",
+                                      qng="ja", flaeche=180, fin_art="Kredit", kredit_zins=0.01,
+                                      tilgung=0.02, kredit_quote=0.4)]), [
+            ("ne_KreditQuote", 0, 0.8),
+            ("ne_Kaufjahr", 0, 2029),
+            ("ne_6bQNG", 0, None),
+            ("opt_VorQuote", 0, 0.4),
+            ("opt_VorJahr", 0, 2030),
+            ("opt_Vor6b", 0, "nein"),
+            ("opt_ErgVorher", 0, Wie("var_A", 0)),
+            ("opt_ErgNachher", 0, Wie("vg_A", 0)),
+            ("opt_ErgErfuellt", 0, "ja"),
+            ("opt_ErgAenderungen", 0, 2),
+            ("var_Bezeichnung", 0, "Optimierung Ausgang"),
+            ("var_Bezeichnung", 1, "Optimierung Ergebnis"),
+            ("var_Kreditquoten", 0, "NEU-001 40 %"),
+            ("var_Kreditquoten", 1, "NEU-001 80 %"),
+            ("var_A", 1, Wie("vg_A", 0)),
+            ("pr_Gesamt", 0, "OK"),
+            (EXPORT_BLAETTER, 0, ["Überblick", "Jahresrechnung", "Ergebnisbrücke", "Cashflow",
+                                  "BWA gesamt", "BWA halten", "BWA je Objekt",
+                                  "Verkauf und Kauf", "Varianten", "Annahmen"]),
+            ("Export:Varianten:Optimierung Ergebnis", 3, Wie("var_A", 1)),
+            ("Export:Varianten:Optimierung Ergebnis", 12, "NEU-001 80 %"),
+            ("Export:Varianten:Optimierung Ausgang", 6,
+             Summe((Wie("var_A", 0), Wie("var_A", 1, -1)))),
+            (f"{EXPORT_FORMEL}Varianten:Optimierung Ausgang", 5, "=C5-D5"),
+            ("Export:Überblick:Inhalt/Varianten", 1, "Varianten"),
+        ], [
+            ("modOptimierung", "Optimieren", (), 2),
+        ]),
+        # Kredit 5 % über der Alternativrendite: so wenig Kredit wie möglich. Ohne Ausschüttung
+        # reichen 30 %, mit 20.000 p. a. erst 60 % (Kauf 2035, Kaufjahr fest, Schritt 10 %).
+        # Danach trägt die Mappe höchstens 19.000 €; der Parameter bleibt bei 20.000.
+        ("Optimierung: Ausschüttung bestimmt die Kreditquote",
+         Getippt(Modell(objekte=[obj], parameter={"par_Ausschuettung": 20_000},
+                        neuobjekte=[Neuobjekt("NEU-001", 2035, kaufpreis=600_000,
+                                              anteil_gub=0.2, afa_satz=0.03, mietrendite=0.05,
+                                              fin_art="Kredit", kredit_zins=0.05, tilgung=0.02,
+                                              kredit_quote=0.8)]),
+                 {opt_zelle("opt_HebelJahr"): "nein", opt_zelle("opt_KreditSchritt"): 0.1,
+                  opt_zelle("opt_Festhalten"): "nein"}), [
+            ("ne_KreditQuote", 0, 0.6),
+            ("ne_Kredit", 0, 360_000),
+            ("ne_Kaufjahr", 0, 2035),
+            ("opt_ErgErfuellt", 0, "ja"),
+            ("opt_Erfuellt", 0, "ja"),
+            ("opt_Tragbar", 0, 19_000),
+            ("par_Ausschuettung", 0, 20_000),
+            ("var_Bezeichnung", 0, None),
+        ], [
+            ("modOptimierung", "Optimieren", (), 1),
+            ("modOptimierung", "TragbareAusschuettung", (), 19_000),
+        ]),
+        # § 6b nur bis QNG-Grenze lohnt, wenn ein zweites Neuobjekt den Rest aufnimmt
+        ("Optimierung: § 6b nur bis QNG-Grenze mit zweitem Neuobjekt",
+         Getippt(Modell(objekte=[obj],
+                        verkaeufe=[Verkauf("OBJ-001", 2029, preis=1_400_000, nutzung_6b="ja")],
+                        neuobjekte=[
+                            Neuobjekt("NEU-001", 2030, kaufpreis=1_000_000, anteil_gub=0.2,
+                                      afa_satz=0.03, quelle="RL-OBJ-001", qng="ja",
+                                      flaeche=180),
+                            Neuobjekt("NEU-002", 2031, kaufpreis=600_000, anteil_gub=0.2,
+                                      afa_satz=0.03, quelle="RL-OBJ-001")]),
+                 {opt_zelle("opt_HebelJahr"): "nein", opt_zelle("opt_HebelKredit"): "nein",
+                  opt_zelle("opt_Festhalten"): "nein"}), [
+            ("ne_6bQNG", 0, "ja"),
+            ("ne_6bQNG", 1, None),
+            ("ne_Ue1", 0, 80_000),
+            ("opt_Hinweis", 0, None),
+            ("opt_Vor6b", 1, "nein"),
+        ], [
+            ("modOptimierung", "Optimieren", (), 1),
+        ]),
     ]
+
+
+_OPT_ZELLEN = {}
+
+
+def opt_zelle(name: str) -> tuple:
+    """(Blatt, Zelle) einer Einstellung im Blatt Optimierung, für eingetippte Werte."""
+    if not _OPT_ZELLEN:
+        wb = erstelle_mappe(Modell(kapazitaet=TEST_KAPAZITAET))
+        for n, dn in wb.defined_names.items():
+            if n.startswith("opt_"):
+                blatt, ref = next(iter(dn.destinations))
+                _OPT_ZELLEN[n] = (blatt, ref.replace("$", ""))
+    return _OPT_ZELLEN[name]
 
 
 def eingeklappt(ws, spalte: int) -> tuple:
@@ -3393,7 +3583,10 @@ def makro_lauf(lo, fall: str, modell: Modell, aufrufe, ordner: Path, zellen: dic
         lo.speichern(doc, ordner / "gerechnet.xlsx")
     finally:
         doc.close(True)
-    return load_workbook(ordner / "gerechnet.xlsx", data_only=True), fehler
+    wb = load_workbook(ordner / "gerechnet.xlsx", data_only=True)
+    wb.pfad = ordner / "gerechnet.xlsx"   # für den Mandanten-Export
+    wb.erzeugt = load_workbook(ordner / "gerechnet.xlsx")
+    return wb, fehler
 
 
 def lauf(i: int, tmp: Path, lo_stapel: contextlib.ExitStack = None) -> tuple:

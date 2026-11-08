@@ -27,7 +27,8 @@ from pathlib import Path
 from .modelle import CODENAME_MAPPE
 
 VBA_ORDNER = Path(__file__).parent / "vba"
-MODULE = ["modStart", "modRechnen", "modPruefung", "modObjekte", "modVarianten"]
+MODULE = ["modStart", "modRechnen", "modPruefung", "modObjekte", "modVarianten",
+          "modOptimierung"]
 PROJEKTNAME = "VBAProject"
 FILTER_XLSM = "Calc MS Excel 2007 VBA XML"
 FILTER_XLSX = "Calc MS Excel 2007 XML"
