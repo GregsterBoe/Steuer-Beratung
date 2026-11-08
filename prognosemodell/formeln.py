@@ -1074,7 +1074,10 @@ def neu_zeile(zeile: int) -> dict:
                  f'{kj}+1-par_Basisjahr+1),"")')
 
     def quelle_summe(name):
-        return "(" + "+".join(f"IFERROR(N(INDEX({name},MATCH({_n(feld, zeile)},rl_ID,0))),0)"
+        # leere Quelle zählt nicht: LibreOffice fände mit MATCH("") die erste Zeile ohne
+        # Rücklage und zählte deren Verkauf mit
+        return "(" + "+".join(f'IF({_n(feld, zeile)}="",0,'
+                              f"IFERROR(N(INDEX({name},MATCH({_n(feld, zeile)},rl_ID,0))),0))"
                               for feld, _, _ in QUELLEN) + ")"
 
     quell_miete, quell_preis = quelle_summe("vk_Miete"), quelle_summe("vk_Preis")
