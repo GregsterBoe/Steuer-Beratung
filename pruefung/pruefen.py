@@ -2696,7 +2696,7 @@ def faelle():
             (f"{KOPF}Objekte:1", 1, "ObjektID * [Tooltip]"),
             (f"{KOPF}Liquidität:2", nr(LIQ_SPALTEN, "zve"),
              "Ergebnis vor Verlustvortrag [Tooltip]"),
-            (f"{KOPF}Liquidität:2", 1, "Jahr"),
+            (f"{KOPF}Liquidität:2", 1, "Jahr [Tooltip]"),   # seit PR #60 mit Erläuterung
             (f"{KOPF}Rücklagen:1", 1, "RücklageID [Tooltip]"),
             (f"{KOPF}Parameter:5", 1, "★ Basisjahr (Ist) [Tooltip]"),
             (f"{KOPF}Parameter:15", 1, "Steigerung weitere Ausgaben p. a. [Tooltip]"),
