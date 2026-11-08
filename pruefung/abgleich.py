@@ -334,6 +334,10 @@ def lauf(i: int, ordner: Path, ausfuehrlich: bool) -> tuple:
     ein = eingabe(modell, wb)
     # zweiter Weg: Eingaben so, wie die Browser-Fassung sie aus der gespeicherten Mappe liest
     ein_mappe = eingabe_aus_mappe(wb.pfad)
+    for j, name in ein["_leer_kst"]:   # wie oben: LibreOffice-Lesart leerer Bezüge
+        key = next(f.key for f in OBJEKT_FELDER if f.name == name)
+        ein_mappe["objekte"][j][key] = ""
+        ein_mappe["objekte"][j].setdefault("herkunft", {})[key] = "annahme"
     js, js_mappe = rechne_browser([ein, ein_mappe])
     for ergebnis in (js, js_mappe):
         if "fehler" in ergebnis:

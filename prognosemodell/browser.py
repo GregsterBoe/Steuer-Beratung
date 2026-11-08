@@ -270,9 +270,11 @@ def eingabe_aus_mappe(pfad: Path) -> dict:
         anlagen.append({f.key: (None if _ist_formel(formeln[f.key][j])
                                 else _eingetippt(formeln[f.key][j])) for f in ANLAGE_FELDER})
 
+    # Schnellcheck: § 6b und reinvestieren stehen als Annahmeformel in den Verkaufszeilen
+    schnellcheck = any(_ist_formel(z[0]) for z in bereich(wf, "vk_6b"))
     return leere_eingabe(parameter=param, objekte=objekte, verkaeufe=verkaeufe,
                          neuobjekte=neuobjekte, anlagen=anlagen, afa_plan=afa_plan(wv),
-                         neukauf=neukauf(wv), quelle=Path(pfad).name)
+                         neukauf=neukauf(wv), quelle=Path(pfad).name, schnellcheck=schnellcheck)
 
 
 # ---- HTML ----
