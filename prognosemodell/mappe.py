@@ -1426,8 +1426,10 @@ def _blatt_cashflow(wb) -> None:
     position("kredit", "+ Kreditauszahlung", fest("kredit"), einzug=True)
     position("tilgung", "− planmäßige Tilgung", fest("tilgung"), einzug=True)
     position("abloesung", "− Ablösung Darlehen bei Verkauf", fest("abloesung"), einzug=True)
+    position("ausschuettung", "− Ausschüttung an Gesellschafter", fest("ausschuettung"),
+             einzug=True)
     position("finanzierung", "Finanzierungs-Cashflow",
-             summe("kredit", "tilgung", "abloesung"), fett=True)
+             summe("kredit", "tilgung", "abloesung", "ausschuettung"), fett=True)
     zeile += 1
 
     position("veraenderung", "Veränderung der Liquidität",
@@ -1759,6 +1761,158 @@ def _blatt_varianten(wb) -> None:
     _blatt_variantenspeicher(wb)
 
 
+def _blatt_optimierung(wb, modell: Modell) -> None:
+    """Optimierung (Makro modOptimierung): oben Ziel und Nebenbedingungen als Formeln, dann
+    die Einstellungen der Suche (gelb), das Ergebnis des letzten Laufs (vom Makro) und je
+    Neuobjekt, ob es optimiert wird, mit dem Stand vor dem Lauf. Gerechnet wird in den
+    Formeln der Mappe; das Makro setzt nur Kreditquote, Kaufjahr und § 6b nur bis
+    QNG-Grenze, rechnet neu und behält die beste zulässige Kombination."""
+    ws = wb.create_sheet("Optimierung")
+    ws["A1"] = "Optimierung: Käufe, Finanzierung und § 6b auf Endvermögen ausrichten"
+    ws["A1"].font = FONT_TITEL
+    ws.row_dimensions[1].height = 26
+    ws["A2"] = OPT_HINWEIS
+    ws["A2"].alignment = Alignment(wrap_text=True, vertical="top")
+    ws.merge_cells("A2:F2")
+    ws.row_dimensions[2].height = 75
+
+    def abschnitt(zeile, text):
+        ws.cell(row=zeile, column=1, value=text).font = Font(bold=True, size=12)
+
+    def zeilen(start, eintraege, fill):
+        for i, (name, text, wert, fmt, erlaeuterung, auswahl) in enumerate(eintraege):
+            z = start + i
+            ws.cell(row=z, column=1, value=text)
+            c = ws.cell(row=z, column=2, value=wert)
+            c.number_format, c.fill = fmt, fill
+            c.alignment = Alignment(horizontal="right")
+            ws.cell(row=z, column=3, value=erlaeuterung).alignment = Alignment(wrap_text=True)
+            _name(wb, name, f"Optimierung!$B${z}")
+            if auswahl:
+                dv = DataValidation(type="list", formula1='"' + ",".join(auswahl) + '"',
+                                    allow_blank=True)
+                ws.add_data_validation(dv)
+                dv.add(c.coordinate)
+        return start + len(eintraege)
+
+    zeile = 4
+    abschnitt(zeile, "Ziel und Nebenbedingungen (aktueller Stand)")
+    zeile = zeilen(zeile + 1, [(n, t, f, fmt, e, None)
+                               for n, t, f, fmt, e in formeln.optimierung_kennzahlen()],
+                   FILL_BERECHNET)
+    ws.conditional_formatting.add(
+        "B5:B" + str(zeile), FormulaRule(formula=['B5="nein"'], fill=FILL_FEHLER))
+    zeile += 1
+    abschnitt(zeile, "Einstellungen der Suche")
+    zeile = zeilen(zeile + 1, OPT_EINSTELLUNGEN, FILL_EINGABE)
+    zeile += 1
+    abschnitt(zeile, "Ergebnis des letzten Laufs (vom Makro geschrieben)")
+    zeile = zeilen(zeile + 1, [(n, t, None, fmt, e, None) for n, t, fmt, e in OPT_ERGEBNIS],
+                   PatternFill())
+    _name(wb, "opt_Ergebnis", f"Optimierung!$B${zeile - len(OPT_ERGEBNIS)}:$B${zeile - 1}")
+    zeile += 1
+
+    abschnitt(zeile, "Neuobjekte")
+    kopf = zeile + 1
+    _kopf(ws, kopf, [t for _, t, _, _ in OPT_NEU_SPALTEN])
+    ws.row_dimensions[kopf].height = 45
+    for spalte, (_, _, _, erl) in enumerate(OPT_NEU_SPALTEN, start=1):
+        _tooltip(ws.cell(row=kopf, column=spalte), erl)
+    erste, letzte = kopf + 1, kopf + modell.kapazitaet.neuobjekte
+    for spalte, (key, _, fmt, _) in enumerate(OPT_NEU_SPALTEN, start=1):
+        bst = get_column_letter(spalte)
+        _name(wb, f"opt_{key}", f"Optimierung!${bst}${erste}:${bst}${letzte}")
+        formel = formeln.optimierung_neu
+        for i, z in enumerate(range(erste, letzte + 1), start=1):
+            c = ws.cell(row=z, column=spalte)
+            c.number_format = fmt
+            inhalt = formel(key, i)
+            if inhalt is not None:
+                c.value, c.fill = inhalt, FILL_BERECHNET
+            elif key == "Mit":
+                c.fill = FILL_EINGABE
+        if key == "Mit":
+            dv = DataValidation(type="list", formula1='"ja,nein"', allow_blank=True)
+            ws.add_data_validation(dv)
+            dv.add(f"{bst}{erste}:{bst}{letzte}")
+    for spalte, breite in zip("ABCDEFGHIJKLM", (44, 16, 70, 10, 10, 14, 12, 10, 12, 12, 10,
+                                                 12, 40)):
+        ws.column_dimensions[spalte].width = breite
+    ws.freeze_panes = "A4"
+
+
+# Blatt Optimierung: Einstellungen (Name, Text, Standard, Format, Erläuterung, Auswahl)
+OPT_HINWEIS = (
+    "Ziel ist das Endvermögen nach latenter Steuer im Plan A. Nebenbedingungen: Liquidität in "
+    "keinem Jahr unter der Mindestliquidität, Kapitaldienstdeckung nicht unter der "
+    "Mindestvorgabe (beides Parameterblatt, Abschnitt Ausschüttung und Liquidität), keine "
+    "neuen Fehler im Blatt Prüfung. Das Makro „Optimieren“ ändert je Neuobjekt (Spalte "
+    "optimieren ≠ nein) Kaufjahr, § 6b nur bis QNG-Grenze und Kreditquote, rechnet jede "
+    "Kombination in den Formeln der Mappe durch und behält die beste zulässige; Ausgang und "
+    "Ergebnis hält es im Blatt Varianten fest. Faustregeln: Fremdkapital lohnt, solange der "
+    "Kreditzins unter der Rendite der Alternativanlage liegt; mehr Kredit kann trotzdem nötig "
+    "sein, damit die Ausschüttung trägt. Auf ein QNG-Gebäude kostet der § 6b-Übertrag keine "
+    "Sonder-AfA bis AK Gebäude − 4.000 € × Fläche.")
+OPT_EINSTELLUNGEN = [
+    ("opt_HebelJahr", "Kaufjahr verändern", "ja", FMT_TEXT,
+     "ja: Kaufjahr je Neuobjekt um bis zu ± Spielraum; mit Quelle nur innerhalb der Frist der "
+     "Rücklage (sonst Fehler, verworfen)", ("ja", "nein")),
+    ("opt_JahrSpielraum", "Spielraum Kaufjahr ± Jahre", 2, FMT_ZAHL,
+     "Jahre vor und nach dem eingetragenen Kaufjahr, innerhalb des Rasters", None),
+    ("opt_Hebel6b", "§ 6b nur bis QNG-Grenze verändern", "ja", FMT_TEXT,
+     "ja: probiert ja und nein bei Neuobjekten mit Sonder-AfA § 7b (QNG) und Quelle", ("ja", "nein")),
+    ("opt_HebelKredit", "Kreditquote verändern", "ja", FMT_TEXT,
+     "ja: Finanzierung Rest = Kredit mit Kreditquote von … bis …; braucht Zinssatz und "
+     "Tilgung (bzw. Laufzeit) im Blatt Neuobjekte, sonst bleibt das Neuobjekt wie erfasst",
+     ("ja", "nein")),
+    ("opt_KreditMin", "Kreditquote von", 0, FMT_PROZENT, "kleinste geprüfte Quote", None),
+    ("opt_KreditMax", "Kreditquote bis", 0.8, FMT_PROZENT,
+     "größte geprüfte Quote, z. B. Beleihungsgrenze der Bank", None),
+    ("opt_KreditSchritt", "Schrittweite Kreditquote", 0.2, FMT_PROZENT,
+     "kleiner = genauer, aber mehr Rechenläufe", None),
+    ("opt_Runden", "Runden höchstens", 3, FMT_ZAHL,
+     "je Runde jeder Hebel jedes Neuobjekts einmal; Ende, sobald eine Runde nichts verbessert",
+     None),
+    ("opt_Festhalten", "Ausgang und Ergebnis als Variante festhalten", "ja", FMT_TEXT,
+     "ja: Blatt Varianten, Zeilen „Optimierung Ausgang“ und „Optimierung Ergebnis“; der "
+     "Ausgang lässt sich wieder einspielen", ("ja", "nein")),
+]
+# Ergebnis des letzten Laufs: (Name, Text, Format, Erläuterung)
+OPT_ERGEBNIS = [
+    ("opt_ErgZeit", "Lauf am", "DD.MM.YYYY HH:MM", ""),
+    ("opt_ErgMeldung", "Ergebnis", FMT_TEXT, ""),
+    ("opt_ErgVorher", "Endvermögen A vorher", FMT_EURO, ""),
+    ("opt_ErgNachher", "Endvermögen A nachher", FMT_EURO, ""),
+    ("opt_ErgLiqVorher", "tiefste Liquidität A vorher", FMT_EURO, ""),
+    ("opt_ErgLiqNachher", "tiefste Liquidität A nachher", FMT_EURO, ""),
+    ("opt_ErgErfuellt", "Nebenbedingungen erfüllt", FMT_TEXT, ""),
+    ("opt_ErgAenderungen", "geänderte Hebel", FMT_ZAHL, "Anzahl Eingaben, die vom Ausgang "
+     "abweichen; vorher-Werte je Neuobjekt unten"),
+    ("opt_ErgLaeufe", "Rechenläufe", FMT_ZAHL, ""),
+    ("opt_Tragbar", "tragbare Ausschüttung p. a.", FMT_EURO,
+     "Makro „Tragbare Ausschüttung“: höchster Betrag (auf 1.000 € abgerundet), bei dem die "
+     "Nebenbedingungen mit den aktuellen Eingaben halten; Ab-Jahr und Steigerung wie "
+     "Parameterblatt"),
+    ("opt_TragbarZeit", "ermittelt am", "DD.MM.YYYY HH:MM", ""),
+]
+# Tabelle Neuobjekte: (Schlüssel, Überschrift, Format, Erläuterung); Name opt_<Schlüssel>
+OPT_NEU_SPALTEN = [
+    ("ID", "NeuID", FMT_TEXT, "aus dem Blatt Neuobjekte"),
+    ("Name", "Name", FMT_TEXT, ""),
+    ("Mit", "optimieren", FMT_TEXT, "nein: das Makro lässt dieses Neuobjekt unverändert; leer = ja"),
+    ("Zins", "Zinssatz Kredit", FMT_PROZENT, "ohne Zinssatz kein Kredit möglich"),
+    ("QNG", "Sonder-AfA § 7b", FMT_TEXT, ""),
+    ("Quelle", "Quelle 1", FMT_TEXT, ""),
+    ("Quote", "Kreditquote aktuell", FMT_PROZENT, "Kredit / (Kaufpreis + Nebenkosten)"),
+    ("Jahr", "Kaufjahr aktuell", FMT_JAHR, ""),
+    ("QNGGrenze", "§ 6b nur bis QNG-Grenze aktuell", FMT_TEXT, ""),
+    ("VorQuote", "Kreditquote vor dem Lauf", FMT_PROZENT, "vom Makro"),
+    ("VorJahr", "Kaufjahr vor dem Lauf", FMT_JAHR, "vom Makro"),
+    ("Vor6b", "§ 6b bis QNG-Grenze vor dem Lauf", FMT_TEXT, "vom Makro"),
+    ("Hinweis", "Hinweis", FMT_TEXT, "vom Makro, z. B. warum ein Hebel fehlt"),
+]
+
+
 def _blatt_variantenspeicher(wb) -> None:
     """Ausgeblendet: je festgehaltener Variante ein Block mit den Eingaben (FormulaR1C1,
     Präfix ~), die Bereiche aus VARIANTEN_BEREICHE untereinander. Nur die Makros lesen und
@@ -1800,6 +1954,7 @@ REITER = {"Start": "305496", "Parameter": "FFC000", "Objekte": "FFC000", "Anlage
           "Verkäufe": "FFC000",
           "Neuobjekte": "FFC000", "Prognose": "A5A5A5", "Rücklagen": "A5A5A5",
           "Liquidität": "A5A5A5", "Darlehen": "A5A5A5", "Prüfung": "70AD47", "Varianten": "70AD47",
+          "Optimierung": "70AD47",
           "BWA-Zuordnung": "FFC000"}
 FARBE_AUSGABE = "5B9BD5"
 # im Schnellcheck ausgeblendet; über Rechtsklick auf einen Reiter wieder einblendbar
@@ -1979,6 +2134,7 @@ def erstelle_mappe(modell: Modell) -> Workbook:
     _blatt_cashflow(wb)
     _blatt_pruefung(wb)
     _blatt_varianten(wb)
+    _blatt_optimierung(wb, modell)
     bwa_blaetter = bwa.blaetter_bwa(wb, modell)
     bwa.blatt_sonderbereich(wb, modell)
     _blatt_start(wb, modell)

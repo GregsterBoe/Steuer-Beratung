@@ -1108,8 +1108,16 @@ def neu_zeile(zeile: int) -> dict:
     # nach der Sonder-AfA § 7b des Kaufjahrs; die übrige AfA beginnt erst im Folgejahr
     qng_kaufjahr = f"IF(par_QNGJahre>0,N({_n('qng_basis_ohne6b', zeile)})*par_QNGSatz,0)"
 
+    # § 6b nur bis QNG-Grenze: auf das Gebäude höchstens, was die Bemessungsgrundlage § 7b
+    # nicht mindert (AK Gebäude − Höchstbetrag je m² × Fläche; ohne Fläche nichts)
+    flaeche = _n("flaeche", zeile)
+    qng_grenze = (f'IF(AND({_n("qng_grenze", zeile)}="ja",{_n("qng", zeile)}="ja",'
+                  f"NOT({_qng_ueber_obergrenze(zeile)})),"
+                  f"MAX({ak_geb}-IF(N({flaeche})>0,par_QNGHoechstQm*N({flaeche}),{ak_geb}),0),"
+                  f"{ak_geb})")
+
     def geb_grenze(k):
-        return f"({ak_geb}-IF({_vorjahr(zeile, k)},{qng_kaufjahr},0))"
+        return f"MIN({ak_geb}-IF({_vorjahr(zeile, k)},{qng_kaufjahr},0),{qng_grenze})"
 
     def folge(keys):
         return "+".join(f"IF({_vorjahr(zeile, k)},"
@@ -1518,6 +1526,13 @@ def _summe_zeilen(name: str, jahr: str, sz: Szenario, *bedingungen: str) -> str:
     return _summe_jahr(name, jahr, *bedingungen)
 
 
+def ausschuettung(t: str) -> str:
+    """Ausschüttung im Jahr t: ab par_AusschuettungAb (leer = erstes Prognosejahr) der Betrag,
+    jährlich um par_AusschuettungSteig gesteigert; in allen Szenarien gleich."""
+    ab = "IF(ISNUMBER(par_AusschuettungAb),par_AusschuettungAb,par_Startjahr)"
+    return (f"=IF({t}>={ab},N(par_Ausschuettung)*(1+N(par_AusschuettungSteig))^({t}-{ab}),0)")
+
+
 def liquiditaet_zeile(sz: Szenario):
     """Formelfunktion (zeile, erstes_jahr) der Liquiditätstabelle des Szenarios."""
     c = _tabelle(liq_spalten, sz)
@@ -1538,10 +1553,11 @@ def liquiditaet_zeile(sz: Szenario):
             "zve": (f"={c('ergebnis', zeile)}+{c('verkauf', zeile)}+{c('zins', zeile)}"
                     f"-{c('kreditzins', zeile)}"),
             **_steuer(c, zeile, erstes_jahr, c("zve", zeile)),
+            "ausschuettung": ausschuettung(t),
             "zufluss": (f"={c('einnahmen', zeile)}-{c('ausgaben', zeile)}+{c('zins', zeile)}"
                         f"-{c('kreditzins', zeile)}+{c('verkaufserloes', zeile)}"
                         f"-{c('steuer', zeile)}-{c('kauf', zeile)}+{c('kredit', zeile)}"
-                        f"-{c('tilgung', zeile)}"),
+                        f"-{c('tilgung', zeile)}-{c('ausschuettung', zeile)}"),
             "kum": f"={kum_vor}+{c('zufluss', zeile)}",
         }
     return zeile_formeln
@@ -1791,6 +1807,7 @@ def cashflow_summen(jahr: str) -> dict:
         "kredit": f"={liq('Kredit')}",
         "tilgung": f"=-({liq('Tilgung')}-{liq('Abloesung')})",
         "abloesung": f"=-{liq('Abloesung')}",
+        "ausschuettung": f"=-{liq('Ausschuettung')}",
         "kum": liq("Kum"),
     }
 
@@ -1842,7 +1859,7 @@ def pruefung_anzahl() -> dict:
         # je gültigem Verkauf: Verkäufe im Zeitraum, der mit seinem Verkaufsjahr endet
         "grundstueckshandel": f"=SUMPRODUCT({gueltig}*(({im_fenster})>par_DOGrenze))",
         "frist_ende": '=SUMPRODUCT(--(rl_Hinweis<>""))',
-        "liquiditaet": "=SUMPRODUCT(--(liq_Kum<-0.005))",
+        "liquiditaet": "=SUMPRODUCT(--(liq_Kum<N(par_MindestLiq)-0.005))",
         "kritisch": '=COUNTIF(obj_Kritisch,">0")+SUM(vk_PreisAnnahme)',
         "bwa_zuordnung": ("=SUMPRODUCT(--(COUNTIF(zuo_Nummern,zuo_Nr)=0))"
                           "+SUMPRODUCT(--(ABS(zuo_Differenz)>0.5))"
@@ -1965,3 +1982,62 @@ def annahme_neu(key: str, zeile: int):
     if key in annahmen:
         return f'=IF({eigen},"",{annahmen[key]})'
     return None
+
+
+# --- Blatt Optimierung (Makro modOptimierung) ---
+#
+# Ziel und Nebenbedingungen als Formeln, damit sie auch ohne Makro sichtbar sind; das Makro
+# liest opt_Ziel, opt_LiqJahre, opt_Fehlbetrag, opt_KDDJahre und pr_Fehler.
+
+def optimierung_kennzahlen() -> list:
+    """(Name, Text, Formel, Format, Erläuterung) der Kennzahlen oben im Blatt Optimierung."""
+    mindest = "N(par_MindestLiq)"
+    kdd = (f"SUMPRODUCT(({_KAPITALDIENST}>0.005)"
+           f"*((liq_Einnahmen-liq_Ausgaben)<par_MindestKDD*{_KAPITALDIENST}))")
+    eur, txt = '#,##0 "€"', "@"
+    return [
+        ("opt_Ziel", "Ziel: Endvermögen nach latenter Steuer, Plan A", "=INDEX(vg_A,1)", eur,
+         "Ende des Rasters (Blatt Vergleich); wird maximiert"),
+        ("opt_ZielHalten", "zum Vergleich: Endvermögen Halten", "=INDEX(vg_Baseline,1)", eur,
+         "Baseline, alles halten; mit derselben Ausschüttung"),
+        ("opt_Ausschuettung", "Ausschüttung p. a. (Parameter)", "=N(par_Ausschuettung)", eur,
+         "Ab-Jahr und Steigerung auf dem Parameterblatt"),
+        ("opt_AusschuettungSumme", "Ausschüttungen über alle Jahre", "=SUM(liq_Ausschuettung)",
+         eur, ""),
+        ("opt_MindestLiq", "Mindestliquidität (Parameter)", f"={mindest}", eur, ""),
+        ("opt_LiqMin", "tiefste Liquidität, Plan A", "=MIN(liq_Kum)", eur, ""),
+        ("opt_LiqJahre", "Jahre unter der Mindestliquidität",
+         f"=SUMPRODUCT(--(liq_Kum<{mindest}-0.005))", "0", "muss 0 sein"),
+        ("opt_Fehlbetrag", "Fehlbetrag zur Mindestliquidität (Summe der Jahre)",
+         f"=SUMPRODUCT((liq_Kum<{mindest})*({mindest}-liq_Kum))", eur,
+         "bei unzulässigen Lösungen: je kleiner, desto näher an zulässig"),
+        ("opt_MindestKDD", "Mindest-Kapitaldienstdeckung (Parameter)",
+         '=IF(ISNUMBER(par_MindestKDD),par_MindestKDD,"keine")', "0.00", ""),
+        ("opt_KDDJahre", "Jahre unter der Mindest-Kapitaldienstdeckung",
+         f"=IF(ISNUMBER(par_MindestKDD),{kdd},0)", "0", "muss 0 sein"),
+        ("opt_Erfuellt", "Nebenbedingungen erfüllt",
+         '=IF(AND(opt_LiqJahre=0,opt_KDDJahre=0),"ja","nein")', txt, ""),
+        ("opt_Pruefung", "Plausibilitätsprüfung", "=pr_Gesamt", txt,
+         "neue Fehler machen eine Lösung unzulässig"),
+    ]
+
+
+def optimierung_neu(key: str, i: int):
+    """Formel der Spalte key in der i-ten Zeile der Tabelle Neuobjekte (Blatt Optimierung);
+    None = Eingabe bzw. vom Makro geschrieben."""
+    def ne(name):
+        return f"INDEX({name},{i})"
+
+    leer = f'{ne("ne_ID")}=""'
+    werte = {
+        "ID": f'=IF({leer},"",{ne("ne_ID")})',
+        "Name": f'=IF({leer},"",{ne("ne_Name")}&"")',
+        "Zins": f'=IF(OR({leer},{ne("ne_KreditZins")}=""),"",{ne("ne_KreditZins")})',
+        "QNG": f'=IF({leer},"",IF({ne("ne_QNG")}="ja","ja","nein"))',
+        "Quelle": f'=IF({leer},"",{ne("ne_Quelle")}&"")',
+        "Quote": f'=IF(OR({leer},N({ne("ne_AKGesamt")})=0),"",N({ne("ne_Kredit")})'
+                 f'/{ne("ne_AKGesamt")})',
+        "Jahr": f'=IF({leer},"",{ne("ne_Kaufjahr")})',
+        "QNGGrenze": f'=IF({leer},"",IF({ne("ne_6bQNG")}="ja","ja","nein"))',
+    }
+    return werte.get(key)

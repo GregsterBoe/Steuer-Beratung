@@ -1604,3 +1604,42 @@ par\_SteuersatzEff = KG: par\_KGGewSt + (par\_KGESt − MIN(Anrechnung × Messza
 **Unverändert:** AfA, Verkauf, § 6b (bei einem Gesellschafter deckt sich die gesellschafterbezogene Betrachtung mit der KG), Darlehen, BWA, Drei-Objekt-Grenze (die KG ist gewerblich geprägt). Die Alternativanlage bleibt voll steuerpflichtig mit dem angewandten Satz.
 
 **Testfälle:** „GmbH & Co. KG: Steuersatz und Verlustausgleich“ (Verlustvortragsfall aus Etappe 7: Steuer 2030 = −95.884,57 × 44,31 % = −42.486,45; 2034 = 1.044.915,43 × 43,54 % + 95.884,57 × 44,31 % = 497.442,63) und „GmbH & Co. KG: erweiterte Kürzung, Verluste vortragen“ (Satz 44,31 %, Steuer 2030 = 0).
+
+## 38. Ausschüttung, § 6b nur bis QNG-Grenze, Optimierung
+
+**Wunsch:** Der Mandanten-Export lässt sich nicht tunen. Statt Varianten von Hand zu suchen, soll das Modell gezielt nach Kriterien optimieren: (1) Investitionen so setzen, dass laufend Ausschüttungen (z. B. 600.000 € p. a.) finanzierbar sind; (2) das beste Verhältnis von Fremd- und Eigenkapital der Neuobjekte; (3) die beste Verteilung der § 6b-Rücklage, wenn die Sonder-AfA § 7b (QNG) möglichst genutzt werden soll, dafür ein anteiliger Übertrag.
+
+**Entscheidungen:** Optimiert wird in der Prognosemappe (VBA steuert, gerechnet wird in den Formeln), der Export zeigt die Ergebnisse als Varianten. Ziel ist das Endvermögen nach latenter Steuer im Plan A, die Ausschüttung ist Nebenbedingung. Der anteilige Übertrag ist ein Schalter je Neuobjekt („bis QNG-Grenze“), kein freier Betrag. Hebel: Kreditquote, § 6b-Schalter und Kaufjahr je Neuobjekt; Kaufpreis und Kauf ja/nein bleiben Eingaben.
+
+**Ausschüttung.** Parameter im neuen, offenen Abschnitt „Ausschüttung und Liquidität“: par\_Ausschuettung (Kernparameter, 0), par\_AusschuettungAb (leer = par\_Startjahr), par\_AusschuettungSteig (0), par\_MindestLiq (0), par\_MindestKDD (leer). Neue Spalte „Ausschüttung an Gesellschafter“ (liq\_/lvb\_/lvc\_/lqb\_Ausschuettung) vor dem freien Mittelzufluss, in allen Szenarien gleich: IF(t ≥ Ab; Betrag × (1 + Steigerung)^(t − Ab); 0). Sie mindert Zufluss und Liquidität, damit auch den Zinsertrag, nicht das Ergebnis. Cashflow: Zeile „− Ausschüttung an Gesellschafter“ in der Finanzierungstätigkeit (cf\_Ausschuettung). Vergleich: Kennzahl „Ausschüttungen“ (Summe). Prüfung „liquiditaet“ zählt Jahre unter par\_MindestLiq statt unter 0. Export: Zeile in der Jahresrechnung nur mit Ausschüttung, Summe im Überblick. Nicht abgebildet: KapESt bzw. Teileinkünfteverfahren beim Gesellschafter.
+
+**§ 6b nur bis QNG-Grenze.** Neues Feld ne\_6bQNG (ja/nein, hinter Sonder-AfA § 7b). Mit ja, QNG = ja und AK Gebäude je m² nicht über der Baukostenobergrenze gilt für ü1 und ü3 zusätzlich die Grenze AK Gebäude − par\_QNGHoechstQm × Fläche (ohne Fläche 0): geb\_grenze = MIN(bisherige Grenze; QNG-Grenze). ü2 bleibt. Die AfA-Basis bleibt damit mindestens 4.000 € × Fläche, die Bemessungsgrundlage § 7b also unverändert. Der Rest der Rücklage geht wie bisher an Neuobjekte darunter mit derselben Quelle oder wird im Fristjahr aufgelöst (Prüfung „teiluebertrag“).
+
+**Blatt Optimierung** (mappe.\_blatt\_optimierung, Reiter grün, Codename wsOptimierung):
+- *Ziel und Nebenbedingungen* (Formeln, formeln.optimierung\_kennzahlen): opt\_Ziel = INDEX(vg\_A; 1), opt\_ZielHalten, opt\_Ausschuettung, opt\_AusschuettungSumme, opt\_MindestLiq, opt\_LiqMin, opt\_LiqJahre (Jahre mit liq\_Kum < Mindestliquidität), opt\_Fehlbetrag (Summe der Unterschreitungen), opt\_MindestKDD, opt\_KDDJahre (Jahre mit Kapitaldienst, in denen Einnahmen − Ausgaben < Mindest-KDD × Kapitaldienst; 0 ohne Vorgabe), opt\_Erfuellt, opt\_Pruefung.
+- *Einstellungen* (gelb): opt\_HebelJahr, opt\_JahrSpielraum (2), opt\_Hebel6b, opt\_HebelKredit, opt\_KreditMin (0 %), opt\_KreditMax (80 %), opt\_KreditSchritt (20 %), opt\_Runden (3), opt\_Festhalten (ja).
+- *Ergebnis des letzten Laufs* (vom Makro): Zeitpunkt, Meldung, Endvermögen und tiefste Liquidität vorher/nachher, erfüllt, Anzahl geänderter Hebel, Rechenläufe, tragbare Ausschüttung.
+- *Neuobjekte:* je Zeile des Blatts Neuobjekte NeuID, Name, „optimieren“ (Eingabe, nein = unverändert), Zinssatz, QNG, Quelle, Kreditquote, Kaufjahr und § 6b-Schalter aktuell (Formeln), dazu die Werte vor dem Lauf und ein Hinweis (vom Makro).
+
+**Makro modOptimierung.Optimieren** (Rückgabe: Anzahl Hebel, die vom Ausgang abweichen):
+1. Neu rechnen, Fehlerzahl merken, Ausgang festhalten (Variante „Optimierung Ausgang“).
+2. Je rechnendem Neuobjekt mit optimieren ≠ nein drei Hebel. Kandidat 0 ist immer der Ausgang (Formeln wie erfasst). Kaufjahr: Ausgang ± Spielraum im Raster. § 6b-Schalter: das Gegenteil, nur mit QNG und Quelle. Kreditquote: von … bis … in Schritten, gesetzt als Finanzierung Rest = Kredit, Kreditbetrag leer, Kreditquote; ohne Zinssatz kein Hebel (Hinweis).
+3. Bewertung je Kandidat: neu rechnen; zulässig, wenn opt\_LiqJahre = 0, opt\_KDDJahre = 0 und pr\_Fehler nicht über dem Ausgang; dann opt\_Ziel, sonst −10^15 − neue Fehler × 10^13 − KDD-Jahre × 10^10 − Fehlbetrag. So findet die Suche auch aus einem unzulässigen Ausgang heraus.
+4. Koordinatenweise: je Runde jeder Hebel jedes Neuobjekts einmal, ein Kandidat bleibt nur, wenn er um mehr als 1 € besser ist; Ende nach opt\_Runden oder einer Runde ohne Verbesserung.
+5. Ergebnis eintragen, Variante „Optimierung Ergebnis“ festhalten.
+
+**Makro modOptimierung.TragbareAusschuettung:** prüft mit Ausschüttung 0, dann verdoppelnd ab MAX(Parameter; 100.000) bis zur ersten Verletzung, dann Bisektion bis 1.000 €; Ergebnis auf 1.000 € abgerundet in opt\_Tragbar, der Parameter bleibt.
+
+**Varianten:** neue Spalten „Ausschüttung p. a.“ (par\_Ausschuettung), „Kreditquote je Kauf“ (*Kreditquoten: NeuID und Kredit / AK gesamt je rechnendem Neuobjekt) und „§ 6b nur bis QNG-Grenze“ (*QNGGrenze) vor „Eingaben gespeichert“. Schaltflächen „Optimieren“ und „Tragbare Ausschüttung ermitteln“ im Blatt Optimierung, „Optimieren“ auch auf dem Parameterblatt.
+
+**Mandanten-Export:** Blatt Varianten hinter Verkauf und Kauf, nur mit festgehaltenen Varianten: je Variante Bezeichnung, Zeitpunkt, Endvermögen Plan und Halten, Differenz Plan − Halten und zur besten Variante (Formeln), tiefste Liquidität mit Jahr, Steuer, Ausschüttung, Käufe, Kreditquoten, § 6b-Schalter, Verkäufe, Prüfung; die beste Variante fett. Spalten, die eine ältere Mappe nicht kennt, entfallen.
+
+**Grenzen:** Die Suche ist lokal (koordinatenweise), nicht global; bei vielen Neuobjekten mit großem Spielraum dauert sie, jeder Rechenlauf ist eine volle Neuberechnung. Kaufpreis und Kauf ja/nein optimiert sie nicht; neue Käufe für eine höhere Ausschüttung erfasst man im Blatt Neuobjekte und lässt dann optimieren.
+
+**Testfälle:**
+- „Ausschüttung: Abfluss in allen Szenarien, Cashflow, Mindestliquidität“: 30.000 ab 2028, +10 %, ohne Zins; 2028 Zufluss 62.424 − 8.405 − 11.405,70 − 30.000 = 12.613,30, kumuliert 54.513,30; 2029 Ausschüttung 33.000 in allen Szenarien; Cashflow- und Brückenkontrolle 0; Mindestliquidität 50.000: 12 Jahre darunter. Export: Jahresrechnung, Cashflow, Überblick.
+- „§ 6b nur bis QNG-Grenze, Rest auf ein zweites Neuobjekt“: OBJ-001 Ende 2029 (Rücklage Gebäude 268.000, G+B 500.000), NEU-001 2030 QNG 180 m² (Grenze 80.000): ü1 80.000, ü2 200.000, ü3 0, AfA-Basis und Bemessungsgrundlage 720.000, Sonder-AfA 36.000; NEU-002 2031: ü1 188.000, ü2 120.000, ü3 180.000, AfA-Basis 112.000, keine Auflösung.
+- „§ 6b nur bis QNG-Grenze, Rest aufgelöst“: mit Fläche Auflösung 488.000; ohne Fläche nichts auf das Gebäude, Auflösung 568.000; ohne QNG wirkt der Schalter nicht; zwei Warnungen „teiluebertrag“.
+- „Optimierung: günstiger Kredit, Kaufjahr, Varianten“: Kredit 1 % gegen Alternativrendite 3 %: Quote 40 % → 80 %, Kaufjahr 2030 → 2029, § 6b-Schalter bleibt nein; Varianten Ausgang und Ergebnis; Export-Blatt Varianten.
+- „Optimierung: Ausschüttung bestimmt die Kreditquote“: Kredit 5 %, Kauf 2035 (600.000), Kaufjahr fest, Schritt 10 %: mit 20.000 Ausschüttung 60 % (ohne wären es 30 %); tragbar danach 19.000, Parameter bleibt 20.000.
+- „Optimierung: § 6b nur bis QNG-Grenze mit zweitem Neuobjekt“: nur der § 6b-Hebel: NEU-001 wechselt auf ja, ü1 80.000.
