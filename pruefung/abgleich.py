@@ -31,6 +31,7 @@ from pathlib import Path
 from openpyxl.utils import get_column_letter
 
 from prognosemodell import formeln
+from prognosemodell.browser import eingabe_aus_mappe
 from prognosemodell.bwa import OBJEKT_AUS_KST
 from prognosemodell.modelle import (ANLAGE_FELDER, ANLAGE_JAHRE_NAME, ANLAGE_SPALTEN,
                                     ANLAGE_STATUS_NAME, DARLEHEN_BLOECKE, DARLEHEN_SPALTEN,
@@ -331,10 +332,16 @@ def lauf(i: int, ordner: Path, ausfuehrlich: bool) -> tuple:
     modell, zellen = modell_zu(i)
     wb = pruefen.durchrechnen(modell, ordner / f"fall{i}", zellen, profil=ordner / "lo-profil")
     ein = eingabe(modell, wb)
-    js = rechne_browser(ein)
-    if "fehler" in js:
-        return fall, [("Rechenwerk", 0, "", js["fehler"].splitlines()[0])], js["fehler"]
-    return fall, vergleichen(wb, modell, js, ein["_leer_kst"]), ""
+    # zweiter Weg: Eingaben so, wie die Browser-Fassung sie aus der gespeicherten Mappe liest
+    ein_mappe = eingabe_aus_mappe(wb.pfad)
+    js, js_mappe = rechne_browser([ein, ein_mappe])
+    for ergebnis in (js, js_mappe):
+        if "fehler" in ergebnis:
+            return fall, [("Rechenwerk", 0, "", ergebnis["fehler"].splitlines()[0])], ergebnis["fehler"]
+    abw = vergleichen(wb, modell, js, ein["_leer_kst"])
+    abw += [(f"aus Mappe: {name}", zeile, excel, browser)
+            for name, zeile, excel, browser in vergleichen(wb, modell, js_mappe, ein["_leer_kst"])]
+    return fall, abw, ""
 
 
 _ORDNER = None

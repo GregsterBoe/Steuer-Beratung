@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><!--TITEL--></title>
+<style>
+/*STIL*/
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="kopf">
+    <div class="kopf-titel">
+      <h1><!--TITEL--></h1>
+      <span id="kopf-info" class="leise"></span>
+    </div>
+    <div class="kopf-aktionen">
+      <button id="btn-pruefung" class="chip" title="Plausibilitätsprüfung"></button>
+      <button id="btn-oeffnen" class="knopf">Öffnen …</button>
+      <button id="btn-speichern" class="knopf">Speichern</button>
+      <details class="menue">
+        <summary class="knopf">Mehr</summary>
+        <div class="menue-liste">
+          <button id="btn-beispiel">Beispiel laden</button>
+          <button id="btn-leer">Leer beginnen</button>
+          <button id="btn-start">Daten der Datei wiederherstellen</button>
+          <button id="btn-drucken">Drucken / als PDF</button>
+        </div>
+      </details>
+      <input id="datei" type="file" accept=".json,application/json" hidden>
+    </div>
+  </header>
+  <nav class="navi" id="navi"></nav>
+  <main class="inhalt" id="inhalt"></main>
+  <aside class="rechenweg" id="rechenweg" aria-live="polite" hidden></aside>
+</div>
+<div id="tooltip" class="tooltip" hidden></div>
+<script>
+/*DATEN*/
+</script>
+<script>
+/*SKRIPTE*/
+</script>
+</body>
+</html>
