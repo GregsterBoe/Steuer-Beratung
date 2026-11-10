@@ -12,6 +12,7 @@ python -m prognosemodell.browser --mappe Prognose.xlsx  # mit den Eingaben einer
 | `rechenwerk.js` | `rechne(eingabe)`: die Formeln der Mappe in JavaScript, ohne Abhängigkeiten |
 | `rechenweg.js` | `erklaere(pfad, ergebnis, meta)`: Formel in Worten und Teile je Zahl |
 | `oberflaeche.js`, `stil.css`, `seite.html` | Oberfläche; `prognosemodell/browser.py` setzt alles zu einer Datei zusammen |
+| `stil_werte.css` | Farben, Schriften, Rundungen: die Werte eines Stils der Knowledge-Base, erzeugt |
 | `rechne_cli.js` | rechnet JSON von stdin, für `python -m pruefung.abgleich` |
 
 **Eingabe** (JSON, auch das Format von „Speichern“ unter `eingabe`):
@@ -23,3 +24,19 @@ python -m prognosemodell.browser --mappe Prognose.xlsx  # mit den Eingaben einer
 **Pfade** der Zahlen im Rechenweg: `par:Name`, `obj:Zeile:Feld`, `prg:b|n:Zeile:Spalte:Jahr`, `vk:Zeile:Spalte`, `rl:Zeile:Spalte`, `rls:Spalte:Jahr`, `ne:Zeile:Spalte`, `neq:Zeile:Quelle:Spalte`, `dl:Zeile:haupt|zweit:Spalte[:Jahr]`, `liq|aus:Szenario:Spalte:Jahr`, `vg:Kennzahl:Szenario`. Zeile und Jahr zählen ab 0.
 
 Wer eine Formel in `prognosemodell/formeln.py` ändert, ändert sie in `rechenwerk.js` mit und prüft mit `python -m pruefung.abgleich`.
+
+## Aussehen
+
+Die Seite trägt den Stil „Stil nach awi“ der Knowledge-Base (`design.stil-nach-karriere-bei-awi-tax-gmbh-co-k`). `stil_werte.css` hält dessen Werte, `stil.css` ordnet oben die Rollen der Seite den Rollen des Stils zu (`--akzent: var(--accent)`, Szenario A bis Halten = `--s1` bis `--s4`) und enthält keine eigenen Farbwerte. Nach einer Änderung im Designer, oder für einen anderen Stil:
+
+```bash
+python -m kb style design.stil-nach-karriere-bei-awi-tax-gmbh-co-k --css --out stil.css   # im Repository Knowledge-Base
+python -m prognosemodell.browser --stil ../Knowledge-Base/stil.css                         # schreibt browser/stil_werte.css
+```
+
+Vom Stil und seinen Hausregeln weicht die Seite an zwei Stellen ab:
+
+- **Schriftgrößen und Abstände** bleiben die eigenen, dichten Werte der Seite (14 px Grundschrift) statt der Skala `--t-*` und `--sp-*`: Tabellen über 20 Jahre brauchen die Dichte.
+- **Eingabezellen** nutzen `--warn-bg`, weil der Stil keine Rolle dafür hat; es kommt dem Gelb der Mappe am nächsten.
+
+Die Excel-Mappe behält ihre eigenen Farben.

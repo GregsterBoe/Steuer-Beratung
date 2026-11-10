@@ -1,0 +1,92 @@
+/* Erzeugt mit python -m prognosemodell.browser --stil, nicht von Hand ändern. */
+/* House style: tokens */
+:root {
+  color-scheme: light;
+  --paper: #ecf0f2;
+  --sheet: #ffffff;
+  --sunk: #dee2e3;
+  --ink: #0c1418;
+  --muted: #5c5e5f;
+  --rule: #c6cacb;
+  --accent: #006394;
+  --accent-soft: #deebf1;
+  --ok: #1b6e41;
+  --ok-bg: #dfebe4;
+  --warn: #8a5405;
+  --warn-bg: #efe7dc;
+  --bad: #b0372b;
+  --bad-bg: #f4e3e1;
+  --info: #5b4a9e;
+  --info-bg: #e6e1f4;
+  --s1: #006394;
+  --s2: #e4521b;
+  --s3: #1f7a4d;
+  --s4: #737373;
+  --f-display: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --f-ui: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --f-mono: "Cascadia Mono", Consolas, "SF Mono", Menlo, "DejaVu Sans Mono", monospace;
+  --r: 3px;
+  --r-lg: 4px;
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 20px;
+  --sp-5: 32px;
+  --sp-6: 48px;
+  --t-s: 12.8px;
+  --t-m: 16px;
+  --t-l: 20px;
+  --t-xl: 25px;
+  --t-xxl: 31.2px;
+  --row: 8px;
+  --lh: 1.55;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper: #131718;
+    --sheet: #1c2223;
+    --sunk: #2e3537;
+    --ink: #e5e9eb;
+    --muted: #aab0b1;
+    --rule: #3d4142;
+    --accent: #7cbede;
+    --accent-soft: #31444c;
+    --ok: #6fd09a;
+    --ok-bg: #2d453b;
+    --warn: #e9b45a;
+    --warn-bg: #453f2e;
+    --bad: #f09184;
+    --bad-bg: #463836;
+    --info: #b9a9ee;
+    --info-bg: #38334c;
+    --s1: #7cbede;
+    --s2: #e1a189;
+    --s3: #b9d45c;
+    --s4: #8b8f91;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #131718;
+  --sheet: #1c2223;
+  --sunk: #2e3537;
+  --ink: #e5e9eb;
+  --muted: #aab0b1;
+  --rule: #3d4142;
+  --accent: #7cbede;
+  --accent-soft: #31444c;
+  --ok: #6fd09a;
+  --ok-bg: #2d453b;
+  --warn: #e9b45a;
+  --warn-bg: #453f2e;
+  --bad: #f09184;
+  --bad-bg: #463836;
+  --info: #b9a9ee;
+  --info-bg: #38334c;
+  --s1: #7cbede;
+  --s2: #e1a189;
+  --s3: #b9d45c;
+  --s4: #8b8f91;
+}

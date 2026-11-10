@@ -387,7 +387,7 @@
     return seitenkopf("Parameter", "Alle Annahmen der Rechnung. Leeren setzt die Vorgabe wieder ein. Sätze sind Platzhalter und vor dem Echteinsatz fachlich zu prüfen.") + html;
   }
 
-  const FARBLEGENDE = `<div class="farblegende"><span><i style="background:var(--eingabe-hg)"></i>Eingabe</span><span><i style="background:var(--annahme-hg)"></i>Annahme (leer gelassen, Wert grau-blau)</span><span><i style="background:var(--eingelesen-hg)"></i>aus Buchhaltung oder Anlagen</span><span><i style="box-shadow:inset 0 0 0 1px var(--schlecht)"></i>Pflichtfeld fehlt</span></div>`;
+  const FARBLEGENDE = `<div class="farblegende"><span><i style="background:var(--eingabe-hg)"></i>Eingabe</span><span><i style="background:var(--annahme-hg)"></i>Annahme (leer gelassen, Wert violett)</span><span><i style="background:var(--eingelesen-hg)"></i>aus Buchhaltung oder Anlagen</span><span><i style="box-shadow:inset 0 0 0 1px var(--schlecht)"></i>Pflichtfeld fehlt</span></div>`;
 
   const OBJ_GRUPPEN = [
     ["Laufende Werte im Basisjahr", ["objekt_id", "name", "art", "miete", "erhaltung", "weitere_einnahmen", "weitere_ausgaben", "afa_bwa", "zinsen"]],
@@ -413,7 +413,7 @@
       const st = o ? o.status : "";
       return `<tr>${zellen}<td class="status ${statusKlasse(st)}">${esc(st)}</td><td><button class="knopf klein gefahr" data-aktion="obj-weg" data-nr="${j}" title="Objekt entfernen">✕</button></td></tr>`;
     }).join("");
-    return seitenkopf("Objekte", "Bestandsobjekte und Kostenstellen. Leere Felder rechnen mit der Annahme vom Parameterblatt (blau, kursiv); ein eingetippter Wert ersetzt sie, Leeren stellt sie wieder her. Wert anklicken in den Rechenblättern zeigt, woher er kommt.",
+    return seitenkopf("Objekte", "Bestandsobjekte und Kostenstellen. Leere Felder rechnen mit der Annahme vom Parameterblatt (violett, kursiv); ein eingetippter Wert ersetzt sie, Leeren stellt sie wieder her. Wert anklicken in den Rechenblättern zeigt, woher er kommt.",
       `<button class="knopf haupt" data-aktion="obj-neu">+ Objekt</button>`)
       + FARBLEGENDE
       + (zeilen ? `<div class="tabelle-rahmen"><table><thead>${kopf1}${kopf2}</thead><tbody>${zeilen}</tbody></table></div>` : `<div class="leer-hinweis">Noch keine Objekte. „+ Objekt“ legt eins an; Pflicht sind ObjektID und Miete.</div>`);
