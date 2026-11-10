@@ -19,7 +19,7 @@
   --schlecht: var(--bad);
   --warnung: var(--warn);
   --hinweis: var(--info);
-  /* Herkunft eines Werts: Annahme = Hinweis, aus der Buchhaltung = in Ordnung */
+  /* Herkunft eines Werts: Annahme = Hinweis (violett), aus der Buchhaltung = in Ordnung */
   --annahme: var(--info);
   --annahme-hg: var(--info-bg);
   --eingelesen: var(--ok);
@@ -29,9 +29,8 @@
   --markiert: var(--accent-soft);
   --radius: var(--r-lg);            /* Karten und Flächen */
   --radius-klein: var(--r);         /* Knöpfe, Felder, Chips */
-  --radius-fein: calc(var(--r) / 3);
   --schrift: var(--f-body);
-  --schrift-zahl: var(--f-body);    /* Beträge: Textschrift mit Tabellenziffern, siehe README */
+  --schrift-zahl: var(--f-mono);    /* Beträge wie im Kontenblatt */
 }
 
 * { box-sizing: border-box; }
@@ -46,7 +45,8 @@ h1 { font-size: 17px; }
 h2 { font-size: 20px; margin-bottom: 4px; }
 h3 { font-size: 15px; margin: 22px 0 8px; }
 .leise { color: var(--leise); }
-.zahl, td.z, th.z { font-family: var(--schrift-zahl); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.zahl, td.z, th.z { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.zahl, td.z { font-family: var(--schrift-zahl); }
 
 #app {
   display: grid; height: 100vh;
@@ -159,7 +159,7 @@ td.eingabe { padding: 0; background: var(--eingabe-hg); }
 td.eingabe input, td.eingabe select {
   width: 100%; min-width: 92px; border: 0; background: transparent; padding: 5px 10px; outline: none;
 }
-td.eingabe input.z { text-align: right; font-variant-numeric: tabular-nums; }
+td.eingabe input.z { text-align: right; font-family: var(--schrift-zahl); font-variant-numeric: tabular-nums; }
 td.eingabe input:focus, td.eingabe select:focus { box-shadow: inset 0 0 0 3px var(--akzent); }
 td.eingabe.annahme { background: var(--annahme-hg); }
 td.eingabe.annahme input::placeholder { color: var(--annahme); font-style: italic; opacity: 1; }
@@ -169,7 +169,7 @@ td.eingabe.pflicht-fehlt { box-shadow: inset 0 0 0 1px var(--schlecht); }
 th .pflicht { color: var(--schlecht); }
 th[title] { cursor: help; }
 .farblegende { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--leise); margin-bottom: 10px; }
-.farblegende i { display: inline-block; width: 12px; height: 12px; border-radius: var(--radius-fein); border: 1px solid var(--linie-stark); vertical-align: -2px; margin-right: 5px; }
+.farblegende i { display: inline-block; width: 12px; height: 12px; border-radius: var(--radius-klein); border: 1px solid var(--linie-stark); vertical-align: -2px; margin-right: 5px; }
 
 .formular { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px 14px; }
 .feld label { display: block; font-size: 12.5px; color: var(--leise); margin-bottom: 3px; }
@@ -177,7 +177,7 @@ th[title] { cursor: help; }
 .feld input, .feld select {
   width: 100%; border: 1px solid var(--linie-stark); border-radius: var(--radius-klein); padding: 5px 9px; background: var(--eingabe-hg);
 }
-.feld input.z { text-align: right; font-variant-numeric: tabular-nums; }
+.feld input.z { text-align: right; font-family: var(--schrift-zahl); font-variant-numeric: tabular-nums; }
 .feld.annahme input, .feld.annahme select { background: var(--annahme-hg); }
 .feld.annahme input::placeholder { color: var(--annahme); font-style: italic; opacity: 1; }
 .feld input:focus, .feld select:focus { outline: 3px solid var(--akzent); outline-offset: -1px; }
@@ -228,11 +228,11 @@ th[title] { cursor: help; }
 .rechenweg .teil.link:hover { background: var(--flaeche-2); }
 .rechenweg .teil.link .t-name::after { content: " ›"; color: var(--akzent); }
 .rechenweg .t-label small { display: block; color: var(--leise); font-size: 11.5px; }
-.rechenweg .t-wert { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rechenweg .t-wert { font-family: var(--schrift-zahl); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .rechenweg .excel { font-size: 12px; color: var(--leise); margin-top: 14px; }
-.rechenweg .excel code { background: var(--flaeche-2); padding: 1px 5px; border-radius: var(--radius-fein); }
+.rechenweg .excel code { background: var(--flaeche-2); padding: 1px 5px; border-radius: var(--radius-klein); }
 .rechenweg .verlauf { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 10px; font-size: 12px; }
-.rechenweg .verlauf button { border: 0; background: var(--flaeche-2); border-radius: var(--radius-fein); padding: 2px 7px; cursor: pointer; color: var(--leise); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rechenweg .verlauf button { border: 0; background: var(--flaeche-2); border-radius: var(--radius-klein); padding: 2px 7px; cursor: pointer; color: var(--leise); max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rechenweg .verlauf button:hover { color: var(--akzent); }
 .schliessen { border: 0; background: none; font-size: 20px; line-height: 1; cursor: pointer; color: var(--leise); padding: 2px 6px; }
 

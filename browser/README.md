@@ -34,10 +34,9 @@ python -m kb style design.stil-nach-karriere-bei-awi-tax-gmbh-co-k --css --out s
 python -m prognosemodell.browser --stil ../Knowledge-Base/stil.css                         # schreibt browser/stil_werte.css
 ```
 
-Vom Stil und seinen Hausregeln weicht die Seite an drei Stellen ab:
+Vom Stil und seinen Hausregeln weicht die Seite an zwei Stellen ab:
 
 - **Schriftgrößen und Abstände** bleiben die eigenen, dichten Werte der Seite (14 px Grundschrift) statt der Skala `--t-*` und `--sp-*`: Tabellen über 20 Jahre brauchen die Dichte.
-- **Beträge** stehen in der Textschrift mit Tabellenziffern (`--schrift-zahl`), nicht in `--f-mono`: Der Stil nennt nur `monospace`, unter Windows wäre das Courier New.
 - **Eingabezellen** nutzen `--warn-bg`, weil der Stil keine Rolle dafür hat; es kommt dem Gelb der Mappe am nächsten.
 
 Die Excel-Mappe behält ihre eigenen Farben.
