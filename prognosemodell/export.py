@@ -765,7 +765,8 @@ def _blatt_cashflow(ex, wb, formeln: Formeln) -> None:
     zeile = _titel(ws, f"Cashflow: Kapitalflussrechnung je Jahr ({_wert(wb, 'cf_Szenario')})",
                    "Operativer Cashflow indirekt: Jahresüberschuss plus Aufwand ohne Auszahlung "
                    "(AfA, Einstellung in die § 6b-Rücklage) minus Ertrag ohne Einzahlung "
-                   "(Veräußerungsgewinne, Auflösung, Gewinnzuschlag); Zinsen gehören dazu. "
+                   "(Veräußerungsgewinne, Auflösung, Gewinnzuschlag); Zinsen gehören dazu, "
+                   "abweichend von DRS 21 (gezahlte Zinsen dort in der Finanzierung). "
                    "Zuflüsse positiv, Abflüsse negativ. Kapitaldienstdeckung = (Einnahmen − "
                    "Ausgaben) / (Zinsen + planmäßige Tilgung). Summe = über alle Jahre.")
     _kopfzeile(ws, zeile, ["Position"] + jahre + ["Summe"])

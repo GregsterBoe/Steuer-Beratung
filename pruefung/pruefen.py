@@ -1252,6 +1252,9 @@ def faelle():
             ("cf_Dscr", lj(2027), 53_000 / 70_000),
             ("cf_NachKapitaldienst", lj(2027), Summe((Wie("cf_Operativ", lj(2027)),
                                                       Wie("cf_Tilgung", lj(2027))))),
+            # vor Darlehenszinsen: operativ + 40.000 Zinsen
+            ("cf_VorZinsen", lj(2027), Summe((Wie("cf_Operativ", lj(2027)),
+                                              Wie("cf_Kreditzins", lj(2027), faktor=-1)))),
             ("cf_Abloesung", lj(2027), 0),
             *[("cf_Kontrolle", lj(j), 0) for j in (2027, 2036, 2046)],
             ("pr_Anzahl", pr("kapitaldienst"), KAPITALDIENST_UNTER_1),
