@@ -285,7 +285,8 @@ def _json_im_skript(daten) -> str:
 
 def erstelle_html(eingabe: dict, titel: str = "Prognosemodell V+V") -> str:
     vorlage = (ORDNER / "seite.html").read_text(encoding="utf-8")
-    stil = (ORDNER / "stil.css").read_text(encoding="utf-8")
+    stil = "\n".join((ORDNER / name).read_text(encoding="utf-8")
+                     for name in ("stil_werte.css", "stil.css"))
     skripte = "\n".join((ORDNER / name).read_text(encoding="utf-8")
                         for name in ("rechenwerk.js", "rechenweg.js", "oberflaeche.js"))
     daten = (f"window.PROGNOSE_META={_json_im_skript(metadaten())};\n"
@@ -296,12 +297,33 @@ def erstelle_html(eingabe: dict, titel: str = "Prognosemodell V+V") -> str:
     return re.sub("|".join(re.escape(k) for k in ersetzt), lambda m: ersetzt[m.group(0)], vorlage)
 
 
+STIL_ENDE = "/* House style: base */"
+
+
+def uebernimm_stil(css: str) -> Path:
+    """Schreibt browser/stil_werte.css: nur die Werte des Stils (Farben, Schriften, Rundungen,
+    Skalen), ohne dessen Bausteine. Die Seite ordnet sie in stil.css ihren Rollen zu."""
+    if STIL_ENDE not in css or "--paper:" not in css:
+        raise SystemExit("Das ist nicht die Ausgabe von `python -m kb style ID --css`.")
+    werte = css.split(STIL_ENDE)[0].rstrip() + "\n"
+    ziel = ORDNER / "stil_werte.css"
+    ziel.write_text("/* Erzeugt mit python -m prognosemodell.browser --stil, nicht von Hand ändern. */\n"
+                    + werte, encoding="utf-8")
+    return ziel
+
+
 def main(argv=None) -> int:
     argumente = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     argumente.add_argument("--mappe", type=Path, help="Eingaben aus dieser Excel-Mappe übernehmen")
     argumente.add_argument("--ohne-testdaten", action="store_true", help="leere Seite")
     argumente.add_argument("--ausgabe", type=Path, default=STANDARD_AUSGABE)
+    argumente.add_argument("--stil", type=Path, metavar="CSS",
+                           help="Werte eines Stils der Knowledge-Base übernehmen "
+                                "(Ausgabe von `python -m kb style ID --css`) und beenden")
     args = argumente.parse_args(argv)
+    if args.stil:
+        print(f"geschrieben: {uebernimm_stil(args.stil.read_text(encoding='utf-8'))}")
+        return 0
     if args.mappe:
         eingabe = eingabe_aus_mappe(args.mappe)
     elif args.ohne_testdaten:
