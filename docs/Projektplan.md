@@ -1547,9 +1547,9 @@ Prüfung: Paket OBJ-001 2030 = −40.115,43 − 36.600 (Sonder-AfA im Kaufjahr 5
 | Investitionstätigkeit | + Verkaufserlöse netto − Kauf Neuobjekte inkl. Nebenkosten |
 | Finanzierungstätigkeit | + Kreditauszahlung − planmäßige Tilgung − Ablösung bei Verkauf |
 | Summe | Veränderung = freier Mittelzufluss; Liquidität Anfang und Ende; Kontrolle Ende − liq\_Kum (muss 0 sein) |
-| Kennzahlen | Free Cashflow, Kapitaldienst (Zinsen + planmäßige Tilgung), Cashflow nach Kapitaldienst, Kapitaldienstdeckung (Einnahmen − Ausgaben) / Kapitaldienst, unter 1 rot |
+| Kennzahlen | Free Cashflow, operativer Cashflow vor Darlehenszinsen (operativ − Zinsen Darlehen, Sicht DRS 21), Kapitaldienst (Zinsen + planmäßige Tilgung), Cashflow nach Kapitaldienst, Kapitaldienstdeckung (Einnahmen − Ausgaben) / Kapitaldienst, unter 1 rot |
 
-Übertragung des Schemas: Zuschreibungen gibt es im Modell nicht; die § 6b-Rücklage übernimmt die Rolle der Rückstellungen (Einstellung = Aufwand ohne Auszahlung, Auflösung und Zuschlag = Ertrag ohne Einzahlung). Veräußerungsgewinne sind Ertrag ohne Einzahlung, das Geld steht als Erlös in der Investitionstätigkeit. Forderungen entfallen, alle Zahlungen fallen im Jahr an. Zinsen gehören zum operativen Cashflow. B und C: nur „− Veräußerungsgewinne“; Baseline: keine Verkäufe.
+Übertragung des Schemas: Zuschreibungen gibt es im Modell nicht; die § 6b-Rücklage übernimmt die Rolle der Rückstellungen (Einstellung = Aufwand ohne Auszahlung, Auflösung und Zuschlag = Ertrag ohne Einzahlung). Veräußerungsgewinne sind Ertrag ohne Einzahlung, das Geld steht als Erlös in der Investitionstätigkeit. Forderungen entfallen, alle Zahlungen fallen im Jahr an. Zinsen gehören zum operativen Cashflow, abweichend von DRS 21 (gezahlte Zinsen in der Finanzierung, erhaltene in der Investition): bei fremdfinanzierten Objekten sind die Zinsen laufende Kosten, und der operative Cashflow soll zeigen, ob sich ein Objekt samt Kredit trägt. Die Kennzahl cf\_VorZinsen zeigt den Wert nach DRS 21 ohne Darlehenszinsen (Zinsertrag bleibt operativ). B und C: nur „− Veräußerungsgewinne“; Baseline: keine Verkäufe.
 
 **Ablösung:** neue Spalte prg\_Abloesung (Prognose) und \*\_Abloesung (Liquidität): Tilgung im Verkaufsjahr minus planmäßige Tilgung (Rate − Zins). Die Tilgung insgesamt bleibt unverändert.
 

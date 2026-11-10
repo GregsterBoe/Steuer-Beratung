@@ -1319,12 +1319,14 @@ def _blatt_cashflow(wb) -> None:
     ws["A2"] = ("Operativer Cashflow indirekt: Jahresüberschuss plus Aufwand ohne Auszahlung "
                 "(AfA, Einstellung in die § 6b-Rücklage) minus Ertrag ohne Einzahlung "
                 "(Veräußerungsgewinne, Auflösung, Gewinnzuschlag). Forderungen entfallen: Miete, "
-                "Kosten, Zinsen und Steuer fließen im selben Jahr. Zinsen gehören zum operativen "
-                "Cashflow. Zuflüsse positiv, Abflüsse negativ. Liquidität Ende = Blatt "
+                "Kosten, Zinsen und Steuer fließen im selben Jahr. Zinsen gehören hier zum "
+                "operativen Cashflow, abweichend von DRS 21 (gezahlte Zinsen: Finanzierung, "
+                "erhaltene: Investition); die Kennzahl „vor Darlehenszinsen“ zeigt den Wert "
+                "ohne Kreditzinsen. Zuflüsse positiv, Abflüsse negativ. Liquidität Ende = Blatt "
                 "Liquidität; die Kontrolle muss 0 sein.")
     ws["A2"].alignment = Alignment(wrap_text=True, vertical="top")
     ws.merge_cells("A2:L2")
-    ws.row_dimensions[2].height = 60
+    ws.row_dimensions[2].height = 75
     ws["A3"] = "Szenario (Auswahl)"
     ws["A3"].font = Font(bold=True)
 
@@ -1448,6 +1450,8 @@ def _blatt_cashflow(wb) -> None:
     abschnitt("Kennzahlen")
     position("free_cashflow", "Free Cashflow (operativ + Investition)",
              summe("operativ", "investition"))
+    position("vor_zinsen", "Operativer Cashflow vor Darlehenszinsen (wie DRS 21)",
+             lambda sp, k: f"={sp}{zeilen['operativ']}-{sp}{zeilen['kreditzins']}")
     position("kapitaldienst", "Kapitaldienst (Zinsen + planmäßige Tilgung)",
              lambda sp, k: f"=-({sp}{zeilen['kreditzins']}+{sp}{zeilen['tilgung']})")
     position("nach_kapitaldienst", "Cashflow nach Kapitaldienst (operativ − planmäßige Tilgung)",

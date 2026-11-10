@@ -622,6 +622,9 @@ CASHFLOW = {
                  "sonst meldet das Blatt Prüfung einen Fehler.",
     "free_cashflow": "Operativer Cashflow plus Investitions-Cashflow: was nach Käufen und "
                      "Verkäufen für Tilgung und Anlage bleibt.",
+    "vor_zinsen": "Operativer Cashflow ohne die Zinsen der Darlehen: was das Geschäft "
+                  "unabhängig von der Finanzierung erwirtschaftet. DRS 21 ordnet gezahlte "
+                  "Zinsen der Finanzierung zu; dieses Blatt lässt sie im operativen Cashflow.",
     "kapitaldienst": "Zinsen und planmäßige Tilgung der Darlehen, ohne Ablösung bei Verkauf.",
     "nach_kapitaldienst": "Operativer Cashflow minus planmäßige Tilgung: was nach Bank und "
                           "Finanzamt aus dem laufenden Geschäft übrig bleibt.",
