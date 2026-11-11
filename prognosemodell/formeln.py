@@ -1353,8 +1353,9 @@ def darlehen_zeile(zeile: int, neu_nr: int, zweit: bool = False,
                    partner: int = None) -> dict:
     """Kreditdaten und Tilgungsplan einer Zeile; leer ohne Kredit. zweit: der Zweitkredit,
     dessen leere Tilgungsangaben die des Hauptkredits übernehmen. partner: Zeile des anderen
-    Kredits desselben Neuobjekts; mit „auf Hauptkredit“ geht die Restschuld des Zweitkredits
-    zum Ende des letzten Laufzeitjahrs auf den Hauptkredit über, dessen Rate danach steigt."""
+    Kredits desselben Neuobjekts; mit „auf Hauptkredit“ (auch leer, solange der Hauptkredit
+    länger läuft) geht die Restschuld des Zweitkredits zum Ende des letzten Laufzeitjahrs auf
+    den Hauptkredit über, dessen Rate danach steigt."""
     def ne(name):
         return f"INDEX({name},{neu_nr})"
 
@@ -1392,10 +1393,14 @@ def darlehen_zeile(zeile: int, neu_nr: int, zweit: bool = False,
 
     ue_jahr, ue_betrag, rate_neu = d("ue_jahr"), d("ue_betrag"), d("rate_neu")
     if zweit:
+        # Übernahme mit „auf Hauptkredit“; leer nur, wenn der Hauptkredit länger läuft (keine
+        # oder die längere Laufzeit), sonst wäre er beim Ende des Zweitkredits schon getilgt.
         # Restschuld vor der Übernahme: Betrag − Tilgung bis einschließlich Übernahmejahr
+        wahl, lz_haupt = ne("ne_Kredit2Uebernahme"), f'N({ne("ne_Laufzeit")})'
         uebernahme = {
-            "ue_jahr": wenn(f'IF(AND({ne("ne_Kredit2Uebernahme")}="{UEBERNAHME_HAUPT}",'
-                            f'ISNUMBER({d("laufzeit")})),{d("kaufjahr")}+{d("laufzeit")},"")'),
+            "ue_jahr": wenn(f'IF(AND(ISNUMBER({d("laufzeit")}),OR({wahl}="{UEBERNAHME_HAUPT}",'
+                            f'AND({wahl}="",OR({lz_haupt}<=0,{lz_haupt}>N({d("laufzeit")}))))),'
+                            f'{d("kaufjahr")}+{d("laufzeit")},"")'),
             "ue_betrag": wenn(f'IF(AND(ISNUMBER({ue_jahr}),N({ue_jahr})<=par_Endjahr),'
                               f'MAX({d("betrag")}-SUMIFS({zeilenbereich(1)},{jahre(1)},'
                               f'"<="&{ue_jahr}),0),"")'),

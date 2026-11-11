@@ -779,7 +779,11 @@
     d.rate = endf ? 0 : linear ? betrag * d.tilgungssatz : betrag * (zins + d.tilgungssatz);
     const kj = N(d.kaufjahr);
     if (zweit) {
-      d.ue_jahr = gleich(f.kredit2_uebernahme, UEBERNAHME_HAUPT) && istZahl(d.laufzeit) ? kj + d.laufzeit : "";
+      // leer = auf Hauptkredit, wenn der länger läuft (keine oder die längere Laufzeit)
+      const lzHaupt = N(f.laufzeit);
+      const ueber = gleich(f.kredit2_uebernahme, UEBERNAHME_HAUPT)
+        || (leer(f.kredit2_uebernahme) && (lzHaupt <= 0 || lzHaupt > N(d.laufzeit)));
+      d.ue_jahr = ueber && istZahl(d.laufzeit) ? kj + d.laufzeit : "";
       d.rate_neu = "";
     } else {
       d.ue_jahr = istZahl(partnerUe) ? partner.ue_jahr : "";

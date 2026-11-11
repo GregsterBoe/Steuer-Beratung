@@ -1222,7 +1222,7 @@ NEU_ANGABEN = [
            nur_mit="zweit"),
     *[Angabe(text, f"#dl2_{name}", fmt, ebene=2, nur_mit="zweit")
       for text, name, fmt in KREDIT_ANGABEN],
-    Angabe("Restschuld nach der Laufzeit (leer = ablösen)", "ne_Kredit2Uebernahme", ebene=2,
+    Angabe("Restschuld nach der Laufzeit (leer = auf Hauptkredit)", "ne_Kredit2Uebernahme", ebene=2,
            nur_mit="zweit"),
 ]
 SB_AUSLASSEN = ("rechnet mit (1 = ja)",)

@@ -211,9 +211,11 @@ punkte([
     "vor) und der Zinssatz; Tilgungsart, Tilgung, Laufzeit und tilgungsfreie Jahre leer = wie "
     "der Hauptkredit. Der Kredit insgesamt bleibt gleich, im Blatt Darlehen stehen die "
     "Zweitkredite unter den Hauptkrediten.",
-    "**Restschuld des Zweitkredits nach der Laufzeit:** leer bzw. „ablösen“ tilgt sie nach "
-    "der Laufzeit auf einmal aus der Liquidität. „auf Hauptkredit“ finanziert sie über den "
-    "Hauptkredit weiter: Zum Ende des letzten Laufzeitjahrs (nach der regulären Rate) geht sie "
+    "**Restschuld des Zweitkredits nach der Laufzeit:** „ablösen“ tilgt sie nach der "
+    "Laufzeit auf einmal aus der Liquidität. „auf Hauptkredit“ finanziert sie über den "
+    "Hauptkredit weiter und ist der Standard: Ein leeres Feld rechnet so, solange der "
+    "Hauptkredit länger läuft als der Zweitkredit (keine oder die längere Laufzeit), sonst "
+    "wie „ablösen“. Zum Ende des letzten Laufzeitjahrs (nach der regulären Rate) geht sie "
     "auf den Hauptkredit über, dessen Rate ab dem Folgejahr um übernommener Betrag × (Zinssatz "
     "+ Tilgung) steigt, bei linearer Tilgung um Betrag × Tilgung. Braucht eine Laufzeit; das "
     "Blatt Darlehen zeigt Übernahmejahr, Betrag und neue Rate.",
