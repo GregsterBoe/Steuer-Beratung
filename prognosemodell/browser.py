@@ -319,7 +319,8 @@ def erstelle_html(eingabe: dict, titel: str = "Prognosemodell V+V") -> str:
     stil = "\n".join((ORDNER / name).read_text(encoding="utf-8")
                      for name in ("stil_werte.css", "stil.css"))
     skripte = "\n".join((ORDNER / name).read_text(encoding="utf-8")
-                        for name in ("rechenwerk.js", "rechenweg.js", "oberflaeche.js"))
+                        for name in ("rechenwerk.js", "rechenweg.js", "optimierung.js",
+                                     "oberflaeche.js"))
     daten = (f"window.PROGNOSE_META={_json_im_skript(metadaten())};\n"
              f"window.PROGNOSE_START={_json_im_skript(eingabe)};\n"
              f"window.PROGNOSE_ERZEUGT={_json_im_skript(datetime.date.today().isoformat())};")

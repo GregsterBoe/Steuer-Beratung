@@ -13,7 +13,9 @@ python -m prognosemodell.browser --mappe Prognose.xlsx  # mit den Eingaben einer
 | `rechenweg.js` | `erklaere(pfad, ergebnis, meta)`: Formel in Worten und Teile je Zahl |
 | `oberflaeche.js`, `stil.css`, `seite.html` | Oberfläche; `prognosemodell/browser.py` setzt alles zu einer Datei zusammen |
 | `stil_werte.css` | Farben, Schriften, Rundungen: die Werte eines Stils der Knowledge-Base, erzeugt |
+| `optimierung.js` | Optimierung und Varianten: `optimiere`, `tragbareAusschuettung`, `kennzahlen`, `variante`; das Gegenstück zu modOptimierung und modVarianten |
 | `rechne_cli.js` | rechnet JSON von stdin, für `python -m pruefung.abgleich` |
+| `optimiere_cli.js` | optimiert JSON von stdin, für `python -m pruefung.pruefen_optimierung` |
 
 **Eingabe** (JSON, auch das Format von „Speichern“ unter `eingabe`):
 
@@ -21,9 +23,11 @@ python -m prognosemodell.browser --mappe Prognose.xlsx  # mit den Eingaben einer
 - `objekte`, `verkaeufe`, `neuobjekte`, `anlagen`: Listen mit den Feldschlüsseln aus `modelle.py` (`OBJEKT_FELDER`, …). `null` = leer gelassen, die Annahme greift wie in der Mappe; `""` = bewusst leer. Ein Neuobjekt `null` ist eine Annahmezeile (Reinvestition aus dem Verkauf derselben Zeile).
 - `afa_plan`: `{ObjektID: {Jahr: AfA}}`; `neukauf`: `[{kst, name, werte: {miete|einnahmen|erhaltung|ausgaben: {Jahr: Wert}}}]`.
 
+**Datei von „Speichern“:** neben `eingabe` stehen `varianten` (je Variante die Kennzahlen und eine Kopie der Eingaben zum Einspielen) und `optimierung` (`einstellungen`, letzter `lauf`, `tragbar`). Im Browser liegt dasselbe im lokalen Speicher.
+
 **Pfade** der Zahlen im Rechenweg: `par:Name`, `obj:Zeile:Feld`, `prg:b|n:Zeile:Spalte:Jahr`, `vk:Zeile:Spalte`, `rl:Zeile:Spalte`, `rls:Spalte:Jahr`, `ne:Zeile:Spalte`, `neq:Zeile:Quelle:Spalte`, `dl:Zeile:haupt|zweit:Spalte[:Jahr]`, `liq|aus:Szenario:Spalte:Jahr`, `vg:Kennzahl:Szenario`. Zeile und Jahr zählen ab 0.
 
-Wer eine Formel in `prognosemodell/formeln.py` ändert, ändert sie in `rechenwerk.js` mit und prüft mit `python -m pruefung.abgleich`.
+Wer eine Formel in `prognosemodell/formeln.py` ändert, ändert sie in `rechenwerk.js` mit und prüft mit `python -m pruefung.abgleich`. Wer `modOptimierung.bas` oder die Kennzahlen des Blatts Optimierung ändert, ändert `optimierung.js` mit und prüft mit `python -m pruefung.pruefen_optimierung`.
 
 ## Aussehen
 
