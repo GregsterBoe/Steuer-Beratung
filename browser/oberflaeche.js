@@ -8,6 +8,7 @@
   const START = window.PROGNOSE_START;
   const RW = window.Rechenwerk;
   const WEG = window.Rechenweg;
+  const OPT = window.Optimierung;
   const SPEICHER = "prognosemodell-entwurf";
   const OHNE_BROWSER = ["bwa_zuordnung", "kst_abweichung", "bruecke", "cashflow"];
   const SZ_FARBE = { A: "var(--a)", B: "var(--b)", C: "var(--c)", Baseline: "var(--baseline)" };
@@ -20,7 +21,16 @@
   const zustand = {
     eingabe: null, ergebnis: null, fehler: null, ansicht: "ueberblick", sz: "A",
     prgObjekt: "b:0", weg: [], gewaehlt: null, quelle: "datei",
+    // Varianten und Optimierung: bleiben neben den Eingaben im Browser und in der JSON-Datei
+    varianten: [], optimierung: { einstellungen: {}, lauf: null, tragbar: null },
+    ausgang: null, meldung: null,
   };
+  const META_OPT = {
+    fehlerKeys: M.pruefungen.filter((p) => p.art === "Fehler" && !OHNE_BROWSER.includes(p.key)).map((p) => p.key),
+    neuFelder: M.felder.neuobjekte.map((f) => f.key),
+  };
+  const PRUEFUNGEN = M.pruefungen.filter((p) => !OHNE_BROWSER.includes(p.key));
+  const datumZeit = (iso) => { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" }); };
   const startKennung = String(hash(JSON.stringify(START) + (window.PROGNOSE_ERZEUGT || "")));
 
   // ---------------------------------------------------------------- Formate
@@ -109,21 +119,36 @@
     zeichnen();
   }
   function speichern() {
-    try { localStorage.setItem(SPEICHER, JSON.stringify({ start: startKennung, eingabe: zustand.eingabe })); } catch (e) { /* ohne Speicher */ }
+    const stand = { start: startKennung, eingabe: zustand.eingabe, varianten: zustand.varianten, optimierung: zustand.optimierung };
+    zustand.speicherVoll = false;
+    try { localStorage.setItem(SPEICHER, JSON.stringify(stand)); } catch (e) {
+      // Varianten tragen je eine Kopie der Eingaben: passt das nicht, wenigstens den Entwurf sichern
+      zustand.speicherVoll = zustand.varianten.length > 0;
+      try { localStorage.setItem(SPEICHER, JSON.stringify(Object.assign(stand, { varianten: [] }))); } catch (e2) { /* ohne Speicher */ }
+    }
   }
   function laden() {
     try {
       const roh = localStorage.getItem(SPEICHER);
       if (!roh) return null;
       const s = JSON.parse(roh);
-      return s && s.start === startKennung ? s.eingabe : null;
+      return s && s.start === startKennung ? s : null;
     } catch (e) { return null; }
   }
   function setzeEingabe(neu, quelle) {
     zustand.eingabe = neu;
     zustand.quelle = quelle;
     zustand.weg = [];
+    zustand.ausgang = null;
+    zustand.meldung = null;
+    zustand.optimierung.lauf = null;
+    zustand.optimierung.tragbar = null;
     neuRechnen();
+  }
+  function uebernimmZusatz(quelle) {
+    zustand.varianten = Array.isArray(quelle && quelle.varianten) ? quelle.varianten : [];
+    const o = (quelle && quelle.optimierung) || {};
+    zustand.optimierung = { einstellungen: o.einstellungen || {}, lauf: o.lauf || null, tragbar: o.tragbar || null };
   }
 
   // ---------------------------------------------------------------- Navigation
@@ -131,13 +156,14 @@
     ["Ergebnis", [["ueberblick", "Überblick"], ["vergleich", "Szenarienvergleich"], ["liquiditaet", "Liquidität und Steuer"], ["vermoegen", "Vermögen"]]],
     ["Eingaben", [["parameter", "Parameter"], ["objekte", "Objekte"], ["verkaeufe", "Verkäufe"], ["neuobjekte", "Neuobjekte"], ["daten", "Anlagen und Planwerte"]]],
     ["Rechenweg", [["prognose", "Prognose je Objekt"], ["ruecklagen", "§ 6b-Rücklagen"], ["darlehen", "Darlehen"]]],
-    ["Kontrolle", [["pruefung", "Prüfung"]]],
+    ["Kontrolle", [["pruefung", "Prüfung"], ["varianten", "Varianten"], ["optimierung", "Optimierung"]]],
   ];
   function zeichneNavi() {
     const R = zustand.ergebnis;
     const anzahl = R ? {
       objekte: R.objekte.filter(Boolean).length, verkaeufe: R.verkaeufe.length,
       neuobjekte: R.neuobjekte.filter((x) => x.berechnet).length,
+      varianten: zustand.varianten.length || undefined,
     } : {};
     $("#navi").innerHTML = ANSICHTEN.map(([gruppe, liste]) => `<div class="gruppe">${gruppe}</div>` + liste.map(([id, titel]) =>
       `<button data-ansicht="${id}" class="${zustand.ansicht === id ? "aktiv" : ""}">${titel}${anzahl[id] !== undefined ? `<span class="anzahl">${anzahl[id]}</span>` : ""}</button>`).join("")).join("");
@@ -411,11 +437,11 @@
         return n === 0 ? td.replace('<td class="', '<td class="fest ') : td;
       }).join("");
       const st = o ? o.status : "";
-      return `<tr>${zellen}<td class="status ${statusKlasse(st)}">${esc(st)}</td><td><button class="knopf klein gefahr" data-aktion="obj-weg" data-nr="${j}" title="Objekt entfernen">✕</button></td></tr>`;
+      return `<tr>${zellen}<td class="status ${statusKlasse(st)}">${esc(st)}</td><td class="knoepfe"><button class="knopf klein" data-aktion="obj-kopie" data-nr="${j}" title="Objekt duplizieren: alle Eingaben in eine neue Zeile, mit neuer ObjektID">Kopieren</button> <button class="knopf klein gefahr" data-aktion="obj-weg" data-nr="${j}" title="Objekt entfernen">✕</button></td></tr>`;
     }).join("");
     return seitenkopf("Objekte", "Bestandsobjekte und Kostenstellen. Leere Felder rechnen mit der Annahme vom Parameterblatt (violett, kursiv); ein eingetippter Wert ersetzt sie, Leeren stellt sie wieder her. Wert anklicken in den Rechenblättern zeigt, woher er kommt.",
-      `<button class="knopf haupt" data-aktion="obj-neu">+ Objekt</button>`)
-      + FARBLEGENDE
+      `<div class="knopfreihe"><button class="knopf" data-aktion="obj-annahmen" title="Felder, deren Annahme gelöscht wurde (Status „Wert fehlt: Annahme gelöscht“), rechnen wieder mit der Annahme">Annahmen wiederherstellen</button><button class="knopf haupt" data-aktion="obj-neu">+ Objekt</button></div>`)
+      + meldungBox() + FARBLEGENDE
       + (zeilen ? `<div class="tabelle-rahmen"><table><thead>${kopf1}${kopf2}</thead><tbody>${zeilen}</tbody></table></div>` : `<div class="leer-hinweis">Noch keine Objekte. „+ Objekt“ legt eins an; Pflicht sind ObjektID und Miete.</div>`);
   }
 
@@ -502,7 +528,8 @@
   function ansichtDaten() {
     const R = zustand.ergebnis, E = zustand.eingabe;
     const anl = R.anlagen.filter(Boolean);
-    const anlTab = anl.length ? `<div class="tabelle-rahmen"><table><thead><tr><th class="fest">Inventar-Nr.</th><th>Bezeichnung</th><th>ObjektID</th><th>Art</th><th>Methode</th><th class="z">AHK</th><th class="z">Buchwert Stand</th><th class="z">AfA-Satz</th><th class="z">AfA p. a.</th><th class="z">Buchwert Basisjahr</th><th>Status</th></tr></thead><tbody>${R.anlagen.map((a, j) => a ? `<tr><td class="fest">${esc(a.felder.nr)}</td><td>${esc(a.felder.bezeichnung)}</td><td>${esc(a.felder.objekt_id)}</td><td>${esc(a.felder.art)}</td><td>${esc(a.felder.methode)}</td><td class="z">${esc(format(a.felder.ahk, "euro"))}</td><td class="z">${esc(format(a.felder.bw_stand, "euro"))}</td><td class="z">${esc(format(a.felder.satz, "prozent"))}</td><td class="z">${esc(format(a.afa, "euro"))}</td><td class="z">${esc(format(a.bw_basis, "euro"))}</td><td class="status ${statusKlasse(a.status)}">${esc(a.status)}</td></tr>` : "").join("")}</tbody></table></div>` : `<div class="leer-hinweis">Kein Anlagenverzeichnis.</div>`;
+    const anlTab = anl.length ? `<div class="tabelle-rahmen"><table><thead><tr><th class="fest">Inventar-Nr.</th><th>Bezeichnung</th><th>ObjektID</th><th>Art</th><th>Methode</th><th class="z">AHK</th><th class="z">Buchwert Stand</th><th class="z">AfA-Satz</th><th class="z">AfA p. a.</th><th class="z">Buchwert Basisjahr</th><th>Status</th><th></th></tr></thead><tbody>${R.anlagen.map((a, j) => a ? `<tr><td class="fest">${esc(a.felder.nr)}</td><td>${esc(a.felder.bezeichnung)}</td><td>${esc(a.felder.objekt_id)}</td><td>${esc(a.felder.art)}</td><td>${esc(a.felder.methode)}</td><td class="z">${esc(format(a.felder.ahk, "euro"))}</td><td class="z">${esc(format(a.felder.bw_stand, "euro"))}</td><td class="z">${esc(format(a.felder.satz, "prozent"))}</td><td class="z">${esc(format(a.afa, "euro"))}</td><td class="z">${esc(format(a.bw_basis, "euro"))}</td><td class="status ${statusKlasse(a.status)}">${esc(a.status)}</td><td><button class="knopf klein gefahr" data-aktion="anl-weg" data-nr="${j}" title="Anlage löschen">✕</button></td></tr>` : "").join("")}</tbody></table></div>` : `<div class="leer-hinweis">Kein Anlagenverzeichnis.</div>`;
+    const anlKopf = `<div class="zwischenkopf"><h3>Anlagenverzeichnis</h3>${anl.length ? `<button class="knopf klein gefahr" data-aktion="anl-alle-weg" title="Das ganze Anlagenverzeichnis löschen; die Objekte rechnen dann mit ihren Eingaben und Annahmen">Alle Anlagen löschen</button>` : ""}</div>`;
     const plan = Object.entries(E.afa_plan || {});
     const planTab = plan.length ? `<div class="tabelle-rahmen"><table>${jahresKopf(R.jahre, false, "ObjektID")}<tbody>${plan.map(([id, w]) => `<tr><td class="fest">${esc(id)}</td>${R.jahre.map((t) => `<td class="z">${esc(format(w[t], "euro"))}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : `<div class="leer-hinweis">Kein AfA-Plan.</div>`;
     const nk = E.neukauf || [];
@@ -511,8 +538,8 @@
       const fort = (R.neukauf[String(n.kst).toLowerCase()] || {})[p.key] || [];
       return `<tr><td class="fest">${esc(n.kst)} · ${esc(p.bezeichnung)}</td>${nkJahre.map((t, i) => `<td class="z${istZahl((n.werte[p.key] || {})[t]) ? "" : " leise"}">${esc(format(fort[i], "euro"))}</td>`).join("")}</tr>`;
     }).join("")).join("")}</tbody></table></div>` : `<div class="leer-hinweis">Keine Neukauf-Kostenstellen.</div>`;
-    return seitenkopf("Anlagen und Planwerte", "Diese Daten kommen aus der Excel-Mappe (Anlagenverzeichnis, AfA-Plan aus BWA 1240, Neukauf-Kostenstellen) und werden hier nur angezeigt. Ändern in der Mappe, dann die Seite neu erzeugen: python -m prognosemodell.browser --mappe Prognose.xlsx.")
-      + `<h3>Anlagenverzeichnis</h3>${anlTab}<h3>AfA-Plan</h3>${planTab}<h3>Neukauf-Kostenstellen (fortgeschrieben, grau = Annahme bzw. Fortschreibung)</h3>${nkTab}`;
+    return seitenkopf("Anlagen und Planwerte", "Diese Daten kommen aus der Excel-Mappe (Anlagenverzeichnis, AfA-Plan aus BWA 1240, Neukauf-Kostenstellen). Fehlerhafte Anlagen lassen sich hier löschen (✕); das Objekt rechnet dann ohne sie, also mit seinen Eingaben und Annahmen. Ändern oder ergänzen in der Mappe, dann die Seite neu erzeugen: python -m prognosemodell.browser --mappe Prognose.xlsx.")
+      + meldungBox() + `${anlKopf}${anlTab}<h3>AfA-Plan</h3>${planTab}<h3>Neukauf-Kostenstellen (fortgeschrieben, grau = Annahme bzw. Fortschreibung)</h3>${nkTab}`;
   }
 
   // ---------------------------------------------------------------- Ansichten: Rechenweg
@@ -621,6 +648,74 @@
       + `<div class="pruefliste">${liste.map((p) => `<div class="pruefung${p.n ? "" : " ok"}"><div class="art ${p.n ? p.art : "OK"}">${p.n ? p.art : "OK"}</div><div class="zahl">${p.n}</div><div>${esc(p.bezeichnung)}<div class="wo">${esc(p.wo)}</div></div></div>`).join("")}</div>`;
   }
 
+  // ---------------------------------------------------------------- Varianten und Optimierung
+  function meldungBox() {
+    const m = zustand.meldung;
+    if (!m || m.ansicht !== zustand.ansicht) return "";
+    return `<div class="meldung">${esc(m.text)}${m.rueckgaengig ? ` <button class="knopf klein" data-aktion="rueckgaengig">Rückgängig</button>` : ""}</div>`;
+  }
+  function melde(text, rueckgaengig = false) {
+    zustand.meldung = { text, ansicht: zustand.ansicht, rueckgaengig };
+  }
+  /** Vor einer Änderung, die sich zurücknehmen lassen soll (Optimieren, Einspielen, Löschen). */
+  function merkeAusgang() { zustand.ausgang = kopie(zustand.eingabe); }
+  function halteFest(bezeichnung, eingabe = zustand.eingabe, R = zustand.ergebnis) {
+    if (zustand.varianten.length >= OPT.MAX_VARIANTEN) { alert(`Es sind schon ${OPT.MAX_VARIANTEN} Varianten festgehalten. Bitte erst Varianten löschen.`); return false; }
+    zustand.varianten.push(OPT.variante(bezeichnung, eingabe, R, PRUEFUNGEN));
+    return true;
+  }
+  function ansichtVarianten() {
+    const V = zustand.varianten;
+    const besteA = V.length ? Math.max(...V.map((v) => v.A)) : null;
+    const kopf = `<thead><tr><th class="fest">Variante</th><th>festgehalten am</th>${OPT.VARIANTEN_SPALTEN.map(([, t, f]) => `<th class="${f === "text" ? "" : "z"}">${esc(t)}</th>`).join("")}<th></th></tr></thead>`;
+    const zeilen = V.map((v, n) => `<tr class="${V.length > 1 && v.A === besteA ? "beste" : ""}"><td class="fest">${esc(v.bezeichnung)}</td><td>${esc(datumZeit(v.datum))}</td>${OPT.VARIANTEN_SPALTEN.map(([k, , f]) => `<td class="${f === "text" ? "" : "z"}${f === "euro" && istZahl(v[k]) && v[k] < -0.005 ? " neg" : ""}">${esc(format(v[k], f))}</td>`).join("")}<td class="knoepfe"><button class="knopf klein" data-aktion="var-ein" data-nr="${n}" title="Die Eingaben dieser Variante wieder einspielen">Einspielen</button> <button class="knopf klein gefahr" data-aktion="var-weg" data-nr="${n}" title="Variante löschen">✕</button></td></tr>`).join("");
+    const jetzt = OPT.variante("", zustand.eingabe, zustand.ergebnis, PRUEFUNGEN);
+    const aktuell = `<tr class="unter"><td class="fest leise">aktueller Stand</td><td></td>${OPT.VARIANTEN_SPALTEN.map(([k, , f]) => `<td class="${f === "text" ? "" : "z"} leise">${esc(format(jetzt[k], f))}</td>`).join("")}<td></td></tr>`;
+    return seitenkopf("Varianten", "Ergebnisse verschiedener Eingaben vergleichen: „Variante festhalten“ hält die Kennzahlen des aktuellen Stands fest und sichert alle Eingaben dazu. „Einspielen“ stellt die Eingaben einer Variante wieder her. Die Variante mit dem höchsten Endvermögen A ist fett. Varianten bleiben in diesem Browser und stehen in der Datei von „Speichern“.",
+      `<div class="knopfreihe">${V.length ? `<button class="knopf gefahr" data-aktion="var-leeren">Alle löschen</button>` : ""}<button class="knopf haupt" data-aktion="var-neu">Variante festhalten</button></div>`)
+      + meldungBox()
+      + (zustand.speicherVoll ? `<div class="hinweisbox">Die Varianten passen nicht mehr in den Speicher des Browsers. Mit „Speichern“ als Datei sichern, sonst sind sie nach dem Schließen der Seite weg.</div>` : "")
+      + (V.length ? `<div class="tabelle-rahmen"><table>${kopf}<tbody>${zeilen}${aktuell}</tbody></table></div>` : `<div class="leer-hinweis">Noch keine Variante festgehalten.</div>`);
+  }
+
+  function ansichtOptimierung() {
+    const R = zustand.ergebnis, P = R.parameter;
+    const K = OPT.kennzahlen(R, META_OPT.fehlerKeys);
+    const E = OPT.einstellungen(zustand.optimierung.einstellungen);
+    const minI = R.jahre.indexOf(K.liqMinJahr);
+    const zahl = (label, wert, art, pfad, unter, klasse = "") => `<div class="karte"><div class="etikett">${esc(label)}</div><div class="gross${pfad ? " klickbar" : ""} ${klasse}"${pfad ? ` data-pfad="${pfad}"` : ""}>${esc(format(wert, art))}</div><div class="unter">${unter || ""}</div></div>`;
+    const kennzahlen = `<div class="karten">
+        ${zahl("Ziel: Endvermögen nach latenter Steuer, Plan A", K.ziel, "euro", "vg:0:A", "wird maximiert")}
+        ${zahl("zum Vergleich: Endvermögen Halten", K.zielHalten, "euro", "vg:0:Baseline", "mit derselben Ausschüttung")}
+        ${zahl("Ausschüttung p. a.", K.ausschuettung, "euro", "par:Ausschuettung", `über alle Jahre ${esc(format(K.ausschuettungSumme, "euro"))}`)}
+        ${zahl("tiefste Liquidität, Plan A", K.liqMin, "euro", `liq:A:kum:${minI}`, `im Jahr ${K.liqMinJahr}, Mindestliquidität ${esc(format(K.mindestLiq, "euro"))}`)}
+        ${zahl("Jahre unter der Mindestliquidität", K.liqJahre, "zahl", null, K.liqJahre ? `Fehlbetrag ${esc(format(K.fehlbetrag, "euro"))} (Summe der Jahre)` : "muss 0 sein", K.liqJahre ? "schlecht" : "")}
+        ${zahl("Jahre unter der Mindest-Kapitaldienstdeckung", K.kddJahre, "zahl", null, `Vorgabe: ${esc(istZahl(K.mindestKDD) ? format(K.mindestKDD, "dez2") : "keine")}`, K.kddJahre ? "schlecht" : "")}
+        ${zahl("Nebenbedingungen erfüllt", K.erfuellt ? "ja" : "nein", "text", null, `Prüfung: ${esc(OPT.pruefungText(R, PRUEFUNGEN))}`, K.erfuellt ? "gut" : "schlecht")}
+      </div>`;
+    const einst = `<details class="feldgruppe" open><summary>Einstellungen der Suche<span class="zusatz">Ausschüttung, Mindestliquidität und Mindest-Kapitaldienstdeckung stehen bei den <a href="#" data-ansicht="parameter">Parametern</a></span></summary><div><div class="formular">${OPT.EINSTELLUNGEN.map((s) => {
+      const roh = zustand.optimierung.einstellungen[s.key];
+      const feld = { format: s.format, auswahl: null, hinweis: s.hinweis };
+      let html;
+      if (s.auswahl) html = `<select data-ziel="opt:${s.key}" data-art="text">${s.auswahl.map((o) => `<option${E[s.key] === o ? " selected" : ""}>${o}</option>`).join("")}</select>`;
+      else html = eingabeFeld(`opt:${s.key}`, s.format, leer(roh) ? s.wert : roh, null, "", feld, false).html;
+      return `<div class="feld"><label>${esc(s.text)}${s.format === "prozent" ? " in %" : ""}</label>${html}<div class="hilfe">${esc(s.hinweis)}</div></div>`;
+    }).join("")}</div></div></details>`;
+    const L = zustand.optimierung.lauf, T = zustand.optimierung.tragbar;
+    const lauf = L ? `<div class="empfehlung"><strong>${esc(L.meldung)}</strong><p>Lauf vom ${esc(datumZeit(L.zeit))}: Endvermögen A vorher ${esc(format(L.vorher, "euro"))}, nachher ${esc(format(L.nachher, "euro"))} (${L.nachher - L.vorher >= 0 ? "+" : ""}${esc(format(L.nachher - L.vorher, "euro"))}). Tiefste Liquidität vorher ${esc(format(L.liqVorher, "euro"))}, nachher ${esc(format(L.liqNachher, "euro"))}. Nebenbedingungen erfüllt: ${L.erfuellt ? "ja" : "nein"}. Geänderte Hebel: ${L.aenderungen}, Rechenläufe: ${L.laeufe}.${zustand.ausgang ? ` <button class="knopf klein" data-aktion="rueckgaengig">Ausgang wiederherstellen</button>` : ""}</p></div>` : "";
+    const tragbar = T ? `<div class="hinweisbox">Tragbare Ausschüttung p. a. mit den Eingaben vom ${esc(datumZeit(T.zeit))}: <b>${esc(format(T.betrag, "euro"))}</b> (Mindestliquidität und Mindest-Kapitaldienstdeckung laut Parametern; der Parameter Ausschüttung bleibt unverändert, ${T.laeufe} Rechenläufe).</div>` : "";
+    const zeilen = OPT.neuobjektZeilen(R, E);
+    const vor = (z) => (L ? L.zeilen.find((y) => y.r === z.r && String(y.id) === String(z.id)) : null) || {};
+    const tab = zeilen.length ? `<div class="tabelle-rahmen"><table><thead><tr class="obergruppe"><th class="fest"></th><th colspan="5"></th><th colspan="3">aktuell</th><th colspan="3">vor dem letzten Lauf</th><th></th></tr><tr><th class="fest">NeuID</th><th>Name</th><th title="nein: dieses Neuobjekt bleibt unverändert">optimieren</th><th class="z">Zinssatz</th><th>QNG</th><th>Quelle</th><th class="z">Kreditquote</th><th class="z">Kaufjahr</th><th>§ 6b nur bis QNG-Grenze</th><th class="z">Kreditquote</th><th class="z">Kaufjahr</th><th>§ 6b nur bis QNG-Grenze</th><th>Hinweis</th></tr></thead><tbody>${zeilen.map((z) => {
+      const v = vor(z);
+      const hinweis = v.hinweis || (!z.rechnet ? "rechnet nicht mit (Status bzw. Kauf aktiv)" : "");
+      return `<tr><td class="fest">${esc(z.id)}</td><td>${esc(z.name)}</td><td class="eingabe"><select data-ziel="optmit:${esc(z.id)}" data-art="text"><option${z.mit ? " selected" : ""}>ja</option><option${z.mit ? "" : " selected"}>nein</option></select></td><td class="z">${esc(format(z.zins, "prozent"))}</td><td>${z.qng}</td><td>${esc(z.quelle)}</td><td class="z${z.rechnet ? ` klickbar" data-pfad="ne:${z.r}:kredit` : ""}">${esc(format(z.quote, "prozent0"))}</td><td class="z">${esc(format(z.jahr, "jahr"))}</td><td>${z.qngGrenze}</td><td class="z leise">${esc(format(v.vorQuote, "prozent0"))}</td><td class="z leise">${esc(format(v.vorJahr, "jahr"))}</td><td class="leise">${esc(v.vor6b || "")}</td><td class="leise">${esc(hinweis)}</td></tr>`;
+    }).join("")}</tbody></table></div>` : `<div class="leer-hinweis">Keine Neuobjekte. Die Optimierung verändert Kaufjahr, § 6b-Schalter und Kreditquote der Neuobjekte; Käufe erfasst man unter <a href="#" data-ansicht="neuobjekte">Neuobjekte</a>.</div>`;
+    return seitenkopf("Optimierung", "Sucht je Neuobjekt Kaufjahr, „§ 6b nur bis QNG-Grenze“ und Kreditquote so, dass das Endvermögen nach latenter Steuer im Plan A am höchsten ist, ohne Mindestliquidität und Mindest-Kapitaldienstdeckung zu verletzen und ohne neue Fehler in der Prüfung. Kaufpreis und Kauf ja/nein bleiben Eingaben. Mehr Kredit lohnt, solange der Kreditzins unter der Rendite der Alternativanlage liegt; mehr Kredit kann trotzdem nötig sein, damit die Ausschüttung trägt. Die Suche ist lokal (Hebel für Hebel), nicht global.",
+      `<div class="knopfreihe"><button class="knopf" data-aktion="opt-tragbar" title="Höchste Ausschüttung p. a., bei der Mindestliquidität und Mindest-Kapitaldienstdeckung mit den aktuellen Eingaben halten">Tragbare Ausschüttung ermitteln</button><button class="knopf haupt" data-aktion="opt-start">Optimieren</button></div>`)
+      + lauf + tragbar + kennzahlen + einst + `<h3>Neuobjekte</h3>` + tab;
+  }
+
   // ---------------------------------------------------------------- Rechenweg-Leiste
   function zeigeWeg(pfad, neu = true) {
     if (neu) zustand.weg = [pfad];
@@ -698,6 +793,7 @@
       ueberblick: ansichtUeberblick, vergleich: ansichtVergleich, liquiditaet: ansichtLiquiditaet, vermoegen: ansichtVermoegen,
       parameter: ansichtParameter, objekte: ansichtObjekte, verkaeufe: ansichtVerkaeufe, neuobjekte: ansichtNeuobjekte,
       daten: ansichtDaten, prognose: ansichtPrognose, ruecklagen: ansichtRuecklagen, darlehen: ansichtDarlehen, pruefung: ansichtPruefung,
+      varianten: ansichtVarianten, optimierung: ansichtOptimierung,
     }[zustand.ansicht] || ansichtUeberblick;
     const aktiv = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.ziel : null;
     inhalt.innerHTML = ansicht();
@@ -725,7 +821,16 @@
     const t = ziel.split(":");
     const wert = lese(text, art);
     const E = zustand.eingabe;
-    if (t[0] === "par") {
+    zustand.meldung = null;
+    if (t[0] === "opt") {
+      const s = OPT.EINSTELLUNGEN.find((x) => x.key === t[1]);
+      zustand.optimierung.einstellungen[t[1]] = wert === null || (s.format !== "text" && !istZahl(wert)) ? s.wert : wert;
+    } else if (t[0] === "optmit") {
+      const id = ziel.slice(7);
+      const ohne = (zustand.optimierung.einstellungen.ohne || []).filter((x) => String(x) !== id);
+      if (wert === "nein") ohne.push(id);
+      zustand.optimierung.einstellungen.ohne = ohne;
+    } else if (t[0] === "par") {
       const vorgabe = (M.parameter.find((p) => p.name === t[1]) || {}).wert;
       E.parameter[t[1]] = wert === null ? (vorgabe === undefined ? null : vorgabe) : wert;
     } else {
@@ -749,6 +854,82 @@
     switch (name) {
       case "obj-neu": E.objekte.push(leeresObjekt(E.objekte, "OBJ-", "objekt_id", M.felder.objekte)); break;
       case "obj-weg": if (confirmFrage(`Objekt ${E.objekte[nr].objekt_id || ""} entfernen?`)) E.objekte.splice(nr, 1); else return; break;
+      case "obj-kopie": {
+        const k = kopie(E.objekte[nr]);
+        k.objekt_id = leeresObjekt(E.objekte, "OBJ-", "objekt_id", []).objekt_id;
+        E.objekte.push(k);
+        melde(`Objekt ${E.objekte[nr].objekt_id || ""} als ${k.objekt_id} dupliziert (letzte Zeile).`);
+        break;
+      }
+      case "obj-annahmen": {
+        // wie das Makro „Annahmen wiederherstellen“: geleerte Felder mit Annahme rechnen wieder mit ihr
+        let n = 0;
+        const mitAnnahme = M.felder.objekte.filter((f) => f.annahme).map((f) => f.key);
+        E.objekte.forEach((o) => mitAnnahme.forEach((k) => { if (o[k] === "") { o[k] = null; n++; } }));
+        melde(n ? `${n} Annahme(n) wiederhergestellt.` : "Keine gelöschte Annahme gefunden.");
+        break;
+      }
+      case "anl-weg": {
+        const a = E.anlagen[nr];
+        if (!confirmFrage(`Anlage ${a.nr || ""}${a.bezeichnung ? " (" + a.bezeichnung + ")" : ""} löschen?`)) return;
+        merkeAusgang();
+        E.anlagen.splice(nr, 1);
+        melde(`Anlage ${a.nr || ""} gelöscht.`, true);
+        break;
+      }
+      case "anl-alle-weg":
+        if (!confirmFrage(`Alle ${E.anlagen.length} Anlagen löschen?`)) return;
+        merkeAusgang();
+        E.anlagen = [];
+        melde("Anlagenverzeichnis gelöscht.", true);
+        break;
+      case "rueckgaengig":
+        if (!zustand.ausgang) return;
+        zustand.eingabe = zustand.ausgang;
+        zustand.ausgang = null;
+        zustand.optimierung.lauf = null;
+        zustand.meldung = null;
+        break;
+      case "var-neu": {
+        if (pruefungGesamt(zustand.ergebnis).klasse === "fehler" && !confirmFrage("Die Prüfung meldet Fehler. Trotzdem festhalten?")) return;
+        const name = window.prompt("Bezeichnung der Variante:", `Variante ${zustand.varianten.length + 1}`);
+        if (!name || !name.trim()) return;
+        if (!halteFest(name)) return;
+        melde(`Variante „${name.trim()}“ festgehalten. Die Eingaben sind gesichert und lassen sich mit „Einspielen“ wiederherstellen.`);
+        break;
+      }
+      case "var-ein": {
+        const v = zustand.varianten[nr];
+        if (!confirmFrage(`Eingaben der Variante „${v.bezeichnung}“ einspielen? Der aktuelle Stand wird ersetzt (Rückgängig möglich).`)) return;
+        merkeAusgang();
+        zustand.eingabe = kopie(v.eingabe);
+        zustand.optimierung.lauf = null;
+        melde(`Variante „${v.bezeichnung}“ eingespielt.`, true);
+        break;
+      }
+      case "var-weg":
+        if (!confirmFrage(`Variante „${zustand.varianten[nr].bezeichnung}“ löschen?`)) return;
+        zustand.varianten.splice(nr, 1);
+        break;
+      case "var-leeren":
+        if (!confirmFrage(`Alle ${zustand.varianten.length} Varianten löschen?`)) return;
+        zustand.varianten = [];
+        break;
+      case "opt-start": {
+        const e = OPT.einstellungen(zustand.optimierung.einstellungen);
+        const fest = e.festhalten === "ja";
+        if (fest && zustand.varianten.length + 2 > OPT.MAX_VARIANTEN) { alert("Für Ausgang und Ergebnis ist kein Platz mehr bei den Varianten. Bitte erst Varianten löschen oder „festhalten = nein“ wählen."); return; }
+        const lauf = OPT.optimiere(E, e, META_OPT);
+        if (fest) halteFest("Optimierung Ausgang");
+        merkeAusgang();
+        zustand.eingabe = lauf.eingabe;
+        zustand.optimierung.lauf = lauf.lauf;
+        zustand.optimierung.tragbar = null;
+        if (fest) halteFest("Optimierung Ergebnis", lauf.eingabe, lauf.ergebnis);
+        zustand.meldung = null;
+        break;
+      }
+      case "opt-tragbar": zustand.optimierung.tragbar = OPT.tragbareAusschuettung(E); break;
       case "vk-neu": {
         const v = Object.fromEntries(M.felder.verkaeufe.filter((f) => f.key !== "bezeichnung").map((f) => [f.key, null]));
         const erstes = E.objekte.find((o) => !leer(o.objekt_id));
@@ -787,7 +968,8 @@
 
   // ---------------------------------------------------------------- Dateien
   function herunterladen() {
-    const daten = { format: "prognosemodell-eingabe", version: 1, gespeichert: new Date().toISOString(), eingabe: zustand.eingabe };
+    const daten = { format: "prognosemodell-eingabe", version: 1, gespeichert: new Date().toISOString(), eingabe: zustand.eingabe,
+      varianten: zustand.varianten, optimierung: zustand.optimierung };
     const blob = new Blob([JSON.stringify(daten, null, 1)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -808,6 +990,9 @@
         e.afa_plan = e.afa_plan || {};
         e.quelle = datei.name;
         setzeEingabe(e, "datei");
+        uebernimmZusatz(roh);   // Varianten und letzter Lauf der Datei
+        speichern();
+        zeichnen();
       } catch (err) {
         alert("Die Datei lässt sich nicht öffnen: " + err.message);
       }
@@ -887,7 +1072,8 @@
   // ---------------------------------------------------------------- Start
   function start() {
     const entwurf = laden();
-    zustand.eingabe = entwurf || kopie(START);
+    zustand.eingabe = entwurf ? entwurf.eingabe : kopie(START);
+    if (entwurf) uebernimmZusatz(entwurf);
     zustand.quelle = entwurf ? "entwurf" : "datei";
     verbinden();
     neuRechnen();

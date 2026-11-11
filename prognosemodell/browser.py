@@ -15,6 +15,7 @@ import dataclasses
 import datetime
 import json
 import re
+import sys
 from pathlib import Path
 
 from .modelle import (ANLAGE_FELDER, ANLAGE_SPALTEN, DARLEHEN_SPALTEN, FMT_EURO, FMT_FAKTOR,
@@ -154,9 +155,31 @@ def _eingetippt(zelle):
     return "" if zelle.value is None else _json_wert(zelle.value)
 
 
-def afa_plan(wb) -> dict:
+def ist_gerechnet(wv) -> bool:
+    """Hat die Mappe gespeicherte Formelergebnisse? Eine frisch erzeugte Mappe hat keine:
+    Python schreibt nur die Formeln, erst Excel rechnet sie beim Öffnen und Speichern."""
+    return spalte(wv, "prg_Jahr")[0] is not None
+
+
+def startjahr(wf, wv) -> int:
+    """Erstes Prognosejahr; ohne gespeicherte Formelergebnisse aus den Parametern."""
+    gerechnet = spalte(wv, "prg_Jahr")[0]
+    if gerechnet is not None:
+        return int(gerechnet)
+    vorgaben = {p.name: p.wert for p in PARAMETER}
+
+    def eingetippt(name):
+        wert = bereich(wf, name)[0][0].value if name in wf.defined_names else vorgaben[name]
+        return wert if isinstance(wert, (int, float)) else None
+
+    start = eingetippt("par_Startjahr")
+    if start is None:
+        start = (eingetippt("par_Basisjahr") or vorgaben["par_Basisjahr"]) + 1
+    return int(start)
+
+
+def afa_plan(wb, start: int) -> dict:
     """AfA-Plan je ObjektID aus einer gerechneten Mappe (Werte)."""
-    start = int(spalte(wb, "prg_Jahr")[0])
     plan = {}
     for id_, reihe in zip(spalte(wb, "afp_ID"), werte(wb, "afp_Jahre")):
         jahre = {start + i: w for i, w in enumerate(reihe) if isinstance(w, (int, float))}
@@ -165,10 +188,10 @@ def afa_plan(wb) -> dict:
     return plan
 
 
-def neukauf(wb) -> list:
+def neukauf(wb, start: int) -> list:
     """Neukauf-Kostenstellen mit ihren eingetragenen Jahreswerten (Werte)."""
     zeilen = werte(wb, "nk_Eingabe")
-    basis = int(spalte(wb, "prg_Jahr")[0]) - 1
+    basis = start - 1
     je = len(NEUKAUF_POSITIONEN)
     liste = []
     for kopf in range(0, len(zeilen), je):
@@ -272,9 +295,17 @@ def eingabe_aus_mappe(pfad: Path) -> dict:
 
     # Schnellcheck: § 6b und reinvestieren stehen als Annahmeformel in den Verkaufszeilen
     schnellcheck = any(_ist_formel(z[0]) for z in bereich(wf, "vk_6b"))
+    if not ist_gerechnet(wv):
+        print(f"Hinweis: {Path(pfad).name} enthält keine gerechneten Werte (noch nie in Excel "
+              "gespeichert). Eingetippte Werte sind übernommen; Werte, die in der Mappe aus "
+              "Formeln kommen (Verknüpfungen auf Kostenstellenblätter), fehlen. Dafür die "
+              "Mappe einmal in Excel öffnen, speichern und den Befehl wiederholen.",
+              file=sys.stderr)
+    start = startjahr(wf, wv)
     return leere_eingabe(parameter=param, objekte=objekte, verkaeufe=verkaeufe,
-                         neuobjekte=neuobjekte, anlagen=anlagen, afa_plan=afa_plan(wv),
-                         neukauf=neukauf(wv), quelle=Path(pfad).name, schnellcheck=schnellcheck)
+                         neuobjekte=neuobjekte, anlagen=anlagen, afa_plan=afa_plan(wv, start),
+                         neukauf=neukauf(wv, start), quelle=Path(pfad).name,
+                         schnellcheck=schnellcheck)
 
 
 # ---- HTML ----
@@ -288,7 +319,8 @@ def erstelle_html(eingabe: dict, titel: str = "Prognosemodell V+V") -> str:
     stil = "\n".join((ORDNER / name).read_text(encoding="utf-8")
                      for name in ("stil_werte.css", "stil.css"))
     skripte = "\n".join((ORDNER / name).read_text(encoding="utf-8")
-                        for name in ("rechenwerk.js", "rechenweg.js", "oberflaeche.js"))
+                        for name in ("rechenwerk.js", "rechenweg.js", "optimierung.js",
+                                     "oberflaeche.js"))
     daten = (f"window.PROGNOSE_META={_json_im_skript(metadaten())};\n"
              f"window.PROGNOSE_START={_json_im_skript(eingabe)};\n"
              f"window.PROGNOSE_ERZEUGT={_json_im_skript(datetime.date.today().isoformat())};")
