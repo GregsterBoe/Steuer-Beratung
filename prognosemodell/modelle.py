@@ -652,7 +652,8 @@ MAX_NEUOBJEKTE = 50
 FIN_EIGEN, FIN_KREDIT = "Eigenmittel", "Kredit"
 TILGUNG_ANNUITAET, TILGUNG_LINEAR, TILGUNG_ENDFAELLIG = "Annuität", "linear", "endfällig"
 TILGUNGSARTEN = (TILGUNG_ANNUITAET, TILGUNG_LINEAR, TILGUNG_ENDFAELLIG)
-# Restschuld des Zweitkredits nach der Laufzeit: ablösen (leer) oder auf den Hauptkredit
+# Restschuld des Zweitkredits nach der Laufzeit: ablösen oder auf den Hauptkredit; leer =
+# auf den Hauptkredit, wenn der länger läuft als der Zweitkredit, sonst ablösen
 UEBERNAHME_ABLOESEN, UEBERNAHME_HAUPT = "ablösen", "auf Hauptkredit"
 UEBERNAHME_ARTEN = (UEBERNAHME_ABLOESEN, UEBERNAHME_HAUPT)
 NEU_FELDER = [
@@ -835,10 +836,12 @@ NEU_FELDER = [
          hinweis="leer = wie Hauptkredit; 0 = sofort tilgen"),
     Feld("kredit2_uebernahme", "Restschuld Zweitkredit nach Laufzeit", "ne_Kredit2Uebernahme",
          FMT_TEXT, False, 14, auswahl=UEBERNAHME_ARTEN,
-         hinweis="ablösen (leer): die Restschuld wird nach der Laufzeit auf einmal getilgt; "
-                 "auf Hauptkredit: sie geht zum Ende des letzten Laufzeitjahrs auf den "
-                 "Hauptkredit über, dessen Rate um übernommener Betrag × (Zinssatz + Tilgung) "
-                 "bzw. bei linear × Tilgung steigt. Braucht eine Laufzeit des Zweitkredits"),
+         hinweis="auf Hauptkredit: die Restschuld geht zum Ende des letzten Laufzeitjahrs auf "
+                 "den Hauptkredit über, dessen Rate um übernommener Betrag × (Zinssatz + "
+                 "Tilgung) bzw. bei linear × Tilgung steigt; ablösen: sie wird nach der "
+                 "Laufzeit auf einmal getilgt. Leer = auf Hauptkredit, wenn der Hauptkredit "
+                 "länger läuft (keine oder die längere Laufzeit), sonst ablösen. Braucht eine "
+                 "Laufzeit des Zweitkredits"),
 ]
 # Quell-Rücklagen je Neuobjekt: (Feld, benannter Bereich, Präfix der Hilfsspalten)
 QUELLEN = [("quelle", "ne_Quelle", "ne_Q1"), ("quelle2", "ne_Quelle2", "ne_Q2"),
@@ -1179,7 +1182,7 @@ class Neuobjekt:
     kredit2_tilgung: Optional[float] = None
     kredit2_laufzeit: Optional[int] = None
     kredit2_tilgungsfrei: Optional[int] = None
-    kredit2_uebernahme: Optional[str] = None  # "auf Hauptkredit"; leer = ablösen
+    kredit2_uebernahme: Optional[str] = None  # "ablösen" / "auf Hauptkredit"; leer = auf Hauptkredit, wenn der länger läuft
 
 
 # Blatt Prüfung: Plausibilitätsprüfungen (Etappe 9, Projektplan Abschnitt 5 und 19)
