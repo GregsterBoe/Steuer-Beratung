@@ -211,6 +211,27 @@ th[title] { cursor: help; }
 .vorgang .abschnitte section { margin-bottom: 14px; }
 .leiste { display: flex; gap: 8px; margin: 10px 0 16px; flex-wrap: wrap; align-items: center; }
 
+/* Wirkung der Parameter: Bausteine im Überblick, unwirksame Parameter, Abweichungen der Käufe */
+.bausteine { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 10px; margin: 8px 0 18px; }
+.baustein {
+  display: flex; flex-direction: column; gap: 3px; padding: 10px 14px; text-decoration: none; color: var(--text);
+  background: var(--flaeche); border: 1px solid var(--linie); border-left: 4px solid var(--gut); border-radius: var(--radius);
+}
+.baustein:hover { border-color: var(--akzent); border-left-color: var(--akzent); }
+.baustein.aus { border-left-color: var(--linie); background: var(--flaeche-2); }
+.baustein.an.warnung { border-left-color: var(--warnung); }
+.baustein .b-kopf { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.baustein .b-titel { font-weight: 600; }
+.baustein .b-zustand { font-size: 12px; font-weight: 600; color: var(--gut); text-transform: uppercase; letter-spacing: .04em; }
+.baustein.aus .b-zustand { color: var(--leise); }
+.baustein .b-text { font-size: 12.5px; color: var(--leise); }
+.feldgruppe.unwirksam > summary { color: var(--leise); }
+.feld.unwirksam > label, .feld.unwirksam input, .feld.unwirksam select, .feld.unwirksam .wert { opacity: .55; }
+.feld.unwirksam .hilfe .nicht, .feldgruppe.unwirksam .zusatz { font-style: italic; }
+.feld.abweichend input, .feld.abweichend select { box-shadow: inset 0 0 0 1px var(--warnung); }
+.feld .bezug { color: var(--warnung); }
+.abweichung-zeile { padding: 8px 16px; border-bottom: 1px solid var(--linie); background: var(--warn-bg); font-size: 13px; }
+
 /* Prüfung */
 .pruefliste { display: flex; flex-direction: column; gap: 8px; }
 .pruefung { display: grid; grid-template-columns: 90px 52px 1fr; gap: 12px; align-items: start; background: var(--flaeche); border: 1px solid var(--linie); border-radius: var(--radius); padding: 10px 14px; }
