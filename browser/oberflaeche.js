@@ -24,6 +24,7 @@
     // Varianten und Optimierung: bleiben neben den Eingaben im Browser und in der JSON-Datei
     varianten: [], optimierung: { einstellungen: {}, lauf: null, tragbar: null },
     ausgang: null, meldung: null,
+    parOffen: {},  // Parameterabschnitte auf- oder zugeklappt, nur für diese Sitzung
   };
   const META_OPT = {
     fehlerKeys: M.pruefungen.filter((p) => p.art === "Fehler" && !OHNE_BROWSER.includes(p.key)).map((p) => p.key),
@@ -276,6 +277,123 @@
     svg.querySelectorAll("[data-punkt],[data-fuehrung]").forEach((c) => c.setAttribute("visibility", "hidden"));
   }
 
+  // ---------------------------------------------------------------- Wirkung der Parameter
+  // Nur Anzeige: welche Parameter mit den aktuellen Eingaben wirken und wo Käufe von ihnen
+  // abweichen. Die Rechnung bleibt unberührt.
+  const istJa = (v) => String(v === null || v === undefined ? "" : v).trim().toLowerCase() === "ja";
+  const zahl = (v) => (istZahl(v) ? v : 0);
+  /** Erster Parameter eines Abschnitts: dient als Kennung des Abschnitts. */
+  const ABSCHNITT_6B = "6bVorbesitz", ABSCHNITT_KG = "KGESt", ABSCHNITT_QNG = "QNGSatz",
+    ABSCHNITT_ANN = "AnnVervielfaeltiger", ABSCHNITT_REINVEST = "AnnReinvestJahre", ABSCHNITT_QM = "QmErhQuote",
+    ABSCHNITT_ERH = "ErhAlterungAb", ABSCHNITT_DARL = "ZinsVeraenderung", ABSCHNITT_AUS = "Ausschuettung";
+  function lage(R) {
+    const obj = R.objekte.filter(Boolean);
+    const vk = R.verkaeufe.filter((v) => v.gueltig);
+    const neu = R.neuobjekte.map((x, r) => Object.assign({ r, erfasst: !!zustand.eingabe.neuobjekte[r] }, x))
+      .filter((x) => x.berechnet && x.berechnet.gueltig === 1);
+    const mitKst = (x) => !leer(x.felder.kst);
+    const mitQm = (x) => istZahl(x.berechnet.miete_qm_jahr);
+    return {
+      P: R.parameter, obj, vk, neu,
+      vk6b: vk.filter((v) => istJa(v.felder.nutzung_6b)),
+      reinvest: neu.filter((x) => !x.erfasst),
+      qng: neu.filter((x) => istJa(x.felder.qng)),
+      qm: neu.filter((x) => mitQm(x) && !mitKst(x)),
+      anlauf: neu.filter((x) => !mitKst(x) && !mitQm(x) && zahl(x.felder.erhaltungsquote) > 0),
+      degressiv: neu.filter((x) => String(x.felder.afa_methode).trim().toLowerCase() === "degressiv"),
+      baujahr: obj.filter((o) => zahl(o.felder.baujahr) > 0),
+      san: obj.filter((o) => zahl(o.felder.san_jahr) > 0 && zahl(o.felder.san_betrag) > 0),
+      annahmen: obj.reduce((s, o) => s + Object.values(o.herkunft).filter((h) => h === "annahme").length, 0),
+      annahmenParameter: obj.some((o) => ["erhaltung", "verkehrswert", "vk_quote_gebaeude", "afa_satz", "kaufjahr"]
+        .some((k) => o.herkunft[k] === "annahme")),
+      zinsOhneSchuld: obj.filter((o) => !(zahl(o.felder.restschuld) > 0) && zahl(o.felder.zinsen) !== 0),
+      rateAnnahme: obj.filter((o) => zahl(o.felder.restschuld) > 0 && o.herkunft.rate === "annahme"),
+    };
+  }
+  /** Gründe, warum Parameter derzeit nicht wirken: {abschnitt: {Kennung: Grund}, einzeln: {Name: Grund}}. */
+  function unwirksam(R) {
+    const L = lage(R), P = L.P;
+    const abschnitt = {}, einzeln = {};
+    const setze = (namen, grund) => namen.forEach((n) => { einzeln[n] = grund; });
+    if (!L.neu.some((x) => leer(x.felder.mietsteig)) && !(zustand.eingabe.neukauf || []).length) {
+      einzeln.NeuMietsteig = L.neu.length ? "alle Neuobjekte haben eine eigene Mietsteigerung" : "kein Neuobjekt";
+    }
+    if (!L.degressiv.length) setze(["AfADegressiv", "AfAWechsel"], "kein Neuobjekt mit AfA-Methode degressiv");
+    if (!zahl(P.Ausschuettung)) setze(["AusschuettungAb", "AusschuettungSteig"], "Ausschüttung ist 0");
+    if (!L.vk.length) abschnitt[ABSCHNITT_6B] = "kein Verkauf erfasst";
+    else if (!L.vk6b.length) setze(["6bVorbesitz", "6bFrist", "6bFristNeubau", "6bVorjahr", "6bZuschlag"], "kein Verkauf mit „§ 6b nutzen = ja“");
+    if (String(P.Steuerwelt) !== "GmbH & Co. KG") abschnitt[ABSCHNITT_KG] = "Steuerwelt ist GmbH";
+    else einzeln.Steuersatz = "gilt nur für die GmbH; Steuerwelt ist GmbH & Co. KG";
+    if (!L.qng.length) abschnitt[ABSCHNITT_QNG] = "kein Neuobjekt mit „Sonder-AfA § 7b (QNG) = ja“";
+    if (!L.annahmenParameter) abschnitt[ABSCHNITT_ANN] = "alle Objekte haben diese Werte erfasst";
+    if (!L.reinvest.length) abschnitt[ABSCHNITT_REINVEST] = "kein Verkauf mit „reinvestieren = ja“";
+    if (!L.qm.length) abschnitt[ABSCHNITT_QM] = "kein Neuobjekt mit Fläche und Mietpreis je m²";
+    if (!L.baujahr.length && !L.anlauf.length) abschnitt[ABSCHNITT_ERH] = "kein Objekt mit Baujahr, kein Neuobjekt mit Erhaltungsquote";
+    else {
+      if (!L.baujahr.length) setze(["ErhAlterungAb", "ErhAlterung", "SanAlter", "SanVorlauf", "SanQuote"], "kein Objekt mit Baujahr");
+      if (!L.anlauf.length) setze(["NeuErhAnlaufJahre", "NeuErhAnlaufFaktor"], "kein Neuobjekt mit Erhaltungsquote");
+    }
+    if (!L.zinsOhneSchuld.length && !L.rateAnnahme.length) abschnitt[ABSCHNITT_DARL] = "kein Objekt mit Zinsaufwand ohne Restschuld oder Restschuld ohne Rate";
+    else {
+      if (!L.zinsOhneSchuld.length) einzeln.ZinsVeraenderung = "kein Objekt mit Zinsaufwand ohne Restschuld";
+      if (!L.rateAnnahme.length) einzeln.AnnDarlTilgung = "kein Objekt mit Restschuld ohne erfasste Rate";
+    }
+    return { abschnitt, einzeln };
+  }
+
+  // Felder eines Neuobjekts, die einen Parameter ersetzen (leer = Parameter) oder von der
+  // Annahme für Neuobjekte abweichen (Parameterblatt, Abschnitt Annahmen Reinvestition)
+  const NE_BEZUG = [
+    { key: "mietsteig", par: "NeuMietsteig", art: "Parameter" },
+    { key: "afa_satz", par: "AnnNeuAfASatz", art: "Annahme Neuobjekt" },
+    { key: "afa_methode", par: "AnnNeuAfAMethode", art: "Annahme Neuobjekt" },
+    { key: "anteil_gub", par: "AnnNeuAnteilGuB", art: "Annahme Neuobjekt" },
+    { key: "mietrendite", par: "AnnNeuMietrendite", art: "Annahme Neuobjekt", nurOhne: true },
+    { key: "erhaltungsquote", par: "AnnNeuErhQuote", art: "Annahme Neuobjekt", nurOhne: true },
+  ];
+  /** Abweichungen eines erfassten Neuobjekts von den Parametern: [{key, label, wert, bezug, art, format}]. */
+  function abweichungen(R, r) {
+    const roh = zustand.eingabe.neuobjekte[r];
+    const x = R.neuobjekte[r];
+    if (!roh || !x) return [];
+    const felder = Object.fromEntries(M.felder.neuobjekte.map((f) => [f.key, f]));
+    const ersetzt = !leer(x.felder.kst) || (x.berechnet && istZahl(x.berechnet.miete_qm_jahr));
+    return NE_BEZUG.filter((b) => !leer(roh[b.key]) && !(b.nurOhne && ersetzt)).filter((b) => {
+      const w = roh[b.key], p = R.parameter[b.par];
+      return istZahl(w) && istZahl(p) ? Math.abs(w - p) > 1e-9 : String(w).trim().toLowerCase() !== String(p).trim().toLowerCase();
+    }).map((b) => ({ key: b.key, label: felder[b.key].ueberschrift, wert: roh[b.key], bezug: R.parameter[b.par], art: b.art, format: felder[b.key].format }));
+  }
+
+  /** Bausteine der Rechnung für den Überblick: an oder aus, mit Grund und Ziel. */
+  function bausteine(R) {
+    const L = lage(R), P = L.P;
+    const pr = (w) => format(w, "prozent");
+    const anzahl = (n, eins, mehr) => `${n} ${n === 1 ? eins : mehr}`;
+    const abw = L.neu.filter((x) => x.erfasst && abweichungen(R, x.r).length).length;
+    const liste = [];
+    liste.push({ titel: "Verkäufe und § 6b", an: L.vk.length > 0, ansicht: "verkaeufe",
+      text: L.vk.length ? `${anzahl(L.vk.length, "Verkauf", "Verkäufe")}, davon ${L.vk6b.length} mit § 6b-Rücklage` : "kein Verkauf erfasst" });
+    liste.push({ titel: "Käufe (Neuobjekte)", an: L.neu.length > 0, ansicht: "neuobjekte", warnung: abw > 0,
+      text: L.neu.length ? `${anzahl(L.neu.length, "Kauf", "Käufe")}${L.reinvest.length ? `, davon ${L.reinvest.length} aus „reinvestieren = ja“` : ""}${abw ? `; ${anzahl(abw, "Kauf weicht", "Käufe weichen")} von den Parametern ab` : ""}` : "kein Kauf erfasst" });
+    liste.push({ titel: "Sonder-AfA § 7b (QNG)", an: L.qng.length > 0, ansicht: "neuobjekte",
+      text: L.qng.length ? `${anzahl(L.qng.length, "Neuobjekt", "Neuobjekte")}, ${pr(P.QNGSatz)} über ${P.QNGJahre} Jahre` : "kein Neuobjekt mit QNG = ja" });
+    liste.push({ titel: "Ausschüttung", an: zahl(P.Ausschuettung) > 0, ansicht: "parameter", gruppe: ABSCHNITT_AUS,
+      text: zahl(P.Ausschuettung) > 0 ? `${format(P.Ausschuettung, "euro")} p. a. ab ${leer(P.AusschuettungAb) ? P.Startjahr : P.AusschuettungAb}${zahl(P.AusschuettungSteig) ? `, +${pr(P.AusschuettungSteig)} p. a.` : ""}` : "0 €: keine Ausschüttung" });
+    const alterAn = zahl(P.ErhAlterung) > 0 && L.baujahr.length > 0;
+    liste.push({ titel: "Erhaltung nach Gebäudealter", an: alterAn, ansicht: "parameter", gruppe: ABSCHNITT_ERH,
+      text: alterAn ? `+${pr(P.ErhAlterung)} je Jahr ab ${P.ErhAlterungAb} Jahren, ${anzahl(L.baujahr.length, "Objekt", "Objekte")} mit Baujahr`
+        : zahl(P.ErhAlterung) > 0 ? "kein Objekt mit Baujahr" : "Steigerung 0 %" });
+    const sanSumme = L.san.reduce((s, o) => s + zahl(o.felder.san_betrag), 0);
+    liste.push({ titel: "Großmaßnahmen", an: L.san.length > 0, ansicht: "objekte",
+      text: L.san.length ? `${anzahl(L.san.length, "Objekt", "Objekte")}, zusammen ${format(sanSumme, "euro")}`
+        : !zahl(P.SanQuote) ? "Satz 0 %" : !L.baujahr.length ? "kein Objekt mit Baujahr" : "keine im Prognosezeitraum fällig" });
+    liste.push({ titel: "Zins auf Liquidität", an: zahl(P.Alternativrendite) !== 0, ansicht: "parameter", gruppe: "Basisjahr",
+      text: zahl(P.Alternativrendite) !== 0 ? `${pr(P.Alternativrendite)} auf die Liquidität des Vorjahresendes` : "Rendite 0 %" });
+    liste.push({ titel: "Leere Felder in den Objekten", an: L.annahmen > 0, ansicht: "objekte",
+      text: L.annahmen ? `${anzahl(L.annahmen, "Feld rechnet", "Felder rechnen")} mit einem Wert vom Parameterblatt (violett)` : "alle Felder erfasst" });
+    return liste;
+  }
+
   // ---------------------------------------------------------------- Ansichten: Ergebnis
   function ansichtUeberblick() {
     const R = zustand.ergebnis, P = R.parameter;
@@ -320,7 +438,10 @@
           <div class="karte"><div class="etikett">Ausschüttungen</div><div class="gross klickbar" data-pfad="vg:19:A">${esc(format(ausschuettung, "euro"))}</div><div class="unter">${istZahl(P.Ausschuettung) && P.Ausschuettung ? esc(format(P.Ausschuettung, "euro")) + " p. a." : "keine"}</div></div>
           <div class="karte"><div class="etikett">Restschuld Darlehen ${ende}</div><div class="gross klickbar" data-pfad="vg:17:A">${esc(format(R.vergleich[17].A, "euro"))}</div><div class="unter">Zinsen gesamt ${esc(format(R.vergleich[18].A, "euro"))}</div></div>
           <div class="karte"><div class="etikett">Plausibilitätsprüfung</div><div class="gross ${pr.klasse}" style="color:var(--${pr.klasse === "ok" ? "gut" : pr.klasse === "fehler" ? "schlecht" : "warnung"})">${esc(pr.text)}</div><div class="unter"><a href="#" data-ansicht="pruefung">Einzelheiten</a></div></div>
-        </div>`;
+        </div>`
+      + `<h3>Was die Rechnung berücksichtigt</h3><p class="leise">Abgeleitet aus Parametern und Eingaben; ein- und ausgeschaltet wird über den jeweiligen Wert. Anklicken führt zur Eingabe.</p>
+        <div class="bausteine">${bausteine(R).map((b) => `<a href="#" class="baustein ${b.an ? "an" : "aus"}${b.warnung ? " warnung" : ""}" data-ansicht="${b.ansicht}"${b.gruppe ? ` data-gruppe="${b.gruppe}"` : ""}>
+          <span class="b-kopf"><span class="b-titel">${esc(b.titel)}</span><span class="b-zustand">${b.an ? "an" : "aus"}</span></span><span class="b-text">${esc(b.text)}</span></a>`).join("")}</div>`;
   }
 
   function ansichtVergleich() {
@@ -402,15 +523,25 @@
       if (p.abschnitt) { aktuell = { titel: p.abschnitt, liste: [] }; gruppen.push(aktuell); }
       aktuell.liste.push(p);
     });
-    const html = gruppen.map((g, n) => `<details class="feldgruppe"${n < 2 ? " open" : ""}><summary>${esc(g.titel)}<span class="zusatz">${g.liste.length} Parameter</span></summary><div><div class="formular">${g.liste.map((p) => {
-      if (p.berechnet) return `<div class="feld"><label>${esc(p.bezeichnung)}</label><div class="wert">${esc(format(R.parameter[p.name], p.format))}</div><div class="hilfe">${esc(p.erlaeuterung)}</div></div>`;
+    const U = unwirksam(R);
+    const html = gruppen.map((g, n) => {
+      const kennung = g.liste[0].name;
+      const grund = U.abschnitt[kennung];
+      const offen = zustand.parOffen[kennung] !== undefined ? zustand.parOffen[kennung] : n < 2 && !grund;
+      const zusatz = grund ? `wirkt derzeit nicht: ${esc(grund)}` : `${g.liste.length} Parameter`;
+      return `<details class="feldgruppe${grund ? " unwirksam" : ""}" id="gruppe-${esc(kennung)}" data-gruppe="${esc(kennung)}"${offen ? " open" : ""}><summary>${esc(g.titel)}<span class="zusatz">${zusatz}</span></summary><div><div class="formular">${g.liste.map((p) => {
+      const nicht = grund ? "" : U.einzeln[p.name];
+      const klasse = nicht ? "feld unwirksam" : "feld";
+      const hilfe = `${nicht ? `<span class="nicht">Wirkt derzeit nicht: ${esc(nicht)}.</span> ` : ""}${esc(p.erlaeuterung)}`;
+      if (p.berechnet) return `<div class="${klasse}"><label>${esc(p.bezeichnung)}</label><div class="wert">${esc(format(R.parameter[p.name], p.format))}</div><div class="hilfe">${hilfe}</div></div>`;
       const feld = { format: p.format, auswahl: p.auswahl, hinweis: p.erlaeuterung, ueberschrift: p.bezeichnung };
       const roh = zustand.eingabe.parameter[p.name];
       const e = eingabeFeld(`par:${p.name}`, p.format, roh, null, "", feld, false);
       const abweichend = !leer(p.wert) && roh !== p.wert ? ` <span class="leise">(Vorgabe ${esc(format(p.wert, p.format))})</span>` : "";
-      return `<div class="feld"><label>${esc(p.bezeichnung)}${p.format.startsWith("prozent") ? " in %" : ""}${abweichend}</label>${e.html}<div class="hilfe">${esc(p.erlaeuterung)}</div></div>`;
-    }).join("")}</div></div></details>`).join("");
-    return seitenkopf("Parameter", "Alle Annahmen der Rechnung. Leeren setzt die Vorgabe wieder ein. Sätze sind Platzhalter und vor dem Echteinsatz fachlich zu prüfen.") + html;
+      return `<div class="${klasse}"><label>${esc(p.bezeichnung)}${p.format.startsWith("prozent") ? " in %" : ""}${abweichend}</label>${e.html}<div class="hilfe">${hilfe}</div></div>`;
+    }).join("")}</div></div></details>`;
+    }).join("");
+    return seitenkopf("Parameter", "Alle Annahmen der Rechnung. Leeren setzt die Vorgabe wieder ein. Sätze sind Platzhalter und vor dem Echteinsatz fachlich zu prüfen. Abschnitte und Felder, die mit den aktuellen Eingaben nicht in die Rechnung eingehen, sind blass und nennen den Grund; sie bleiben änderbar.") + html;
   }
 
   const FARBLEGENDE = `<div class="farblegende"><span><i style="background:var(--eingabe-hg)"></i>Eingabe</span><span><i style="background:var(--annahme-hg)"></i>Annahme (leer gelassen, Wert violett)</span><span><i style="background:var(--eingelesen-hg)"></i>aus Buchhaltung oder Anlagen</span><span><i style="box-shadow:inset 0 0 0 1px var(--schlecht)"></i>Pflichtfeld fehlt</span></div>`;
@@ -488,6 +619,9 @@
       const erfasst = !!roh;
       const b = x.berechnet || {};
       const titel = `${esc(x.felder.neu_id || "(ohne NeuID)")}${x.felder.name ? " · " + esc(x.felder.name) : ""}`;
+      const abw = abweichungen(R, r);
+      const abwKeys = Object.fromEntries(abw.map((a) => [a.key, a]));
+      const abwText = abw.length ? `<div class="abweichung-zeile"><b>Weicht von den Parametern ab:</b> ${abw.map((a) => `${esc(a.label)} ${esc(format(a.wert, a.format))} <span class="leise">(${esc(a.art)} ${esc(format(a.bezug, a.format))})</span>`).join(" · ")}</div>` : "";
       const kenn = x.berechnet ? [
         ["Kaufpreis + Nebenkosten", `ne:${r}:ak_gesamt`], ["übertragen § 6b", `ne:${r}:ue_gesamt`], ["AfA-Basis Gebäude", `ne:${r}:afa_basis`],
         ["Bemessung § 7b", `ne:${r}:qng_basis`], ["Kredit", `ne:${r}:kredit`], ["Eigenmittel", `ne:${r}:eigen`],
@@ -500,6 +634,7 @@
           const herkunft = x.herkunft[k] || "";
           if (!erfasst) return `<div class="feld"><label>${esc(f.ueberschrift)}</label><div class="wert">${esc(format(wirksam, f.format))}</div></div>`;
           let html = formFeld(`ne:${r}:${k}`, f, rohWert, wirksam, herkunft);
+          if (abwKeys[k]) html = html.replace('<div class="feld ', '<div class="feld abweichend ').replace("</label>", ` <span class="bezug">(${esc(abwKeys[k].art)} ${esc(format(abwKeys[k].bezug, f.format))})</span></label>`);
           if (k.startsWith("quelle")) html = html.replace("<input ", `<input list="liste-ruecklagen" `);
           if (k === "kst") html = html.replace("<input ", `<input list="liste-neukauf" `);
           return html;
@@ -514,11 +649,11 @@
       return `<div class="vorgang">
         <div class="vorgang-kopf"><div><div class="titel">${titel}</div><div class="leise">Kauf Ende ${esc(x.felder.kaufjahr)}${erfasst ? "" : " · aus „reinvestieren = ja“ im Blatt Verkäufe (Annahmen)"}</div></div>
           <div style="display:flex;gap:10px;align-items:center"><span class="status ${statusKlasse(x.status)}">${esc(x.status)}</span>${erfasst ? `<button class="knopf klein" data-aktion="ne-kopie" data-nr="${r}">Kopieren</button><button class="knopf klein gefahr" data-aktion="ne-weg" data-nr="${r}">Entfernen</button>` : `<button class="knopf klein" data-aktion="ne-uebernehmen" data-nr="${r}">Als eigenes Neuobjekt bearbeiten</button>`}</div></div>
-        ${kenn ? `<div class="vorgang-kennzahlen">${kenn}</div>` : ""}
+        ${abwText}${kenn ? `<div class="vorgang-kennzahlen">${kenn}</div>` : ""}
         <div class="abschnitte">${abschnitte}</div></div>`;
     }).join("");
     const nk = (zustand.eingabe.neukauf || []).map((n) => n.kst);
-    return seitenkopf("Neuobjekte", "Kauf zum Jahresende: Übertragung der Rücklage und Kreditauszahlung im Kaufjahr, Miete, AfA, Zins und Tilgung ab dem Folgejahr. Bis zu drei Quell-Rücklagen in fester Reihenfolge: ü1 Gebäudegewinn auf Gebäude, ü2 G+B-Gewinn auf G+B, ü3 Rest auf Gebäude.",
+    return seitenkopf("Neuobjekte", "Kauf zum Jahresende: Übertragung der Rücklage und Kreditauszahlung im Kaufjahr, Miete, AfA, Zins und Tilgung ab dem Folgejahr. Bis zu drei Quell-Rücklagen in fester Reihenfolge: ü1 Gebäudegewinn auf Gebäude, ü2 G+B-Gewinn auf G+B, ü3 Rest auf Gebäude. Weicht ein Kauf von der Mietsteigerung Neuobjekte oder den Annahmen für Neuobjekte auf dem Parameterblatt ab, steht das im Kopf des Kaufs und am Feld (orange).",
       `<button class="knopf haupt" data-aktion="ne-neu">+ Neuobjekt</button>`)
       + FARBLEGENDE
       + `<datalist id="liste-ruecklagen">${rlIds.map((id) => `<option value="${esc(id)}">`).join("")}</datalist><datalist id="liste-neukauf">${nk.map((id) => `<option value="${esc(id)}">`).join("")}</datalist>`
@@ -1014,7 +1149,16 @@
     const inhalt = $("#inhalt");
     inhalt.addEventListener("click", (e) => {
       const nav = e.target.closest("[data-ansicht]");
-      if (nav) { e.preventDefault(); zustand.ansicht = nav.dataset.ansicht; zeichnen(); return; }
+      if (nav) {
+        e.preventDefault();
+        zustand.ansicht = nav.dataset.ansicht;
+        const g = nav.dataset.gruppe;
+        if (g) zustand.parOffen[g] = true;
+        zeichnen();
+        const ziel = g && document.getElementById("gruppe-" + g);
+        if (ziel) ziel.scrollIntoView({ block: "start" });
+        return;
+      }
       const sz = e.target.closest("[data-sz]");
       if (sz) { zustand.sz = sz.dataset.sz; zeichnen(); return; }
       const ak = e.target.closest("button[data-aktion]");
@@ -1039,6 +1183,10 @@
         e.target.blur();
       }
     });
+    inhalt.addEventListener("toggle", (e) => {
+      const d = e.target;
+      if (d.tagName === "DETAILS" && d.dataset.gruppe) zustand.parOffen[d.dataset.gruppe] = d.open;
+    }, true);
     inhalt.addEventListener("mousemove", diagrammHover);
     inhalt.addEventListener("mouseout", diagrammWeg);
     $("#rechenweg").addEventListener("click", (e) => {
